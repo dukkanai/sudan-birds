@@ -20,6 +20,17 @@ The local SQL harness creates minimal synthetic `auth.users` / `auth.uid()` equi
 
 Source review identified upload-quota reset via content deletion, report-queue deletion via cascading foreign keys, and incorrect search quoting. All three source findings were fixed and re-reviewed. Regression tests cover deletion-resistant quotas, report preservation and layered search escaping. CI must still confirm the final PR commit before approval. The review did not establish an RLS ownership bypass. The real local PostgREST 16.5 regression script passed ten checks, including tied-timestamp pagination, combined search/cursor conditions, literal special-character search, and anonymous access denials. It used a temporary loopback adapter and PostgreSQL 17.6; the full Supabase gateway version runs separately in CI.
 
+## Phase-two local verification
+
+The expanded source in this revision passed the following checks with synthetic data before publication:
+
+- Flutter: **40 tests**, exact formatting and analysis. Includes 320×568 Arabic screens at 200% text scaling, three-tab semantics, touch targets, duplicate submission and navigation-after-await, image metadata stripping, moderation contracts, deletion status, and native staging callback configuration.
+- Backend: **93 real PostgreSQL assertions** and **39 Deno tests**, endpoint type checks, formatting, lint, npm audit and secret scan. Tests cover private data/role boundaries, signed create-only uploads, metadata sanitization, concurrent finalization, durable cleanup failures, live-session recent-authentication requirements and report-resolution auditing.
+- Independent source review identified and repaired account-wide recent-auth checks, hidden permanent deletion failures, legacy-key precedence, unbounded upload-response draining and incomplete retention disclosures. The staging source review is conditional on keeping media disabled until hosted tests pass.
+- Frozen migration SHA-256: `da37035a01eb5c8ca4bbe0ef9937a69581d28c331ca9b40d240b8aad5d119cbe`.
+
+These are local source checks, not successful hosted media/deletion/OAuth flows. GitHub checks for this exact revision must pass separately. The preceding diagnostic-only commit `a2bad5f0b901d6cdf444a70e1115ccc5fc31be9e` passed all six jobs, including 24 pgTAP assertions and ten actual PostgREST API checks in the disposable full Supabase stack: [required checks](https://github.com/dukkanai/sudan-birds/actions/runs/42524075116), [native compilation](https://github.com/dukkanai/sudan-birds/actions/runs/42524075028).
+
 ## Hosted staging verification
 
 - Applied only foundation migration `202611080001`, verified 14 public tables with RLS and 25 policies, and registered its exact 110 statements in migration history using the official CLI schema.
@@ -35,10 +46,10 @@ A fail-closed fixed-synthetic diagnostic is included for a separately approved s
 
 - Connected end-to-end authenticated API flow.
 - Real Google/Apple sign-in and secure callback configuration.
-- R2 image decoder/reencoder, EXIF removal, delivery, deletion and abuse scenarios. Image completion deliberately fails closed.
+- Actual R2 image delivery, conditional writes/fencing, deletion and abuse scenarios. Local decoder/EXIF tests pass, but the deployed media feature deliberately remains disabled.
 - Real-device VoiceOver/TalkBack, large-screen/font behavior across devices, network interruption and upload recovery.
 - Signed Android/iOS beta delivery, store review or production release.
-- Final privacy policy, support channel, full account-deletion lifecycle and moderator console.
+- Final privacy/retention policy, support channel, and hosted account-deletion/moderator flows. The source includes deletion and moderation, but end-to-end hosted verification is pending.
 
 Native compile workflows build an Android debug package and an unsigned iOS simulator app. Even if they pass, neither establishes real-device runtime behavior or TestFlight/Google Play delivery.
 

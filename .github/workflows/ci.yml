@@ -84,7 +84,7 @@ jobs:
       - run: cd supabase/functions && deno fmt --check
       - run: cd supabase/functions && deno lint
       - run: cd supabase/functions && deno check --node-modules-dir=manual */index.ts
-      - run: cd supabase/functions && deno test --node-modules-dir=manual
+      - run: bash supabase/functions/test.sh
 
   repository-security:
     runs-on: ubuntu-24.04

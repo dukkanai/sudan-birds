@@ -13,3 +13,12 @@ verify_jwt = true
 [db.seed]
 enabled = true
 sql_paths = ["./seed.sql"]
+[functions.account-delete]
+verify_jwt = true
+[functions.lifecycle]
+verify_jwt = true
+[functions.codec-diagnostic]
+verify_jwt = true
+[functions.media-read]
+# Public verified images; handler validates any supplied user JWT independently.
+verify_jwt = false

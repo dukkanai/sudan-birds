@@ -14,3 +14,9 @@ No workflow in this foundation publishes to an app store or deploys production. 
 10. Observe health, define rollback compatible with current and previous app versions, and use forward-safe migrations. Restoring an old mobile binary does not undo a destructive schema migration.
 
 The placeholder `beta.yml` and `release.yml` intentionally fail with these instructions. They cannot be used to imply a delivered signed build.
+
+### Staging mobile OAuth callback (client implementation only)
+
+The only supported mobile callback in this source is `dev.sudanbirds.staging://auth/callback`, configured with `AUTH_REDIRECT_URL`. Android registers that exact scheme, host and path; iOS registers the staging scheme. Dart rejects unrelated routes, fragments/implicit tokens, duplicate codes and arbitrary redirect configuration. Supabase Auth uses explicit PKCE. Flutter's competing default deep-link router is disabled so the `app_links`-based Supabase handler receives callbacks.
+
+This does not configure Supabase's hosted redirect allowlist, Google/Apple providers or OAuth credentials. Those must be authorized and configured separately, then verified on real staging devices. Final store identities, production domain-linked redirects, ownership verification and signed-device tests remain release gates. The staging scheme must not be described as an approved production identity.

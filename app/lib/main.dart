@@ -3,6 +3,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'app.dart';
+import 'auth_config.dart';
 import 'domain.dart';
 import 'repository.dart';
 
@@ -54,10 +55,15 @@ void main() {
               'إعداد Supabase غير مكتمل أو غير آمن. تحقق من إعدادات البناء.',
             );
           }
+          if (redirect.isNotEmpty) validateAuthRedirect(redirect);
           await Supabase.initialize(
             url: url,
             publishableKey: key,
             debug: false,
+            authOptions: const FlutterAuthClientOptions(
+              authFlowType: AuthFlowType.pkce,
+              detectSessionInUriPredicate: isStagingAuthCallback,
+            ),
           );
           return SupabaseBirdsRepository(
             Supabase.instance.client,

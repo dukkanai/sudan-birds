@@ -19,9 +19,12 @@ class RecordingRepository extends PreviewRepository {
   @override
   bool get signedIn => true;
   @override
-  Future<Result<bool>> publish(Publication publication) async {
+  Future<Result<FeedEntry>> savePublication(
+    Publication publication, {
+    FeedEntry? existing,
+  }) async {
     publishes++;
-    return const Result.success(true);
+    return const Result.failure(AppFailure('test failure'));
   }
 }
 
@@ -42,7 +45,7 @@ void main() {
     expect(find.textContaining('لا بيانات تجريبية وهمية'), findsOneWidget);
     await tester.tap(find.text('محتوى تعليمي'));
     await tester.pumpAndSettle();
-    expect(find.text('نوع المحتوى'), findsOneWidget);
+    expect(find.text('نوع المحتوى والموقع وبقية الفلاتر'), findsOneWidget);
     expect(find.byIcon(Icons.favorite), findsNothing);
   });
   testWidgets('publishing is auth gated in preview', (tester) async {

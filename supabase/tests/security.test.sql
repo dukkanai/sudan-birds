@@ -31,21 +31,21 @@ select is((select count(*)::integer from public.posts),0,'block hides posts via 
 select throws_ok($$insert into public.replies(post_id,body) values('10000000-0000-4000-8000-000000000001','Blocked reply')$$,'42501',null,'block denies replying');
 select throws_ok($$update public.upload_intents set state='verified'$$,'42501',null,'clients cannot verify media');
 select set_config('request.jwt.claim.sub','00000000-0000-4000-8000-000000000001',true);
-select lives_ok($$select public.reserve_upload('10000000-0000-4000-8000-000000000001',null,100,'image/png')$$,'first reservation accepted');
-select public.reserve_upload('10000000-0000-4000-8000-000000000001',null,100,'image/png');
-select public.reserve_upload('10000000-0000-4000-8000-000000000001',null,100,'image/png');
-select throws_ok($$select public.reserve_upload('10000000-0000-4000-8000-000000000001',null,100,'image/png')$$,'P0001','Attachment limit reached','fourth image denied');
-select throws_ok($$select public.reserve_upload('10000000-0000-4000-8000-000000000002',null,6000000,'image/png')$$,'22023','Invalid upload','oversize denied');
+select lives_ok($$select public.reserve_upload('10000000-0000-4000-8000-000000000001',null,100,'image/jpeg')$$,'first reservation accepted');
+select public.reserve_upload('10000000-0000-4000-8000-000000000001',null,100,'image/jpeg');
+select public.reserve_upload('10000000-0000-4000-8000-000000000001',null,100,'image/jpeg');
+select throws_ok($$select public.reserve_upload('10000000-0000-4000-8000-000000000001',null,100,'image/jpeg')$$,'P0001','Attachment limit reached','fourth image denied');
+select throws_ok($$select public.reserve_upload('10000000-0000-4000-8000-000000000002',null,6000000,'image/jpeg')$$,'22023','Invalid upload','oversize denied');
 select lives_ok($test$
  do $body$ declare target uuid; begin
   for i in 1..17 loop
    insert into public.posts(kind,title,body) values('education','Quota target','Body') returning id into target;
-   perform public.reserve_upload(target,null,100,'image/png');
+   perform public.reserve_upload(target,null,100,'image/jpeg');
    delete from public.posts where id=target;
   end loop;
  end $body$;
 $test$,'consume daily quota while deleting each uploaded parent');
-select throws_ok($$select public.reserve_upload('10000000-0000-4000-8000-000000000002',null,100,'image/png')$$,'P0001','Upload quota reached','parent deletion cannot reset upload quota');
+select throws_ok($$select public.reserve_upload('10000000-0000-4000-8000-000000000002',null,100,'image/jpeg')$$,'P0001','Upload quota reached','parent deletion cannot reset upload quota');
 select throws_ok($$delete from private.upload_events$$,'42501',null,'upload ledger is private');
 insert into public.reports(post_id,reason) values('10000000-0000-4000-8000-000000000002','Report survives target deletion');
 delete from public.posts where id='10000000-0000-4000-8000-000000000002';

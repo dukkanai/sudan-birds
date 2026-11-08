@@ -1,10 +1,11 @@
 // Real PostgreSQL local harness with minimal synthetic Supabase auth context.
 // Usage: EMBEDDED_POSTGRES_MODULE=/absolute/path/to/embedded-postgres/dist/index.js node supabase/tests/embedded_security.mjs
 // Not a substitute for Supabase/PostgREST integration or pgTAP CI.
-import { readFile, mkdtemp, rm } from 'node:fs/promises';
+import { readFile, readdir, mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import assert from 'node:assert/strict';
+import {verifiedCases} from './verified_security_cases.mjs';
 const { default: EmbeddedPostgres } = await import(process.env.EMBEDDED_POSTGRES_MODULE || 'embedded-postgres');
 const dir = await mkdtemp(join(tmpdir(), 'birds-db-'));
 const pg = new EmbeddedPostgres({ databaseDir: join(dir,'data'), user:'postgres', password:'synthetic-test-only', port:15439, persistent:false, createPostgresUser:false, initdbFlags:['--encoding=UTF8'], postgresFlags:['-c','unix_socket_directories='], onLog:()=>{}, onError:console.error });
@@ -18,9 +19,10 @@ try {
  await pg.initialise(); await pg.start(); client=pg.getPgClient(); await client.connect();
  await q(`create role anon; create role authenticated; create role service_role bypassrls;
  create schema auth; create table auth.users(id uuid primary key);
+ create table auth.sessions(id uuid primary key,user_id uuid references auth.users(id) on delete cascade,created_at timestamptz not null default now(),not_after timestamptz);
  create function auth.uid() returns uuid language sql stable as $$ select nullif(current_setting('request.jwt.claim.sub',true),'')::uuid $$;
  grant usage on schema auth to anon,authenticated; grant execute on function auth.uid() to anon,authenticated;`);
- await q(await readFile(new URL('../migrations/202611080001_foundation.sql',import.meta.url),'utf8'));
+ for(const migration of (await readdir(new URL('../migrations/',import.meta.url))).filter(n=>n.endsWith('.sql')).sort()) await q(await readFile(new URL('../migrations/'+migration,import.meta.url),'utf8'));
  const seed=await readFile(new URL('../seed.sql',import.meta.url),'utf8');
  await check('local reference seed is idempotent and creates no user content',async()=>{
    await q(seed); await q(seed);
@@ -61,7 +63,7 @@ try {
  await check('reports remain private',async()=>assert.equal((await q('select * from reports')).rowCount,0));
  await check('contact reveal needs explicit requester consent',()=>denied('select * from reveal_listing_contact($1,false)',[l]));
  await check('contact reveal needs owner consent',async()=>assert.equal((await q('select * from reveal_listing_contact($1,true)',[l])).rowCount,0));
- await check('upload cannot target other owner',()=>denied("select reserve_upload($1,null,100,'image/png')",[p]));
+ await check('upload cannot target other owner',()=>denied("select reserve_upload($1,null,100,'image/jpeg')",[p]));
  await asUser(a); await q('update profile_contacts set reveal_consent=true,consent_at=now()');
  await asUser(b);
  await check('owner consent permits explicit reveal',async()=>assert.equal((await q('select * from reveal_listing_contact($1,true)',[l])).rowCount,1));
@@ -71,12 +73,12 @@ try {
  await check('blocked reply via API denied',()=>denied("insert into replies(post_id,body) values($1,'Blocked')",[p]));
  await asUser(a);
  await check('reverse block hides account',async()=>assert.equal((await q('select * from profiles where id=$1',[b])).rowCount,0));
- await check('first three attachment reservations succeed',async()=>{for(let i=0;i<3;i++)await q("select reserve_upload($1,null,100,'image/png')",[p]);});
- await check('fourth attachment rejected',()=>denied("select reserve_upload($1,null,100,'image/png')",[p],'P0001'));
- await check('oversize upload denied',()=>denied("select reserve_upload($1,null,6000000,'image/png')",[p2],'22023'));
+ await check('first three attachment reservations succeed',async()=>{for(let i=0;i<3;i++)await q("select reserve_upload($1,null,100,'image/jpeg')",[p]);});
+ await check('fourth attachment rejected',()=>denied("select reserve_upload($1,null,100,'image/jpeg')",[p],'P0001'));
+ await check('oversize upload denied',()=>denied("select reserve_upload($1,null,6000000,'image/jpeg')",[p2],'22023'));
  await check('unsafe MIME denied',()=>denied("select reserve_upload($1,null,100,'image/svg+xml')",[p2],'22023'));
  await check('cannot mark intent verified',()=>denied("update upload_intents set state='verified' where owner_id=$1",[a]));
- await check('cannot publish unverified media',()=>denied("insert into media(id,owner_id,post_id,object_key,byte_size,mime_type,width,height,verified_at) values($1,$2,$3,'injected',1,'image/png',1,1,now())",[a,a,p]));
+ await check('cannot publish unverified media',()=>denied("insert into media(id,owner_id,post_id,object_key,byte_size,mime_type,width,height,verified_at) values($1,$2,$3,'injected',1,'image/jpeg',1,1,now())",[a,a,p]));
  await asUser(null);
  await check('anonymous browsing works',async()=>assert.ok((await q('select * from posts')).rowCount>=2));
  await check('anonymous posting denied',()=>denied("insert into posts(kind,title,body) values('education','Anon post','Bad')"));
@@ -93,7 +95,7 @@ try {
    const clients=Array.from({length:6},()=>pg.getPgClient());
    try {
      await Promise.all(clients.map(async c=>{await c.connect(); await c.query("select set_config('request.jwt.claim.sub',$1,false)",[a]);await c.query('set role authenticated');}));
-     const results=await Promise.allSettled(clients.map(c=>c.query("select reserve_upload($1,null,100,'image/png')",[p2])));
+     const results=await Promise.allSettled(clients.map(c=>c.query("select reserve_upload($1,null,100,'image/jpeg')",[p2])));
      assert.equal(results.filter(r=>r.status==='fulfilled').length,3);
      assert.equal(results.filter(r=>r.status==='rejected' && r.reason.code==='P0001').length,3);
    }finally{await Promise.all(clients.map(c=>c.end()));}
@@ -105,11 +107,11 @@ try {
    await asUser(a);
    for(let i=used;i<20;i++) {
      const target=(await q("insert into posts(kind,title,body) values('education','Transient post','Body') returning id")).rows[0].id;
-     await q("select reserve_upload($1,null,100,'image/png')",[target]);
+     await q("select reserve_upload($1,null,100,'image/jpeg')",[target]);
      await q('delete from posts where id=$1',[target]);
    }
    const target=(await q("insert into posts(kind,title,body) values('education','New target','Body') returning id")).rows[0].id;
-   await denied("select reserve_upload($1,null,100,'image/png')",[target],'P0001');
+   await denied("select reserve_upload($1,null,100,'image/jpeg')",[target],'P0001');
  });
  await check('clients cannot clear upload ledger',()=>denied('delete from private.upload_events'));
  await q('reset role'); await q("update private.publish_limits set max_per_day=2 where table_name='posts'"); await asUser(a);
@@ -124,5 +126,6 @@ try {
  await check('private quota ledger cannot be modified',()=>denied('delete from private.publish_events'));
  await q('update profiles set accepted_terms_at=null where id=$1',[a]);
  await check('publishing requires terms acceptance',()=>denied("insert into listings(kind,title,description,quantity) values('request','No consent','Body',1)"));
+ await verifiedCases({q,asUser,check,denied,pg});
  console.log(`PASS ${passed} real PostgreSQL security checks`);
 } finally { if(client)await client.end(); await pg.stop(); await rm(dir,{recursive:true,force:true}); }

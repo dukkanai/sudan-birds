@@ -1,11 +1,29 @@
 import copy
+import json
 import unittest
 import urllib.request
 import urllib.error
-from codec_resource import endpoint, metrics, NoRedirect, TOKEN, require_verified_gateway, safe_failure
+from codec_resource import endpoint, metrics, NoRedirect, TOKEN, require_verified_gateway, safe_failure, diagnostic_error, diagnostic_details
 
 
 class Boundaries(unittest.TestCase):
+    def test_failure_memory_is_numeric_and_allowlisted(self):
+        payload = {'error': 'diagnostic_unavailable', 'calls': 3, 'secret': 'hidden',
+                   'memory': {'rss': 300000000, 'heapUsed': 120000000,
+                              'heapTotal': 160000000, 'external': 20000000,
+                              'secret': 'hidden'}}
+        details = diagnostic_details(json.dumps(payload).encode())
+        error = urllib.error.HTTPError('http://127.0.0.1', 503, 'hidden', {}, None)
+        result = safe_failure({'phase': 'request', **details}, error)
+        self.assertEqual(result['diagnostic_calls'], 3)
+        self.assertEqual(result['diagnostic_memory']['heapUsed'], 120000000)
+        self.assertNotIn('hidden', json.dumps(result))
+        for value in (True, -1, 2**53, 'hidden'):
+            payload['memory']['external'] = value
+            self.assertNotIn('diagnostic_memory', diagnostic_details(json.dumps(payload).encode()))
+        payload['error'] = 'empty_post_required'
+        self.assertNotIn('diagnostic_calls', diagnostic_details(json.dumps(payload).encode()))
+
     def test_verify_gateway_required(self):
         require_verified_gateway('[functions.codec-diagnostic]\nverify_jwt = true')
         for text in ('', '[functions.codec-diagnostic]\nverify_jwt = false',
@@ -23,6 +41,16 @@ class Boundaries(unittest.TestCase):
         self.assertEqual(result, dict(error='LOCAL_EDGE_PROBE_FAILED', phase='setup'))
         self.assertEqual(safe_failure({'phase': 'response_validation', 'status': 200},
                                       ValueError('secret'))['http_status'], 200)
+
+    def test_diagnostic_error_allowlist(self):
+        self.assertEqual(diagnostic_error(b'{"error":"empty_post_required","secret":"hidden"}'),
+                         'empty_post_required')
+        for raw in (b'{"error":"secret"}', b'[]', b'{"error":[]}', b'invalid', b'x' * 4097):
+            self.assertIsNone(diagnostic_error(raw))
+        failure = safe_failure({'phase': 'request', 'diagnostic_error': 'diagnostic_unavailable'},
+                               ValueError('secret'))
+        self.assertEqual(failure['diagnostic_error'], 'diagnostic_unavailable')
+        self.assertNotIn('diagnostic_error', safe_failure({'diagnostic_error': 'secret'}, ValueError()))
 
     def test_loopback(self):
         self.assertEqual(endpoint('http://127.0.0.1:54321'),

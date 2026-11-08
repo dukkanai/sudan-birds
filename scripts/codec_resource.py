@@ -72,7 +72,58 @@ def safe_failure(progress, error):
     status = error.code if isinstance(error, urllib.error.HTTPError) else progress.get('status')
     if type(status) is int and 100 <= status <= 599:
         result['http_status'] = status
+    code = progress.get('diagnostic_error')
+    if isinstance(code, str) and code in DIAGNOSTIC_ERRORS:
+        result['diagnostic_error'] = code
+        if code == 'diagnostic_unavailable' and status == 503:
+            memory = safe_memory(progress.get('diagnostic_memory'))
+            if memory is not None:
+                result['diagnostic_memory'] = memory
+            calls = progress.get('diagnostic_calls')
+            if type(calls) is int and 1 <= calls <= 20:
+                result['diagnostic_calls'] = calls
     return result
+
+
+DIAGNOSTIC_ERRORS = frozenset({'diagnostic_expired', 'diagnostic_unauthorized',
+    'empty_post_required', 'diagnostic_limit', 'diagnostic_unavailable'})
+
+
+def safe_memory(values):
+    if not isinstance(values, dict):
+        return None
+    result = {}
+    for key in ('rss', 'heapUsed', 'heapTotal', 'external'):
+        value = values.get(key)
+        if type(value) is not int or not 0 <= value < 2**53:
+            return None
+        result[key] = value
+    return result
+
+
+def diagnostic_details(raw):
+    try:
+        if len(raw) > 4096:
+            return {}
+        data = json.loads(raw)
+        code = data.get('error') if isinstance(data, dict) else None
+        if not isinstance(code, str) or code not in DIAGNOSTIC_ERRORS:
+            return {}
+        result = {'diagnostic_error': code}
+        if code == 'diagnostic_unavailable':
+            memory = safe_memory(data.get('memory'))
+            if memory is not None:
+                result['diagnostic_memory'] = memory
+            calls = data.get('calls')
+            if type(calls) is int and 1 <= calls <= 20:
+                result['diagnostic_calls'] = calls
+        return result
+    except Exception:
+        return {}
+
+
+def diagnostic_error(raw):
+    return diagnostic_details(raw).get('diagnostic_error')
 
 
 def run(cli, copy, progress):
@@ -151,7 +202,18 @@ def run(cli, copy, progress):
                 req = urllib.request.Request(url, method='POST', headers={
                     'Authorization': 'Bearer ' + key, 'apikey': key,
                     'x-codec-diagnostic-token': TOKEN})
-                with opener.open(req, timeout=30) as response:
+                try:
+                    response = opener.open(req, timeout=30)
+                except urllib.error.HTTPError as error:
+                    # Only an allowlisted code and bounded numeric metrics may be emitted.
+                    try:
+                        progress.update(diagnostic_details(error.read(4097)))
+                    except Exception:
+                        pass  # Preserve the original HTTP status even if error-body read fails.
+                    finally:
+                        error.close()
+                    raise
+                with response:
                     progress.update(phase='response_validation', status=response.status)
                     if response.status != 200:
                         raise ValueError('non-200 result')

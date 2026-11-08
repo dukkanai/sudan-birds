@@ -3,6 +3,7 @@ import { sanitizeJpeg } from "../_shared/images.ts";
 import { requireCodecCapacity, singleVerification } from "../_shared/codec_capacity.ts";
 import { json } from "../_shared/http.ts";
 import { allowedProbeToken } from "./authorization.ts";
+import { hasEmptyBody } from "./empty_body.ts";
 import { fixtureBase64 } from "./fixture.ts";
 export function createCodecDiagnostic(fixedUtcDeadline: string, expectedToken?: string) {
   const expires = Date.parse(fixedUtcDeadline);
@@ -20,8 +21,8 @@ export function createCodecDiagnostic(fixedUtcDeadline: string, expectedToken?: 
       if (!await allowedProbeToken(req.headers.get("x-codec-diagnostic-token"), expectedToken)) {
         return json({ error: "diagnostic_unauthorized" }, 403);
       }
-      if (req.method !== "POST" || new URL(req.url).search !== "" || req.body !== null) {
-        await req.body?.cancel();
+      if (req.method !== "POST" || new URL(req.url).search !== "" || !await hasEmptyBody(req)) {
+        void req.body?.cancel().catch(() => {});
         return json({ error: "empty_post_required" }, 400);
       }
       if (calls >= 20) return json({ error: "diagnostic_limit" }, 429);

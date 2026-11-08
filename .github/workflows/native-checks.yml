@@ -2,6 +2,11 @@ name: Native compile checks
 
 on:
   workflow_dispatch:
+  push:
+    branches: ['build/**']
+    paths:
+      - 'app/**'
+      - '.github/workflows/native-checks.yml'
   pull_request:
     paths:
       - 'app/**'

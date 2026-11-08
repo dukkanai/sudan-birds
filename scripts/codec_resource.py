@@ -126,6 +126,33 @@ def diagnostic_error(raw):
     return diagnostic_details(raw).get('diagnostic_error')
 
 
+def local_entrypoint(deadline):
+    """Only written into the disposable LOCAL archive; never a hosted handler."""
+    return (
+        'import * as r2 from "../_shared/r2.ts";\n'
+        'import * as auth from "../_shared/auth.ts";\n'
+        'import { createCodecDiagnostic } from "./handler.ts";\n'
+        f'const diagnostic = createCodecDiagnostic({json.dumps(deadline)}, {json.dumps(TOKEN)});\n'
+        'Deno.serve(async (req: Request) => {\n'
+        # Retain actual exported function objects in the request closure. Do not call them.
+        '  const r2Exports = Object.values(r2);\n'
+        '  const authExports = Object.values(auth);\n'
+        '  if (r2Exports.length !== 5 || authExports.length !== 7 ||\n'
+        '      ![...r2Exports, ...authExports].every((value) => typeof value === "function")) {\n'
+        '    return new Response(null, { status: 503 });\n'
+        '  }\n'
+        '  const response = await diagnostic(req);\n'
+        '  response.headers.set("x-local-sdk-imports", "r2-5-auth-7");\n'
+        '  return response;\n'
+        '});\n'
+    )
+
+
+def require_sdk_import_marker(value):
+    if value != 'r2-5-auth-7':
+        raise ValueError('production helper import marker missing')
+
+
 def run(cli, copy, progress):
     """copy must be a disposable git archive. CLI output is NEVER echoed."""
     progress['phase'] = 'setup'
@@ -143,8 +170,7 @@ def run(cli, copy, progress):
     deadline = (dt.datetime.now(dt.timezone.utc) + dt.timedelta(minutes=20)).isoformat(
         timespec='milliseconds').replace('+00:00', 'Z')
     (copy / 'supabase/functions/codec-diagnostic/index.ts').write_text(
-        'import { createCodecDiagnostic } from "./handler.ts";\n'
-        f'Deno.serve(createCodecDiagnostic({json.dumps(deadline)}, {json.dumps(TOKEN)}));\n')
+        local_entrypoint(deadline))
     with tempfile.TemporaryDirectory(prefix='birds-codec-private-', dir=copy) as private:
         log = Path(private) / 'cli.log'
         status_file = Path(private) / 'status.json'
@@ -217,6 +243,7 @@ def run(cli, copy, progress):
                     progress.update(phase='response_validation', status=response.status)
                     if response.status != 200:
                         raise ValueError('non-200 result')
+                    require_sdk_import_marker(response.headers.get('x-local-sdk-imports'))
                     raw = response.read(16385)
                     if len(raw) > 16384:
                         raise ValueError('oversized response')
@@ -241,7 +268,7 @@ def run(cli, copy, progress):
                     progress['phase'] = 'cleanup'
                     raise
 
-    print('LOCAL_EDGE_PROBE_PASS: 20/20; warm worker observed; NOT hosted clearance')
+    print('LOCAL_EDGE_PROBE_PASS: 20/20; production helper imports retained; warm worker observed; NOT hosted clearance')
 
 
 if __name__ == '__main__':

@@ -14,6 +14,12 @@ sequential bodyless requests. Failures stop the test without retries. CLI output
 status files, arbitrary response bodies and credentials are not printed or
 uploaded. Cleanup runs both in Python finally and an unconditional workflow step.
 
+The disposable entrypoint also imports and retains the actual R2 and Auth helper
+namespaces, checking their twelve exported functions without invoking them. A fixed
+response marker is required on every request. This exercises SDK module initialization
+and retained import footprint; it does not call Auth, R2 or database operations. The
+hosted diagnostic handler remains unchanged.
+
 All 20 requests must return valid 200 metrics, 640×640 output, a positive bounded
 JPEG size and the exact deadline. At least one response must have `calls > 1` to
 prove warm-worker reuse. Any 429, 503, worker kill, timeout, malformed response or
@@ -40,7 +46,7 @@ compared with the 256MiB isolate limit. Elapsed time is not CPU time.
 
 This is an actual local user-worker supervisor test, not plain Deno, but it is
 not a hosted-runtime equivalence claim. It covers one fixed noisy baseline JPEG,
-not every hostile JPEG, concurrent production workload, SDK memory footprint or
+not every hostile JPEG, concurrent production workload, SDK request-processing allocations or
 R2 upload/verification/deletion integration. Hosted compatibility and resource
 checks, adversarial tests and actual R2 integration remain release gates. A local
 pass must never enable the pipeline automatically.

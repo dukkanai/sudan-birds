@@ -3,10 +3,31 @@ import json
 import unittest
 import urllib.request
 import urllib.error
-from codec_resource import endpoint, metrics, NoRedirect, TOKEN, require_verified_gateway, safe_failure, diagnostic_error, diagnostic_details
+from codec_resource import local_entrypoint, require_sdk_import_marker, endpoint, metrics, NoRedirect, TOKEN, require_verified_gateway, safe_failure, diagnostic_error, diagnostic_details
 
 
 class Boundaries(unittest.TestCase):
+    def test_local_sdk_import_entrypoint(self):
+        source = local_entrypoint('2026-11-08T00:20:00.000Z')
+        self.assertIn('import * as r2 from "../_shared/r2.ts";', source)
+        self.assertIn('import * as auth from "../_shared/auth.ts";', source)
+        self.assertIn('Object.values(r2)', source)
+        self.assertIn('Object.values(auth)', source)
+        self.assertIn('r2Exports.length !== 5', source)
+        self.assertIn('authExports.length !== 7', source)
+        self.assertIn('await diagnostic(req)', source)
+        self.assertIn('"2026-11-08T00:20:00.000Z"', source)
+        self.assertIn(json.dumps(TOKEN), source)
+        for forbidden in ('Deno.env', 'fetch(', 'r2.', 'auth.', 'Date.now('):
+            # Module specifiers contain r2.ts/auth.ts, so inspect after imports.
+            self.assertNotIn(forbidden, source[source.index('const diagnostic'):])
+
+    def test_sdk_import_marker_required(self):
+        require_sdk_import_marker('r2-5-auth-7')
+        for value in (None, '', 'true', 'r2-5-auth-7-extra'):
+            with self.assertRaises(ValueError):
+                require_sdk_import_marker(value)
+
     def test_failure_memory_is_numeric_and_allowlisted(self):
         payload = {'error': 'diagnostic_unavailable', 'calls': 3, 'secret': 'hidden',
                    'memory': {'rss': 300000000, 'heapUsed': 120000000,

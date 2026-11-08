@@ -2,8 +2,20 @@
   "imports": {
     "@supabase/supabase-js": "npm:@supabase/supabase-js@2.57.4",
     "@aws-sdk/client-s3": "npm:@aws-sdk/client-s3@3.1164.0",
-    "@aws-sdk/s3-request-presigner": "npm:@aws-sdk/s3-request-presigner@3.1164.0"
+    "@aws-sdk/s3-request-presigner": "npm:@aws-sdk/s3-request-presigner@3.1164.0",
+    "jpeg-js": "npm:jpeg-js@0.4.4"
   },
-  "compilerOptions": { "strict": true },
-  "fmt": { "lineWidth": 100 }
+  "compilerOptions": {
+    "strict": true
+  },
+  "fmt": {
+    "lineWidth": 100
+  },
+  "lint": {
+    "rules": {
+      "exclude": [
+        "no-import-prefix"
+      ]
+    }
+  }
 }

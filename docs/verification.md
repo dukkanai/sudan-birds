@@ -1,15 +1,15 @@
 # Verification record
 
-Date: 2026-11-08. Environment: disposable Linux workspace, synthetic test data only. This record describes a development foundation, not a release approval.
+Date: 2026-11-08. Environments: disposable Linux workspace, GitHub CI, and the empty designated Supabase staging project. Synthetic fixtures only; no real user data. This record describes development verification, not release approval.
 
 ## Executed checks
 
 - Real PostgreSQL 17.6 migration, reference-seed idempotency and negative security harness: **48 assertions passed** after the final backend changes.
 - Concurrency: six simultaneous attachment reservations allowed exactly three; ownership, privileged-column spoofing, price validation, report/contact privacy, blocks, reply identity, moderation audit and deletion-resistant quotas tested.
-- Full local Supabase stack in GitHub CI: **24 pgTAP assertions passed** on SHA `0b0cfd6e54880cf412f4a6864a880b71be80e3b8`. That aggregate run failed a separate Flutter test-file formatting check; the formatting fix is included in the next commit. Follow final branch checks rather than treating this partial result as approval.
+- Foundation CI passed on exact SHA `d9952c74385a960b31d61686f94263ca9edd3cd8`: Flutter, database (**24 pgTAP assertions**), Edge checks, repository security, Android debug compile and unsigned iOS simulator compile. [Required checks](https://github.com/dukkanai/sudan-birds/actions/runs/42520396936), [native checks](https://github.com/dukkanai/sudan-birds/actions/runs/42520396938). Later commits require their own results.
 - Edge handlers: Deno 2.5.6 strict type checks, formatting, lint and five request-boundary tests executed.
 - Dependency audit: initial AWS SDK dependency audit found a critical transitive advisory. Pins were updated to 3.1164.0 and the final npm audit returned zero known vulnerabilities. This is a point-in-time audit, not proof of absence of vulnerabilities.
-- Native compile checks: Android debug APK and unsigned iOS simulator build both passed for SHA `0b0cfd6e54880cf412f4a6864a880b71be80e3b8` in [run 42519691941](https://github.com/dukkanai/sudan-birds/actions/runs/42519691941). This is compilation, not device testing or store distribution.
+- Native compile success is not device testing or store distribution.
 - Gitleaks 8.21.2 local source scan: no leaks found. CI also scans Git history with redacted output.
 - Repository policy and workflow YAML parsing checks executed.
 - Flutter 3.38.5 / Dart 3.10.4: formatting passed, analysis reported no issues, and **12 tests passed** (domain, search escaping, HTTP-mocked repository pagination/error handling, and Arabic widget flows).
@@ -18,11 +18,22 @@ The local SQL harness creates minimal synthetic `auth.users` / `auth.uid()` equi
 
 ## Security review and regression work
 
-Source review identified upload-quota reset via content deletion, report-queue deletion via cascading foreign keys, and incorrect search quoting. All three source findings were fixed and re-reviewed. Regression tests cover deletion-resistant quotas, report preservation and layered search escaping. CI must still confirm the final PR commit before approval. The review did not establish an RLS ownership bypass. Search parser integration still requires real PostgREST validation.
+Source review identified upload-quota reset via content deletion, report-queue deletion via cascading foreign keys, and incorrect search quoting. All three source findings were fixed and re-reviewed. Regression tests cover deletion-resistant quotas, report preservation and layered search escaping. CI must still confirm the final PR commit before approval. The review did not establish an RLS ownership bypass. The real local PostgREST 16.5 regression script passed ten checks, including tied-timestamp pagination, combined search/cursor conditions, literal special-character search, and anonymous access denials. It used a temporary loopback adapter and PostgreSQL 17.6; the full Supabase gateway version runs separately in CI.
+
+## Hosted staging verification
+
+- Applied only foundation migration `202611080001`, verified 14 public tables with RLS and 25 policies, and registered its exact 110 statements in migration history using the official CLI schema.
+- Reference seed applied twice with stable totals: 9 bird types, 6 topics, 5 locations. No auth users created.
+- Existing public publishable key used for read-only API checks: public taxonomy and empty feeds returned HTTP 200; contacts, reports, moderator roles and upload intents returned HTTP 401 to anonymous clients.
+- No service credentials generated, no R2 object uploads, no production deployment.
+
+## Temporary codec diagnostic
+
+A fail-closed fixed-synthetic diagnostic is included for a separately approved staging resource test. Its committed entry is expired. It accepts no arbitrary images, database operations, R2 operations or user data. A fresh literal expiry and an explicitly approved temporary secret are both required. Local codec timing or process RSS is not proof of Supabase's per-isolate memory behavior; the image feature remains disabled until hosted resource and end-to-end tests pass.
 
 ## Not yet verified / not delivered
 
-- Hosted Supabase migration and connected end-to-end API/auth flow.
+- Connected end-to-end authenticated API flow.
 - Real Google/Apple sign-in and secure callback configuration.
 - R2 image decoder/reencoder, EXIF removal, delivery, deletion and abuse scenarios. Image completion deliberately fails closed.
 - Real-device VoiceOver/TalkBack, large-screen/font behavior across devices, network interruption and upload recovery.

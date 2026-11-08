@@ -27,3 +27,6 @@ ios/.symlinks/
 ios/Flutter/Generated.xcconfig
 ios/Flutter/flutter_export_environment.sh
 .runtime/
+
+__pycache__/
+*.pyc

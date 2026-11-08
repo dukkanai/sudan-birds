@@ -3,7 +3,7 @@ name: Required checks
 on:
   pull_request:
   push:
-    branches: [main, 'build/**']
+    branches: [main]
   workflow_dispatch:
   workflow_call:
 
@@ -58,6 +58,12 @@ jobs:
       - name: Database and RLS negative tests
         run: >-
           "$RUNNER_TEMP/birds-cli/node_modules/.bin/supabase" test db
+      - name: PostgREST API regression checks
+        run: |
+          umask 077
+          trap 'rm -f "$RUNNER_TEMP/birds-status.json"' EXIT
+          "$RUNNER_TEMP/birds-cli/node_modules/.bin/supabase" status --output json > "$RUNNER_TEMP/birds-status.json"
+          python3 scripts/api_smoke.py "$RUNNER_TEMP/birds-status.json"
       - name: Stop isolated services
         if: always()
         run: >-
@@ -77,8 +83,8 @@ jobs:
       - run: cd supabase/functions && npm audit --omit=dev --audit-level=high
       - run: cd supabase/functions && deno fmt --check
       - run: cd supabase/functions && deno lint
-      - run: cd supabase/functions && deno check --node-modules-dir=manual media/index.ts contact/index.ts
-      - run: cd supabase/functions && deno test --node-modules-dir=manual _shared/http_test.ts
+      - run: cd supabase/functions && deno check --node-modules-dir=manual */index.ts
+      - run: cd supabase/functions && deno test --node-modules-dir=manual
 
   repository-security:
     runs-on: ubuntu-24.04

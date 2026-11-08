@@ -6,6 +6,7 @@ on:
     paths:
       - 'app/**'
       - '.github/workflows/native-checks.yml'
+      - '.github/workflows/ci.yml'
 
 permissions:
   contents: read

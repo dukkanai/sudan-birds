@@ -50,8 +50,14 @@ jobs:
       - name: Install pinned Supabase CLI
         run: npm install --no-audit --no-fund --prefix "$RUNNER_TEMP/birds-cli" supabase@2.67.1
       - name: Start isolated synthetic Supabase
-        run: >-
-          "$RUNNER_TEMP/birds-cli/node_modules/.bin/supabase" start -x studio,imgproxy,inbucket,logflare,vector,supavisor
+        run: |
+          umask 077
+          trap 'rm -f "$RUNNER_TEMP/birds-start.log"' EXIT
+          # CLI startup prints local test credentials. Keep them out of public CI logs.
+          if ! "$RUNNER_TEMP/birds-cli/node_modules/.bin/supabase" start -x studio,imgproxy,inbucket,logflare,vector,supavisor > "$RUNNER_TEMP/birds-start.log" 2>&1; then
+            echo 'Isolated Supabase startup failed. Raw output was suppressed because it can contain local credentials.'
+            exit 1
+          fi
       - name: Apply migrations
         run: >-
           "$RUNNER_TEMP/birds-cli/node_modules/.bin/supabase" db reset --local

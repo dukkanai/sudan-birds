@@ -1,0 +1,16 @@
+name: Production release gates (not configured)
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: birds-production
+  cancel-in-progress: false
+jobs:
+  release-blocked:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Require approved exact release candidate
+        run: |
+          echo 'Production release is blocked. No signed candidate has passed all release gates. Explicit owner approval and evidence for the same SHA are required.'
+          exit 1

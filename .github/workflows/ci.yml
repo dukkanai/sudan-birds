@@ -1,0 +1,94 @@
+name: Required checks
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+  workflow_call:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CI: 'true'
+  BOT: 'true'
+  FLUTTER_SUPPRESS_ANALYTICS: 'true'
+
+jobs:
+  flutter:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: subosito/flutter-action@fd55f4c5af5b953cc57a2be44cb082c8f6635e8e
+        with:
+          flutter-version: '3.38.5'
+          channel: stable
+          cache: true
+      - run: flutter pub get --enforce-lockfile
+      - run: dart format --output=none --set-exit-if-changed lib test
+      - run: flutter analyze
+      - run: flutter test --coverage
+
+  database:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Install pinned Supabase CLI
+        run: npm install --no-audit --no-fund --prefix "$RUNNER_TEMP/birds-cli" supabase@2.67.1
+      - name: Start isolated synthetic Supabase
+        run: >-
+          "$RUNNER_TEMP/birds-cli/node_modules/.bin/supabase" start -x studio,imgproxy,inbucket,logflare,vector,supavisor
+      - name: Apply migrations
+        run: >-
+          "$RUNNER_TEMP/birds-cli/node_modules/.bin/supabase" db reset --local
+      - name: Database and RLS negative tests
+        run: >-
+          "$RUNNER_TEMP/birds-cli/node_modules/.bin/supabase" test db
+      - name: Stop isolated services
+        if: always()
+        run: >-
+          "$RUNNER_TEMP/birds-cli/node_modules/.bin/supabase" stop --no-backup
+
+  edge:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: denoland/setup-deno@e95548e56dfa95d4e1a28d6f422fafe75c4c26fb
+        with:
+          deno-version: v2.5.6
+      - run: cd supabase/functions && npm ci --ignore-scripts --no-audit --no-fund
+      - run: cd supabase/functions && npm audit --omit=dev --audit-level=high
+      - run: cd supabase/functions && deno fmt --check
+      - run: cd supabase/functions && deno lint
+      - run: cd supabase/functions && deno check --node-modules-dir=manual media/index.ts contact/index.ts
+      - run: cd supabase/functions && deno test --node-modules-dir=manual _shared/http_test.ts
+
+  repository-security:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Repository policy checks
+        run: python3 scripts/check_repository.py
+      - name: Secret scan (redacted, complete Git history)
+        run: go run github.com/zricethezav/gitleaks/v8@v8.21.2 git --redact --no-banner .

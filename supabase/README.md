@@ -106,14 +106,14 @@ Actual verification performed locally:
   including deletion-resistant daily upload quotas and a six-concurrent-request test that allowed exactly three reservations.
 - Deno 2.5.6 type checking, formatting and lint passed; five HTTP boundary tests passed.
 - Final npm audit reported zero known vulnerabilities after updating AWS SDK to 3.1164.0.
-- pgTAP suite is supplied for Supabase CI but has NOT been run in a full Supabase stack.
+- All **24 pgTAP assertions passed** against the disposable full Supabase stack in [CI run 42519691942](https://github.com/dukkanai/sudan-birds/actions/runs/42519691942), SHA `0b0cfd6e54880cf412f4a6864a880b71be80e3b8`. That aggregate run had a separate Flutter formatting failure, so it is not an all-checks approval.
 - No deployed Supabase/R2 integration, provider login, email verification, account
   deletion, mobile integration, load test or penetration-test certification is claimed.
 
 ## Mandatory remaining gates
 
 Provision/configure separate staging Supabase with approved secrets, run migrations
-and pgTAP in the actual stack, finish image verification, account deletion and retention,
+and connected hosted API flows, finish image verification, account deletion and retention,
 complete moderation/report workflows, test expiry/search/Arabic on representative data,
 exercise PostgREST JWT/RLS and expired/revoked sessions, test rate limits under load,
 verify real device accessibility and publish a signed staging build. Until then this

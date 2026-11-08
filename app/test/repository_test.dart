@@ -38,7 +38,10 @@ void main() {
       );
       expect(result.isSuccess, isTrue);
       expect(sent!.queryParametersAll['or'], hasLength(2));
-      expect(sent!.queryParameters['order'], 'created_at.desc.nullslast,id.desc.nullslast');
+      expect(
+        sent!.queryParameters['order'],
+        'created_at.desc.nullslast,id.desc.nullslast',
+      );
       expect(sent!.queryParameters['limit'], '20');
       expect(sent!.queryParameters['status'], 'eq.active');
       expect(

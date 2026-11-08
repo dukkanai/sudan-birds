@@ -6,8 +6,10 @@ Date: 2026-11-08. Environment: disposable Linux workspace, synthetic test data o
 
 - Real PostgreSQL 17.6 migration, reference-seed idempotency and negative security harness: **48 assertions passed** after the final backend changes.
 - Concurrency: six simultaneous attachment reservations allowed exactly three; ownership, privileged-column spoofing, price validation, report/contact privacy, blocks, reply identity, moderation audit and deletion-resistant quotas tested.
+- Full local Supabase stack in GitHub CI: **24 pgTAP assertions passed** on SHA `0b0cfd6e54880cf412f4a6864a880b71be80e3b8`. That aggregate run failed a separate Flutter test-file formatting check; the formatting fix is included in the next commit. Follow final branch checks rather than treating this partial result as approval.
 - Edge handlers: Deno 2.5.6 strict type checks, formatting, lint and five request-boundary tests executed.
 - Dependency audit: initial AWS SDK dependency audit found a critical transitive advisory. Pins were updated to 3.1164.0 and the final npm audit returned zero known vulnerabilities. This is a point-in-time audit, not proof of absence of vulnerabilities.
+- Native compile checks: Android debug APK and unsigned iOS simulator build both passed for SHA `0b0cfd6e54880cf412f4a6864a880b71be80e3b8` in [run 42519691941](https://github.com/dukkanai/sudan-birds/actions/runs/42519691941). This is compilation, not device testing or store distribution.
 - Gitleaks 8.21.2 local source scan: no leaks found. CI also scans Git history with redacted output.
 - Repository policy and workflow YAML parsing checks executed.
 - Flutter 3.38.5 / Dart 3.10.4: formatting passed, analysis reported no issues, and **12 tests passed** (domain, search escaping, HTTP-mocked repository pagination/error handling, and Arabic widget flows).

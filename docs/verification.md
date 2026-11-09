@@ -240,3 +240,38 @@ References:
 - https://github.com/rhysd/actionlint/releases/tag/v1.7.7
 - https://docs.github.com/en/actions/learn-github-actions/contexts#context-availability
 - https://docs.github.com/en/actions/using-workflows/workflow-commands-for-github-actions#setting-an-environment-variable
+
+### Clean-checkout wrapper ordering correction
+
+Native run `42573640818`, job `129016402575`, exposed another preparation defect:
+`app/android/gradlew` does not exist in a clean checkout. Flutter intentionally
+ignores its generated launchers and wrapper JAR. Earlier tests used an existing
+workspace and did not catch this clean-checkout assumption.
+
+The workflow now installs the scoped init policy, runs `flutter build apk
+--debug`, and only then runs offline repository-policy tests using the exact
+Gradle 8.14 binary downloaded by that build. Flutter 3.38.5's
+`GradleUtils.getExecutable` calls `injectGradleWrapperIfNeeded`: it copies missing
+wrapper files and preserves the existing properties. No wrapper binary,
+launcher, ignore-rule change, SDK edit, or extra bootstrap was introduced.
+Both build and policy-test steps are mandatory: neither is conditional or
+allowed to fail without failing the job.
+
+Validation used a fresh `git archive` of
+`9ce9b153f96eaa3a6742b7333ec1490f779a3476`, overlaid only with the candidate
+workflow and tests. The archive had neither launcher nor wrapper JAR. The actual
+initial environment-export and init-install commands succeeded without those
+files. Locked Flutter dependency resolution succeeded; lockfile and Gradle
+properties remained byte-identical, and it did not create the wrapper. Four tests
+passed from the archive with official Gradle 8.14, including an added regression
+for init/build/test ordering and mandatory test execution. All workflows passed
+actionlint; repository policy and diff checks passed.
+
+The clean-archive APK command stops at `No Android SDK found`; it has not compiled
+locally. Test execution used the separately verified official Gradle binary,
+not an assertion that the Android build generated one here. Fresh CI must prove
+the complete build and subsequent test sequence before any release/hosted gate
+is considered satisfied.
+
+Flutter source reference:
+https://github.com/flutter/flutter/blob/3.38.5/packages/flutter_tools/lib/src/android/gradle_utils.dart

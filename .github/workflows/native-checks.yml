@@ -35,18 +35,17 @@ jobs:
           channel: stable
           cache: true
       - run: cd app && flutter pub get --enforce-lockfile
-      - name: Verify scoped repository policy (offline)
-        run: |
-          app/android/gradlew --version
-          gradle_bins=("$GRADLE_USER_HOME"/wrapper/dists/gradle-8.14-all/*/gradle-8.14/bin/gradle)
-          test "${#gradle_bins[@]}" -eq 1
-          test -x "${gradle_bins[0]}"
-          GRADLE_TEST_BIN="${gradle_bins[0]}" python3 -m unittest discover -s scripts -p 'flutter_plugin_repositories_test.py' -v
       - name: Configure Flutter plugin dependency source
         run: |
           mkdir -p "$GRADLE_USER_HOME/init.d"
           cp app/android/ci/flutter-plugin-repositories.init.gradle "$GRADLE_USER_HOME/init.d/"
       - run: cd app && flutter build apk --debug
+      - name: Verify scoped repository policy (offline)
+        run: |
+          gradle_bins=("$GRADLE_USER_HOME"/wrapper/dists/gradle-8.14-all/*/gradle-8.14/bin/gradle)
+          test "${#gradle_bins[@]}" -eq 1
+          test -x "${gradle_bins[0]}"
+          GRADLE_TEST_BIN="${gradle_bins[0]}" python3 -m unittest discover -s scripts -p 'flutter_plugin_repositories_test.py' -v
 
   ios-simulator:
     runs-on: macos-15

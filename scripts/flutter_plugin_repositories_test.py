@@ -12,6 +12,22 @@ ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / 'app/android/ci/flutter-plugin-repositories.init.gradle'
 
 
+class NativeWorkflowOrderTest(unittest.TestCase):
+    def test_generated_wrapper_is_not_required_before_flutter_build(self):
+        workflow = (ROOT / '.github/workflows/native-checks.yml').read_text()
+        android = workflow.split('  android-debug:', 1)[1].split('  ios-simulator:', 1)[0]
+        init = android.index('name: Configure Flutter plugin dependency source')
+        build = android.index('run: cd app && flutter build apk --debug')
+        tests = android.index('name: Verify scoped repository policy (offline)')
+        self.assertLess(init, build)
+        self.assertLess(build, tests)
+        self.assertNotIn('gradlew', android)
+        self.assertNotIn('continue-on-error:', android)
+        self.assertNotIn('if:', android)
+        self.assertEqual(android.count("-p 'flutter_plugin_repositories_test.py'"), 1)
+        self.assertIn('test -x "${gradle_bins[0]}"', android)
+
+
 @unittest.skipUnless(os.environ.get('GRADLE_TEST_BIN'), 'GRADLE_TEST_BIN not set')
 class FlutterPluginRepositoriesTest(unittest.TestCase):
     def setUp(self):

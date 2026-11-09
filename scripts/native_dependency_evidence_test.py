@@ -421,6 +421,24 @@ class EvidenceBoundaryTest(unittest.TestCase):
 
 
 class WorkflowBoundaryTest(unittest.TestCase):
+    def test_ios_explicitly_provisions_pinned_go_before_build_and_scan(self):
+        workflow = (ROOT / '.github/workflows/native-checks.yml').read_text()
+        ios = workflow.split('  ios-simulator:', 1)[1]
+        setup = """      - name: Prepare Go for evidence secret scan
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: '1.27.3'
+          cache: false
+"""
+        # macos-15 did not provide Go on PATH in the first real capture run.
+        # Do not substitute runner-image assumptions or a success-on-error path.
+        self.assertEqual(ios.count(setup), 1)
+        self.assertLess(ios.index(setup), ios.index('flutter build ios --simulator'))
+        self.assertLess(ios.index(setup), ios.index('gitleaks/v8@v8.21.2 dir'))
+        self.assertNotIn('continue-on-error', ios)
+        self.assertNotIn('|| true', ios)
+        self.assertNotIn('if:', ios)
+
     def test_native_jobs_upload_only_four_specific_files_after_scanning(self):
         workflow = (ROOT / '.github/workflows/native-checks.yml').read_text()
         self.assertIn('contents: read', workflow)

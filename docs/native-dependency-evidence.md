@@ -47,6 +47,14 @@ The final exact-file-set, size, digest and content validation runs before and af
 
 The official GitHub [`actions/upload-artifact` v7.0.2 release](https://github.com/actions/upload-artifact/releases/tag/v7.0.2) links to the verified full commit [`cf430e030ddbb5b0abf93d22962f4752f3646cd9`](https://github.com/actions/upload-artifact/commit/cf430e030ddbb5b0abf93d22962f4752f3646cd9). The workflow pins that SHA, not the mutable tag. Its [action schema](https://github.com/actions/upload-artifact/blob/cf430e030ddbb5b0abf93d22962f4752f3646cd9/action.yml) supports explicit paths, missing-file errors, hidden-file exclusion and retention. It runs on Node 24 using the existing GitHub-hosted runners. Pinning is provenance control, not a security audit of the action or its dependencies.
 
+## Scanner toolchain prerequisite
+
+The [first candidate native run](https://github.com/dukkanai/sudan-birds/actions/runs/42712740594) compiled both Android debug and unsigned iOS simulator successfully. Android evidence passed scanning and uploaded. The [iOS evidence step](https://github.com/dukkanai/sudan-birds/actions/runs/42712740594/job/129486268215) failed with exit 127 because `go` was absent from the macOS runner's `PATH`; Gitleaks did not run, and no iOS evidence was uploaded. That was a missing scanner prerequisite, not a reported secret finding. The failed gate remains failed until a new exact-commit run succeeds.
+
+The iOS job now explicitly provisions Go before building, with cache disabled. The official [`actions/setup-go` v7.0.0 release](https://github.com/actions/setup-go/releases/tag/v7.0.0) resolves to [`b7ad1dad31e06c5925ef5d2fc7ad053ef454303e`](https://github.com/actions/setup-go/commit/b7ad1dad31e06c5925ef5d2fc7ad053ef454303e). Go is fixed to `1.27.3`, verified as a stable release with macOS ARM64 and x64 distributions in the [official Go download metadata](https://go.dev/dl/?mode=json). The action adds the toolchain to `PATH`; no persistent credential or new workflow permission is added. Its standard Go configuration appears in job logs, not in evidence artifacts. Capture scripts do not dump the process environment.
+
+Gitleaks remains exactly v8.21.2. Pre-scan and post-scan validation, all four-file allowlists, failure behavior, unsigned build scope and upload ordering are unchanged. An offline regression test requires the exact setup action/version/cache configuration before the iOS build and scanner; removing the prerequisite or introducing an ignored-failure path fails that test. It does not prove the remote download or macOS execution, which requires the next CI run.
+
 ## Offline verification
 
 From the repository root:

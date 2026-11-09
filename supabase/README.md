@@ -128,8 +128,8 @@ replace hosted Supabase/R2 integration, load tests or a security release review.
 
 ## Mandatory remaining gates
 
-Review the forward removal migration and obtain action-time approval before applying
-it to hosted staging. Verify approved service configuration, run
+The approved forward removal migration has been applied and verified on the
+designated staging project. Verify approved service configuration, run
 connected hosted API flows, verify deployed image/account-deletion flows and finalize retention,
 complete moderation/report workflows, test expiry/search/Arabic on representative data,
 exercise PostgREST JWT/RLS and expired/revoked sessions, test rate limits under load,

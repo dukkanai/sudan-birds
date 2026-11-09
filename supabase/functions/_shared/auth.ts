@@ -1,18 +1,27 @@
 import { createClient } from "npm:@supabase/supabase-js@2.57.4";
 import { ApiError } from "./http.ts";
-export function requiredEnv(name: string): string {
-  const value = Deno.env.get(name);
+export interface AuthRuntime {
+  getEnv: (name: string) => string | undefined;
+  createClient: typeof createClient;
+}
+const runtime: AuthRuntime = { getEnv: (name) => Deno.env.get(name), createClient };
+export function requiredEnv(name: string, get = runtime.getEnv): string {
+  const value = get(name);
   if (!value) throw new ApiError(503, "service_not_configured");
   return value;
 }
-export async function authenticated(req: Request) {
+export async function authenticated(req: Request, deps: AuthRuntime = runtime) {
   const authorization = req.headers.get("authorization");
   if (!authorization?.match(/^Bearer \S+$/i)) throw new ApiError(401, "authentication_required");
   // Caller token, NEVER service_role: all queries and RPCs retain RLS.
-  const client = createClient(requiredEnv("SUPABASE_URL"), supabaseKey("public"), {
-    global: { headers: { Authorization: authorization } },
-    auth: { persistSession: false, autoRefreshToken: false },
-  });
+  const client = deps.createClient(
+    requiredEnv("SUPABASE_URL", deps.getEnv),
+    supabaseKey("public", deps.getEnv),
+    {
+      global: { headers: { Authorization: authorization } },
+      auth: { persistSession: false, autoRefreshToken: false },
+    },
+  );
   const { data, error } = await client.auth.getUser(authorization.slice(7));
   if (error || !data.user) throw new ApiError(401, "invalid_session");
   return { client, user: data.user, token: authorization.slice(7) };
@@ -20,10 +29,14 @@ export async function authenticated(req: Request) {
 
 // Never reuse caller Authorization headers on this client. Every exposed service
 // operation must derive its owner from authenticated(), not request JSON.
-export function serviceClient() {
-  return createClient(requiredEnv("SUPABASE_URL"), supabaseKey("secret"), {
-    auth: { persistSession: false, autoRefreshToken: false },
-  });
+export function serviceClient(deps: AuthRuntime = runtime) {
+  return deps.createClient(
+    requiredEnv("SUPABASE_URL", deps.getEnv),
+    supabaseKey("secret", deps.getEnv),
+    {
+      auth: { persistSession: false, autoRefreshToken: false },
+    },
+  );
 }
 // Call ONLY after Auth.getUser has verified this exact token. Account-global
 // last_sign_in_at and refresh-issued iat are NOT session reauthentication proof.
@@ -96,13 +109,13 @@ export async function resolveReadContext<T>(
   // never silently fall back to anonymous and never gain service privileges.
   return await verifiedUser();
 }
-export async function publicReadClient(req: Request) {
-  const key = supabaseKey("public");
+export async function publicReadClient(req: Request, deps: AuthRuntime = runtime) {
+  const key = supabaseKey("public", deps.getEnv);
   const known = [key];
-  const legacy = Deno.env.get("SUPABASE_ANON_KEY");
+  const legacy = deps.getEnv("SUPABASE_ANON_KEY");
   if (legacy) known.push(legacy);
   try {
-    const raw = Deno.env.get("SUPABASE_PUBLISHABLE_KEYS");
+    const raw = deps.getEnv("SUPABASE_PUBLISHABLE_KEYS");
     const parsed = raw ? JSON.parse(raw) : null;
     if (parsed && typeof parsed.default === "string" && parsed.default) known.push(parsed.default);
   } catch { /* An invalid optional map grants nothing. */ }
@@ -110,9 +123,9 @@ export async function publicReadClient(req: Request) {
     req.headers.get("authorization"),
     known,
     () =>
-      createClient(requiredEnv("SUPABASE_URL"), key, {
+      deps.createClient(requiredEnv("SUPABASE_URL", deps.getEnv), key, {
         auth: { persistSession: false, autoRefreshToken: false },
       }),
-    async () => (await authenticated(req)).client,
+    async () => (await authenticated(req, deps)).client,
   );
 }

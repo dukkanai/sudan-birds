@@ -9,15 +9,24 @@ import { requiredEnv } from "./auth.ts";
 import { ApiError } from "./http.ts";
 import { presignCreateOnly } from "./presign.ts";
 import { readExactImageStream } from "./image_stream.ts";
-function storage() {
-  const account = requiredEnv("R2_ACCOUNT_ID");
+export function storageConfiguration(get?: (name: string) => string | undefined) {
+  const account = requiredEnv("R2_ACCOUNT_ID", get);
   if (!/^[a-f\d]{32}$/i.test(account)) throw new ApiError(503, "service_not_configured");
+  return {
+    account,
+    bucket: requiredEnv("R2_BUCKET", get),
+    accessKeyId: requiredEnv("R2_ACCESS_KEY_ID", get),
+    secretAccessKey: requiredEnv("R2_SECRET_ACCESS_KEY", get),
+  };
+}
+function storage() {
+  const config = storageConfiguration();
   return new S3Client({
     region: "auto",
-    endpoint: `https://${account}.r2.cloudflarestorage.com`,
+    endpoint: `https://${config.account}.r2.cloudflarestorage.com`,
     credentials: {
-      accessKeyId: requiredEnv("R2_ACCESS_KEY_ID"),
-      secretAccessKey: requiredEnv("R2_SECRET_ACCESS_KEY"),
+      accessKeyId: config.accessKeyId,
+      secretAccessKey: config.secretAccessKey,
     },
     requestChecksumCalculation: "WHEN_REQUIRED",
     responseChecksumValidation: "WHEN_REQUIRED",

@@ -47,6 +47,8 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           persist-credentials: false
+      - name: Local API harness boundary tests
+        run: python3 -m unittest discover -s scripts -p 'api_smoke_test.py'
       - name: Install pinned Supabase CLI
         run: npm install --no-audit --no-fund --prefix "$RUNNER_TEMP/birds-cli" supabase@2.67.1
       - name: Start isolated synthetic Supabase

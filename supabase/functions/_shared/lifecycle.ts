@@ -19,6 +19,7 @@ function dbFailure(
 }
 export function lifecycleDependencies(
   service: ReturnType<typeof serviceClient>,
+  remove = removePayloadAndFence,
 ): DeletionDependencies {
   return {
     async list(owner) {
@@ -31,7 +32,7 @@ export function lifecycleDependencies(
     },
     async remove(key) {
       try {
-        return await removePayloadAndFence(key);
+        return await remove(key);
       } catch (error) {
         if (error instanceof ApiError && error.code === "service_not_configured") {
           throw new ApiError(503, "storage_configuration_required");

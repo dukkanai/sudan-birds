@@ -28,7 +28,9 @@ export function boundary(handler: (r: Request) => Promise<Response> | Response) 
   };
 }
 export async function body(req: Request): Promise<Record<string, unknown>> {
-  if (!req.headers.get("content-type")?.toLowerCase().startsWith("application/json")) {
+  if (
+    req.headers.get("content-type")?.split(";", 1)[0].trim().toLowerCase() !== "application/json"
+  ) {
     throw new ApiError(415, "json_required");
   }
   // Stream limit, not just a caller-supplied Content-Length.
@@ -42,7 +44,9 @@ export async function body(req: Request): Promise<Record<string, unknown>> {
       if (next.done) break;
       size += next.value.byteLength;
       if (size > 8192) {
-        await reader.cancel();
+        try {
+          await reader.cancel();
+        } catch { /* Cancellation failure must not hide the exceeded byte limit. */ }
         throw new ApiError(413, "body_too_large");
       }
       chunks.push(next.value);
@@ -71,4 +75,10 @@ export function uuid(value: unknown): string {
     throw new ApiError(400, "invalid_id");
   }
   return value;
+}
+
+export function fields(input: Record<string, unknown>, allowed: readonly string[]): void {
+  if (Object.keys(input).some((key) => !allowed.includes(key))) {
+    throw new ApiError(400, "unknown_field");
+  }
 }

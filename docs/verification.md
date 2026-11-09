@@ -2,7 +2,15 @@
 
 This is development evidence, not release approval. Tests use synthetic data and the owner's designated staging services. A check for an older commit does not validate later changes.
 
-## Current two-tab revision, 2026-11-09
+## Follow-up endpoint and API hardening, 2026-11-09
+
+Five application entrypoints now register testable handlers. Strict field/action checks, complete storage configuration before reservations, validation before privileged client construction, returned deletion-job ownership checks and bounded JSON stream failures are covered by 84 passing local Deno tests. The 37 new endpoint tests use the actual Supabase SDK and authentication/RPC adapters with a synthetic transport; no network or real credentials are involved. An independent rerun passed all 84 tests. Formatting, lint and all six entrypoint type checks also passed.
+
+The disposable-loopback PostgREST harness now exercises synthetic caller JWTs for CRUD ownership, terms gating, price constraints, bilateral blocks, contact consent, private reports, moderator operations, search/pagination and invalid/expired tokens. Its 31 offline boundary tests passed, including an independent rerun. At this pre-CI checkpoint, the 173 planned live assertions have only been statically counted, not executed. The live suite is configured to run against the full disposable Supabase stack in CI; it is not a GoTrue sign-in, refresh, revocation or hosted integration test. Check the exact commit's [GitHub Actions results](https://github.com/dukkanai/sudan-birds/actions) before relying on live-suite success. The unchanged schema separately passed 100 PostgreSQL assertions again.
+
+No hosted function, diagnostic credential, storage key or production deployment is implied by these local changes. Media remains disabled. Historical baseline counts below apply only to their named commits.
+
+## Two-tab implementation baseline, 2026-11-09
 
 The requested scope is now requests and offers only. Application, backend, fixtures, active documentation and seed data were updated together. The first two already-applied migrations remain immutable; a third forward migration removes the retired tables and rewrites shared listing security. It fails if affected user data remains, and preserves populated listings and their media, moderation and account-deletion safeguards.
 

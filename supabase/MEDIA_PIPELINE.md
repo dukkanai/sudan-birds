@@ -78,6 +78,15 @@ and burst behavior on the exact deployed Supabase runtime, with the full depende
 bundle. Keep the current flag false until resource/availability results are acceptable.
 No Promise.race timeout is claimed to preempt synchronous decoding.
 
+A later specifically approved hosted codec-only probe at immutable `3c0cecf`
+completed 19/19 sequential sanitizations after one unauthorized-token rejection.
+Codec time was 194–233 ms; maximum sampled heap-used plus external was 45.41 MiB,
+not a peak. RSS was unavailable (zero), and counters reset across four observed
+sequences with a highest observed call count of five, without isolate IDs. The function and temporary credential
+were removed and verified absent within about 182 seconds. This narrows the fixed
+fixture uncertainty but does not establish full media-bundle, burst, adversarial
+or real R2 behavior. Keep uploads disabled; details are in `docs/verification.md`.
+
 Required integration cases: revoked/expired sessions, wrong caller/owner, expiry,
 malformed/truncated/oversized input, replayed and overwritten quarantine uploads,
 concurrent completions, hidden/deleted target mid-flight, R2 GET/PUT/delete failure,

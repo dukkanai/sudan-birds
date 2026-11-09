@@ -2,6 +2,40 @@
 
 This is development evidence, not release approval. Tests use synthetic data and the owner's designated staging services. A check for an older commit does not validate later changes.
 
+## Hosted synthetic codec probe and cleanup, 2026-11-09
+
+After specific approval, a temporary `codec-diagnostic` wrapper imported the
+immutable `3c0cecf232ca3ed4c4df5ae7c905ef6e9a6e9d7f` handler with a literal expiry
+of `2026-11-09T08:39:25.032Z`. Its legacy JWT gateway stayed enabled. Its separate
+random caller credential was saved only in the designated project's secrets;
+plaintext was not printed, committed, placed in diagnostic request bodies, or saved in local
+files. Caller processing kept it transiently in memory. Dashboard Test was not
+used because it substitutes a nonempty JSON body for an empty request.
+
+Exactly 20 direct empty POST attempts were sent, without redirects or retries:
+one request without the diagnostic token was rejected with 403, then all 19
+sequential authorized requests returned 200 for the fixed synthetic 640×640 JPEG.
+Input size was 571,931 bytes; output was consistently 571,691 bytes. Codec work
+took 194–233 ms. Maximum sampled heap-used plus external memory was 47,612,158
+bytes (45.41 MiB), not a continuous peak. Hosted RSS returned zero and therefore
+provided no usable process-memory measurement. Four call-counter sequences were
+observed, with three resets and a highest observed count of five; isolate identity, sustained worker lifetime,
+burst traffic and aggregate capacity were not established.
+
+The temporary function was deleted first, with only the original five application
+functions remaining. The temporary credential was then deleted and the custom
+secrets list was verified empty at `2026-11-09T08:27:27.110Z`, about 182 seconds
+after generation. The caller process exited and transient browser references were
+released. No user data, database mutation, R2 object, role or scheduler was used.
+The committed diagnostic entry remains expired and fail-closed; it is not deployed.
+A future run needs its own action-time credential approval and bounded cleanup.
+
+This is a codec-only hosted fixture result. It does not exercise the full media
+bundle, real R2 requests, arbitrary/adversarial images, valid user sessions or
+physical devices. Uploads remain disabled. The five existing deployed wrappers,
+their authentication checks and their RLS behavior were unchanged by this probe.
+No merge, signed beta or production release occurred.
+
 ## Hosted modern JWT gateway change verified, 2026-11-09
 
 Implementation `3c0cecf232ca3ed4c4df5ae7c905ef6e9a6e9d7f` passed all seven
@@ -26,8 +60,9 @@ off and saved. The designated project remains `tkfhcjdxovivsrmoxpjm`, with the
 previously disclosed default-branch label `main PRODUCTION`. The five functions
 are `contact`, `media`, `media-read`, `account-delete` and `lifecycle`. No new
 function, credential, test account, role, schedule, database write or R2 object was
-created. Custom secrets remain empty, so uploads remain default-disabled; the
-expired `codec-diagnostic` stays undeployed.
+created by that gateway change. Custom secrets were empty and uploads remained
+default-disabled. The later temporary codec probe and verified cleanup are recorded
+above; no diagnostic remains deployed.
 
 All 29 direct hosted checks passed without retries:
 - Five GET requests returned handler-level 405, proving each deployed handler was
@@ -59,7 +94,8 @@ handler authentication, RLS, public image reads and disabled uploads.
 
 `supabase/config.toml` records the approved five-function target. During preparation,
 all five hosted switches were still on. The completed, verified change is recorded
-above; `codec-diagnostic` remains undeployed with `verify_jwt=true`. The source
+above; `codec-diagnostic` retains `verify_jwt=true` in source and is absent after
+the later approved probe cleanup. The source
 patch itself creates no credential, account, schedule or storage object. Historical
 records below describe the state observed at their respective stages.
 
@@ -198,7 +234,7 @@ The earlier `4acb569` resource run passed 20/20 sequential requests for one fixe
 
 The local CPU policy differs from hosted behavior. These results do not establish hosted capacity, real SDK network allocations, adversarial image safety or R2 integration. Media remains disabled.
 
-The committed hosted diagnostic is expired and fail-closed. It accepts only its fixed synthetic fixture, never arbitrary images, database or R2 work. A separately approved temporary credential and literal short deadline are still required. It has not been deployed.
+The committed hosted diagnostic is expired and fail-closed. It accepts only its fixed synthetic fixture, never arbitrary images, database or R2 work. The later approved hosted probe and cleanup are recorded at the top of this file. Any future run again requires an approved temporary credential, literal short deadline and verified deletion; no diagnostic remains deployed.
 
 ## Unverified or undelivered gates
 

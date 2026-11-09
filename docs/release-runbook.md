@@ -19,7 +19,7 @@ The placeholder `beta.yml` and `release.yml` intentionally fail with these instr
 
 Use `supabase/config.toml` as the reviewed deployment target: `verify_jwt=false`
 for `contact`, `media`, `media-read`, `account-delete` and `lifecycle`, while
-`codec-diagnostic` remains `true` and undeployed. The owner approved disabling only
+`codec-diagnostic` remains `true` in source and absent after its temporary probe. The owner approved disabling only
 these five legacy-secret gateway checks for modern signing-key compatibility.
 The approved staging change was applied after all seven checks passed for
 `3c0cecf232ca3ed4c4df5ae7c905ef6e9a6e9d7f`: all five wrappers were repinned to
@@ -44,3 +44,12 @@ this approval nor passing local tests authorizes a production release.
 The only supported mobile callback in this source is `dev.sudanbirds.staging://auth/callback`, configured with `AUTH_REDIRECT_URL`. Android registers that exact scheme, host and path; iOS registers the staging scheme. Dart rejects unrelated routes, fragments/implicit tokens, duplicate codes and arbitrary redirect configuration. Supabase Auth uses explicit PKCE. Flutter's competing default deep-link router is disabled so the `app_links`-based Supabase handler receives callbacks.
 
 This does not configure Supabase's hosted redirect allowlist, Google/Apple providers or OAuth credentials. Those must be authorized and configured separately, then verified on real staging devices. Final store identities, production domain-linked redirects, ownership verification and signed-device tests remain release gates. The staging scheme must not be described as an approved production identity.
+
+### Temporary codec probe result
+
+The specifically approved hosted codec probe at implementation `3c0cecf` completed
+one unauthorized rejection and 19 synthetic fixture sanitizations, then removed
+both the function and its credential within about 182 seconds. See `verification.md`
+for measurements and limits. This does not satisfy full media/R2 resource or
+integration gates and does not enable uploads. Any further diagnostic credential
+requires a new action-time approval; do not reuse the completed authorization.

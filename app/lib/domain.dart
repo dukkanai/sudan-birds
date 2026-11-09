@@ -260,6 +260,7 @@ abstract interface class BirdsRepository {
   });
   bool get isPreview;
   bool get signedIn;
+  bool get sessionCleanupRequired;
   Stream<void> get authChanges;
   String? get currentUserId;
   Future<Result<bool>> updateEntry(
@@ -278,6 +279,8 @@ abstract interface class BirdsRepository {
 }
 
 class PreviewRepository implements BirdsRepository {
+  @override
+  bool get sessionCleanupRequired => false;
   @override
   Future<Result<bool>> reportTarget(
     ReportKind kind,

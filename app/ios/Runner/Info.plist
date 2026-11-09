@@ -12,7 +12,9 @@
         <key>CFBundleURLSchemes</key><array><string>dev.sudanbirds.staging</string></array>
     </dict></array>
 	<key>NSPhotoLibraryUsageDescription</key>
-	<string>اختر صور الطيور لإرفاقها بإعلانك أو منشورك بعد موافقتك.</string>
+	<string>اختر صور الطيور لإرفاقها بإعلانك بعد موافقتك.</string>
+	<key>CFBundleLocalizations</key>
+	<array><string>ar</string></array>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>

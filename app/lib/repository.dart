@@ -1,14 +1,32 @@
 import 'dart:typed_data';
+import 'dart:async';
 import 'package:http/http.dart' as http;
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'domain.dart';
 import 'auth_config.dart';
 import 'media_policy.dart';
+import 'secure_auth_storage.dart';
+import 'mobile_oauth.dart';
 
 class SupabaseBirdsRepository implements BirdsRepository {
-  SupabaseBirdsRepository(this.client, {required this.authRedirect});
+  SupabaseBirdsRepository(
+    this.client, {
+    required this.authRedirect,
+    this.authStorage,
+    this.oauth,
+  });
   final SupabaseClient client;
   final String authRedirect;
+  final SecureAuthStorage? authStorage;
+  final MobileOAuthCoordinator? oauth;
+
+  void _requireStorage() {
+    authStorage?.requireAvailable();
+    if (authStorage?.acceptsSessions == false &&
+        client.auth.currentSession != null) {
+      throw const SecureStorageFailure();
+    }
+  }
 
   Future<Map<String, dynamic>> _edge(
     String name,
@@ -16,6 +34,7 @@ class SupabaseBirdsRepository implements BirdsRepository {
     _AccountSession? account,
     bool mutation = false,
   }) async {
+    _requireStorage();
     final token =
         account?.authorization ??
         (client.auth.currentSession == null
@@ -224,6 +243,7 @@ class SupabaseBirdsRepository implements BirdsRepository {
   });
   @override
   Future<Result<List<MediaAsset>>> media(FeedEntry entry) => protect(() async {
+    _requireStorage();
     final rows = await client
         .from('media')
         .select('id,alt_text')
@@ -351,8 +371,9 @@ class SupabaseBirdsRepository implements BirdsRepository {
     if (data['status'] == 'completed') {
       var cleanupRequired = false;
       try {
-        if (currentUserId == accountId) {
-          await client.auth.signOut(scope: SignOutScope.local);
+        if (client.auth.currentUser?.id == accountId) {
+          final result = await signOut();
+          cleanupRequired = !result.isSuccess;
         }
       } catch (_) {
         cleanupRequired = true;
@@ -369,7 +390,7 @@ class SupabaseBirdsRepository implements BirdsRepository {
     throw const AppFailure('حالة حذف الحساب غير مؤكدة. تحقق قبل إعادة الطلب.');
   });
   @override
-  String? get currentUserId => client.auth.currentUser?.id;
+  String? get currentUserId => signedIn ? client.auth.currentUser?.id : null;
   @override
   Future<Result<bool>> updateEntry(
     FeedEntry entry,
@@ -431,10 +452,28 @@ class SupabaseBirdsRepository implements BirdsRepository {
   @override
   bool get isPreview => false;
   @override
-  bool get signedIn => client.auth.currentUser != null;
+  bool get signedIn =>
+      authStorage?.failed != true &&
+      authStorage?.acceptsSessions != false &&
+      client.auth.currentUser != null;
   @override
-  Stream<void> get authChanges =>
-      client.auth.onAuthStateChange.map<void>((_) {});
+  bool get sessionCleanupRequired =>
+      authStorage?.failed == true ||
+      (authStorage?.acceptsSessions == false &&
+          client.auth.currentSession != null);
+  @override
+  Stream<void> get authChanges => Stream<void>.multi((events) {
+    final auth = client.auth.onAuthStateChange.listen(
+      (_) => events.add(null),
+      onError: (Object _, StackTrace _) =>
+          events.addError(const AppFailure('تعذر تحديث جلسة الحساب.')),
+    );
+    final storage = authStorage?.changes.listen((_) => events.add(null));
+    events.onCancel = () async {
+      await auth.cancel();
+      await storage?.cancel();
+    };
+  }, isBroadcast: true);
   _AccountSession _accountSession() {
     requireAccount();
     final session = client.auth.currentSession;
@@ -453,6 +492,7 @@ class SupabaseBirdsRepository implements BirdsRepository {
   }
 
   void requireAccount() {
+    _requireStorage();
     if (!signedIn) throw const AppFailure('سجّل الدخول أولاً.');
   }
 
@@ -461,6 +501,7 @@ class SupabaseBirdsRepository implements BirdsRepository {
     FeedKind kind,
     FeedFilter filter,
   ) => protect(() async {
+    _requireStorage();
     var query = client.from('listings').select('*,locations(state_ar,city_ar)');
     query = query.eq('kind', kind.name).eq('status', filter.status);
     if (filter.status == 'active' || filter.status == 'reserved') {
@@ -522,6 +563,8 @@ class SupabaseBirdsRepository implements BirdsRepository {
 
   @override
   Future<Result<bool>> signIn(String provider) => protect(() async {
+    authStorage?.requireAvailable();
+    if (sessionCleanupRequired) throw const SecureStorageFailure();
     if (provider != 'google' && provider != 'apple') {
       throw const AppFailure('موفر تسجيل الدخول غير مدعوم.');
     }
@@ -529,6 +572,15 @@ class SupabaseBirdsRepository implements BirdsRepository {
       throw const AppFailure('لم يُضبط رابط العودة الآمن لتسجيل الدخول بعد.');
     }
     validateAuthRedirect(authRedirect);
+    if (authStorage != null && oauth == null) {
+      throw const SecureStorageFailure();
+    }
+    if (oauth != null) {
+      return oauth!.signIn(
+        provider == 'apple' ? OAuthProvider.apple : OAuthProvider.google,
+        authRedirect,
+      );
+    }
     final launched = await client.auth.signInWithOAuth(
       provider == 'apple' ? OAuthProvider.apple : OAuthProvider.google,
       redirectTo: authRedirect,
@@ -540,7 +592,23 @@ class SupabaseBirdsRepository implements BirdsRepository {
   });
   @override
   Future<Result<bool>> signOut() => protect(() async {
-    await client.auth.signOut();
+    if (oauth != null) {
+      await oauth!.signOut();
+      return true;
+    }
+    await authStorage?.beginSignOut();
+    var serviceFailed = false;
+    try {
+      await client.auth.signOut(scope: SignOutScope.local);
+    } catch (_) {
+      serviceFailed = true;
+    }
+    await authStorage?.clearAfterSignOut();
+    if (serviceFailed) {
+      throw const AppFailure(
+        'مُسحت بيانات الدخول المحلية المتاحة، لكن تعذر تأكيد إنهاء الجلسة لدى الخدمة. لا نؤكد إبطال جلسة الخادم.',
+      );
+    }
     return true;
   });
   @override
@@ -563,6 +631,7 @@ class SupabaseBirdsRepository implements BirdsRepository {
       });
   @override
   Future<Result<Taxonomy>> taxonomy() => protect(() async {
+    _requireStorage();
     final birds = await client.from('bird_types').select().order('name_ar');
     final locations = await client
         .from('locations')

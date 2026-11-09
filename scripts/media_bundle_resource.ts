@@ -112,6 +112,10 @@ export async function runLocalExperiment() {
   let downloadGate: Promise<void> | undefined;
   let reachedDownload: (() => void) | undefined;
   const fakeEnv: Record<string, string> = {
+    MEDIA_PIPELINE_ENABLED: "true",
+    MEDIA_TRIAL_ACCOUNT_IDS: JSON.stringify([owner, "00000000-0000-4000-8000-000000000002"]),
+    MEDIA_TRIAL_STARTS_AT: "2026-01-01T00:00:00.000Z",
+    MEDIA_TRIAL_EXPIRES_AT: "2026-01-01T00:20:00.000Z",
     SUPABASE_URL: "https://synthetic-project.invalid",
     SUPABASE_ANON_KEY: "synthetic-public-no-access",
     SUPABASE_SERVICE_ROLE_KEY: "synthetic-service-no-access",
@@ -185,7 +189,8 @@ export async function runLocalExperiment() {
   const handler = createMediaHandler({
     authenticated: (req) => auth.authenticated(req, runtime),
     serviceClient: () => auth.serviceClient(runtime),
-    pipelineEnabled: () => enabled,
+    getEnv: (name) => name === "MEDIA_PIPELINE_ENABLED" ? String(enabled) : fakeEnv[name],
+    now: () => Date.parse("2026-01-01T00:00:00.000Z"),
     storageConfiguration: () => ({
       account: "a".repeat(32),
       bucket: "synthetic",

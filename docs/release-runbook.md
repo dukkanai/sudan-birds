@@ -41,9 +41,11 @@ this approval nor passing local tests authorizes a production release.
 
 ### Staging mobile OAuth callback (client implementation only)
 
-The only supported mobile callback in this source is `dev.sudanbirds.staging://auth/callback`, configured with `AUTH_REDIRECT_URL`. Android registers that exact scheme, host and path; iOS registers the staging scheme. Dart rejects unrelated routes, fragments/implicit tokens, duplicate codes and arbitrary redirect configuration. Supabase Auth uses explicit PKCE. Flutter's competing default deep-link router is disabled so the `app_links`-based Supabase handler receives callbacks.
+The only supported mobile callback in this source is `dev.sudanbirds.staging://auth/callback`, configured with `AUTH_REDIRECT_URL`. Android registers that exact scheme, host and path; iOS registers the staging scheme. Dart rejects unrelated routes, fragments/implicit tokens, duplicate codes and arbitrary redirect configuration. Supabase Auth uses explicit PKCE. Flutter's competing default deep-link router and Supabase's automatic URI exchange are disabled. An app-owned `app_links` handler exchanges each live browser flow in an isolated Auth client, with a generation-bound secure verifier. Only the still-current flow may install a session into the main client. Duplicate callbacks are ignored; a cold-start return requires a fresh login rather than resuming an inferred flow.
 
 This does not configure Supabase's hosted redirect allowlist, Google/Apple providers or OAuth credentials. Those must be authorized and configured separately, then verified on real staging devices. Final store identities, production domain-linked redirects, ownership verification and signed-device tests remain release gates. The staging scheme must not be described as an approved production identity.
+
+Session and PKCE secrets use the pinned secure-storage adapter, not SharedPreferences. A separate nonsecret, app-private restore fence must be saved before logout effects and checked before startup session reads. Missing/malformed fences block restoration and clear only app-owned secure keys. If saving the fence fails, logout stops before SDK/network/deletion effects and the current process stays quarantined; durable logout cannot be claimed. Native compilation and physical Keychain/Keystore, backup/restore, lock-state, reinstall and power-loss tests remain open. See [mobile security implementation and gates](mobile-security.md) for the exact scope and limits.
 
 ### Temporary codec probe result
 

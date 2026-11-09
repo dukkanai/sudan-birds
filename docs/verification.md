@@ -2,6 +2,40 @@
 
 This is development evidence, not release approval. Tests use synthetic data and the owner's designated staging services. A check for an older commit does not validate later changes.
 
+## Local Auth lifecycle CI, 2026-11-09
+
+All seven exact-head jobs passed for
+`b99b53b9da51b2dbf534afb4e915a0bf830cedc5`:
+[required checks](https://github.com/dukkanai/sudan-birds/actions/runs/42653431816),
+[native compilation](https://github.com/dukkanai/sudan-birds/actions/runs/42653431857)
+and [local codec](https://github.com/dukkanai/sudan-birds/actions/runs/42653431877).
+The new disposable local Auth lifecycle/RLS stage passed all 50 checks, including
+sign-in, refresh, logout behavior and exact synthetic fixture cleanup. Its 41
+offline harness tests passed. The same job passed 173 live local PostgREST checks,
+111 PostgreSQL security checks and nine platform-helper checks. See
+[the local Auth scope and revocation limits](local-auth-lifecycle.md).
+
+This source also aligns the index migration filename without changing SQL bytes.
+These CI results do not establish hosted provider behavior, physical-device
+security or the separate uncommitted mobile/media candidate below. No merge or
+app release occurred.
+
+## Local mobile security candidate, 2026-11-09
+
+The separate mobile candidate passes Flutter analysis and all 139 local Flutter
+tests. Its 25-file manifest was rechecked after the run without any hash changes.
+An independent review passed 48 focused tests and found the prior restart-fencing
+and stale OAuth-exchange findings addressed. That review predates the three-file
+Arabic locale delta; the final 139-test run includes the locale regression.
+See [the candidate manifest and limits](evidence/mobile-candidate-2026-11-09.json)
+and [mobile security notes](mobile-security.md).
+
+This candidate was not on the remote branch at the time of these local checks.
+The seven passing checks for remote `b4f3944` do not compile its new Kotlin/Swift
+code or validate its native dependency changes. Native CI, physical-device secure
+storage/accessibility, actual OAuth callbacks and signed-distribution gates remain
+open. No mobile binary has been released by this work.
+
 ## Exact encoder revision and hosted indexes, 2026-11-09
 
 All seven CI jobs passed for `b4f39445b386dd3bd9ec682af5214b04233f9f41`:

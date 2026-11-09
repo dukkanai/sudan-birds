@@ -6,6 +6,8 @@ on:
     paths:
       - 'app/**'
       - 'scripts/flutter_plugin_repositories_test.py'
+      - 'scripts/*native_dependency_evidence*'
+      - 'docs/native-dependency-evidence.md'
       - '.github/workflows/native-checks.yml'
       - '.github/workflows/ci.yml'
 
@@ -47,6 +49,26 @@ jobs:
           test -x "${gradle_bins[0]}"
           GRADLE_TEST_BIN="${gradle_bins[0]}" python3 -m unittest discover -s scripts -p 'flutter_plugin_repositories_test.py' -v
 
+      - name: Capture Android dependency evidence
+        run: bash scripts/capture_native_dependency_evidence.sh android
+      - name: Validate and scan Android evidence before upload
+        run: |
+          python3 scripts/native_dependency_evidence.py validate --platform android --output "$RUNNER_TEMP/native-evidence-android"
+          go run github.com/zricethezav/gitleaks/v8@v8.21.2 dir --redact --no-banner --no-color "$RUNNER_TEMP/native-evidence-android"
+          python3 scripts/native_dependency_evidence.py validate --platform android --output "$RUNNER_TEMP/native-evidence-android"
+      - name: Retain only allowlisted Android evidence
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: native-dependencies-android-debug-${{ github.sha }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/native-evidence-android/pubspec.lock
+            ${{ runner.temp }}/native-evidence-android/manifest.json
+            ${{ runner.temp }}/native-evidence-android/android-debugRuntimeClasspath.txt
+            ${{ runner.temp }}/native-evidence-android/android-tink-insight.txt
+          if-no-files-found: error
+          include-hidden-files: false
+          retention-days: 7
+
   ios-simulator:
     runs-on: macos-15
     timeout-minutes: 30
@@ -61,3 +83,22 @@ jobs:
           cache: true
       - run: cd app && flutter pub get --enforce-lockfile
       - run: cd app && flutter build ios --simulator --debug --no-codesign
+      - name: Capture unsigned iOS simulator dependency evidence
+        run: bash scripts/capture_native_dependency_evidence.sh ios
+      - name: Validate and scan iOS evidence before upload
+        run: |
+          python3 scripts/native_dependency_evidence.py validate --platform ios --output "$RUNNER_TEMP/native-evidence-ios"
+          go run github.com/zricethezav/gitleaks/v8@v8.21.2 dir --redact --no-banner --no-color "$RUNNER_TEMP/native-evidence-ios"
+          python3 scripts/native_dependency_evidence.py validate --platform ios --output "$RUNNER_TEMP/native-evidence-ios"
+      - name: Retain only allowlisted iOS simulator evidence
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: native-dependencies-ios-simulator-${{ github.sha }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/native-evidence-ios/pubspec.lock
+            ${{ runner.temp }}/native-evidence-ios/manifest.json
+            ${{ runner.temp }}/native-evidence-ios/Podfile.lock
+            ${{ runner.temp }}/native-evidence-ios/pod-resolution.json
+          if-no-files-found: error
+          include-hidden-files: false
+          retention-days: 7

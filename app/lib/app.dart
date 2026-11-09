@@ -13,10 +13,12 @@ class BirdsApp extends StatelessWidget {
     super.key,
     required this.repository,
     this.startupFailure,
+    this.startupNotice,
     this.errorSignal,
   });
   final BirdsRepository repository;
   final String? startupFailure;
+  final Future<String?>? startupNotice;
   final ValueListenable<String?>? errorSignal;
   @override
   Widget build(BuildContext context) => MaterialApp(
@@ -30,13 +32,23 @@ class BirdsApp extends StatelessWidget {
                 if (message != null)
                   Material(
                     color: Theme.of(context).colorScheme.errorContainer,
-                    child: SafeArea(
-                      bottom: false,
-                      child: Padding(
-                        padding: const EdgeInsets.all(12),
-                        child: Text(
-                          message,
-                          style: const TextStyle(fontSize: 18),
+                    child: ConstrainedBox(
+                      constraints: BoxConstraints(
+                        maxHeight: MediaQuery.sizeOf(context).height * .3,
+                      ),
+                      child: SingleChildScrollView(
+                        child: SafeArea(
+                          bottom: false,
+                          child: Padding(
+                            padding: const EdgeInsets.all(12),
+                            child: Semantics(
+                              liveRegion: true,
+                              child: Text(
+                                message,
+                                style: const TextStyle(fontSize: 18),
+                              ),
+                            ),
+                          ),
                         ),
                       ),
                     ),
@@ -57,14 +69,24 @@ class BirdsApp extends StatelessWidget {
         bodyLarge: TextStyle(fontSize: 20),
       ),
     ),
-    home: HomePage(repository: repository, startupFailure: startupFailure),
+    home: HomePage(
+      repository: repository,
+      startupFailure: startupFailure,
+      startupNotice: startupNotice,
+    ),
   );
 }
 
 class HomePage extends StatefulWidget {
-  const HomePage({super.key, required this.repository, this.startupFailure});
+  const HomePage({
+    super.key,
+    required this.repository,
+    this.startupFailure,
+    this.startupNotice,
+  });
   final BirdsRepository repository;
   final String? startupFailure;
+  final Future<String?>? startupNotice;
   @override
   State<HomePage> createState() => _HomePageState();
 }
@@ -238,7 +260,8 @@ class _HomePageState extends State<HomePage> {
                       const Text(
                         'معاينة محلية فقط. لا توجد جلسة أو بيانات محفوظة على خادم.',
                       ),
-                    if (!widget.repository.signedIn) ...[
+                    if (!widget.repository.signedIn &&
+                        !widget.repository.sessionCleanupRequired) ...[
                       const Text(
                         'التصفح متاح للجميع. النشر والإبلاغ يتطلب تسجيل الدخول.',
                       ),
@@ -279,7 +302,11 @@ class _HomePageState extends State<HomePage> {
                           if (mounted) setState(() {});
                           message(result.failure?.message ?? 'تم تسجيل الخروج');
                         },
-                        child: const Text('تسجيل الخروج'),
+                        child: Text(
+                          widget.repository.sessionCleanupRequired
+                              ? 'إعادة مسح الجلسة المحلية'
+                              : 'تسجيل الخروج',
+                        ),
                       ),
                     if (widget.repository.signedIn)
                       TextButton(
@@ -401,6 +428,23 @@ class _HomePageState extends State<HomePage> {
                       widget.startupFailure ??
                           'معاينة محلية • غير متصل بالخادم • لا بيانات تجريبية وهمية',
                     ),
+                  ),
+                if (widget.startupNotice != null)
+                  FutureBuilder<String?>(
+                    future: widget.startupNotice,
+                    builder: (context, snapshot) => snapshot.data == null
+                        ? const SizedBox.shrink()
+                        : Semantics(
+                            liveRegion: true,
+                            child: Container(
+                              width: double.infinity,
+                              color: Theme.of(
+                                context,
+                              ).colorScheme.tertiaryContainer,
+                              padding: const EdgeInsets.all(12),
+                              child: Text(snapshot.data!),
+                            ),
+                          ),
                   ),
                 Padding(
                   padding: const EdgeInsets.all(16),

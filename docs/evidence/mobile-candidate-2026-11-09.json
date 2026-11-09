@@ -1,0 +1,123 @@
+{
+  "date": "2026-11-09",
+  "base_commit": "b4f39445b386dd3bd9ec682af5214b04233f9f41",
+  "scope": "Uncommitted mobile candidate at validation time; not proof that the remote branch or native artifacts include these changes.",
+  "manifest_sha256": "078daf637baf5407900ff9e4a2771fb8097412b61a6fadbf3243d5c88448e635",
+  "files": [
+    {
+      "path": "app/android/app/src/main/AndroidManifest.xml",
+      "sha256": "61487d521e4a321a856d82b9ab626502a6b21da55b3113fea8feaabd95731a07"
+    },
+    {
+      "path": "app/android/app/src/main/kotlin/dev/sudanbirds/sudan_birds/MainActivity.kt",
+      "sha256": "1a37bf0afb001386ffec5b1e94c629fce43fad7527577b37466ccde038295ae4"
+    },
+    {
+      "path": "app/android/app/src/main/res/xml/backup_rules.xml",
+      "sha256": "e4b3e899ffded923bf9feb2df8cc19f90633d30a0ebab3628206b9539a2c7307"
+    },
+    {
+      "path": "app/android/app/src/main/res/xml/data_extraction_rules.xml",
+      "sha256": "941acff3c72fd590750b2b02d43753355907c7785dffb51eb96c8337bc322f8d"
+    },
+    {
+      "path": "app/ios/Runner.xcodeproj/project.pbxproj",
+      "sha256": "bcd29ec9fcf132bc0fb61246b8397c58ac7bd737c6eb9b60139254b3eac70739"
+    },
+    {
+      "path": "app/ios/Runner/AppDelegate.swift",
+      "sha256": "468feceb9e917dfeb45099749c69f4f85b3e19af4183fbfe312abe351e391203"
+    },
+    {
+      "path": "app/ios/Runner/Info.plist",
+      "sha256": "b080a69d22e30ead18104fa82ee0b0626f71e32618f75cf783e9b0f8ff741517"
+    },
+    {
+      "path": "app/ios/Runner/Runner.entitlements",
+      "sha256": "dc74fab10a5a3269b7cda627c4011558bd81c094877bfb03648201e5a6905515"
+    },
+    {
+      "path": "app/lib/app.dart",
+      "sha256": "f7777bde1539f456b3d6cf67d038dfe81c2768863027f54fbcf932fab15ccdbf"
+    },
+    {
+      "path": "app/lib/domain.dart",
+      "sha256": "a4bad22023be6e750ed3843bccbd7b2b29046d8a97f437e96f506d452f7b8157"
+    },
+    {
+      "path": "app/lib/interrupted_image_selection.dart",
+      "sha256": "7f699a7ea9f5124e9079b062f1198e42fb4bd2761713ce71c9fa0827e7b7d300"
+    },
+    {
+      "path": "app/lib/main.dart",
+      "sha256": "8d01882ecd4683e018a6748820c910805a74816899b4f8418a1077b6305b15ef"
+    },
+    {
+      "path": "app/lib/mobile_oauth.dart",
+      "sha256": "04256c97e773b3aa9550b4622cd1c42e1bfaa2f59eb448078a7bfd96c4dd068b"
+    },
+    {
+      "path": "app/lib/repository.dart",
+      "sha256": "9e64e43a10252967215dbd0fb8e3aed215177da2594f9a946fd7515b1989853e"
+    },
+    {
+      "path": "app/lib/secure_auth_storage.dart",
+      "sha256": "dc2302cec76d8301bb58e5f30f8294e5aa9ca9ae41d241d838973915e2d3d955"
+    },
+    {
+      "path": "app/pubspec.lock",
+      "sha256": "98c85991f00858d54667b1986d11e3172a7a5400b8041c37813a0b9ae1641cc7"
+    },
+    {
+      "path": "app/pubspec.yaml",
+      "sha256": "1a84befb97e389b111937b6e5dc2fda54b5d38f2948fd7cf6146cd05c4bc56b4"
+    },
+    {
+      "path": "app/test/accessibility_test.dart",
+      "sha256": "7010f6b5c14029b08786fe6bb40f0942130da23fb7240f4de9f7a4299b86c107"
+    },
+    {
+      "path": "app/test/auth_config_test.dart",
+      "sha256": "4654d7ccff9084f25478692828e4a9a0c313bd3d1337a641372dc161625da121"
+    },
+    {
+      "path": "app/test/auth_lifecycle_test.dart",
+      "sha256": "d65992ab2339417019f9e9d49d8460fbb7f3389559ad7f48f73aed9dd15948cf"
+    },
+    {
+      "path": "app/test/interrupted_image_selection_test.dart",
+      "sha256": "ed65d213aa87de5d531673a8a1a06cee23d8f28e5d22213fc978996aef8d4b57"
+    },
+    {
+      "path": "app/test/native_privacy_config_test.dart",
+      "sha256": "1c434c7e4f66ef67913d4ae32058e07b5320706a8656bbd1f252d94c3d178245"
+    },
+    {
+      "path": "app/test/secure_auth_storage_test.dart",
+      "sha256": "c4d2e2397a42538e35b670db82aab23d7a4e9a785d03cc88bed40b0709948d59"
+    },
+    {
+      "path": "docs/mobile-security.md",
+      "sha256": "b4b84b196d4194078cf8a195b8d5eb8c36ac89ff87ff5c3cc2ae6d25f0cb84c5"
+    },
+    {
+      "path": "docs/release-runbook.md",
+      "sha256": "271984280365a4e604a0e8706d74acaee70301c809c8b78a79d2ae7f0a2fad96"
+    }
+  ],
+  "local_validation": {
+    "flutter_analyze": "PASS",
+    "flutter_tests_passed": 139,
+    "source_hashes_rechecked": 25,
+    "independent_focused_review_tests_passed": 48,
+    "independent_review_limit": "48 tests cover the security snapshot before the three-file Arabic locale delta. The final parent run covers all 139 tests including that delta."
+  },
+  "not_run": [
+    "Native Android Kotlin compilation for this candidate",
+    "Native iOS Swift compilation for this candidate",
+    "Physical secure storage and backup/reinstall tests",
+    "Real mobile Google/Apple callbacks",
+    "Physical VoiceOver and TalkBack",
+    "Signed artifacts and native dependency audit"
+  ]
+}

@@ -61,9 +61,6 @@ void main() {
       ),
     );
     expect(main, contains('authFlowType: AuthFlowType.pkce'));
-    expect(
-      main,
-      contains('detectSessionInUriPredicate: isStagingAuthCallback'),
-    );
+    expect(main, contains('detectSessionInUri: false'));
   });
 }

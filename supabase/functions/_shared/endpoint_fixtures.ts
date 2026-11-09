@@ -46,6 +46,7 @@ export function fixture() {
   const accepted = new Set<string>();
   const valid = token();
   accepted.add(valid);
+  const clock = { now: Date.parse("2026-01-01T00:00:00.000Z") };
   const env: Record<string, string> = {
     SUPABASE_URL: "https://synthetic-project.invalid",
     SUPABASE_PUBLISHABLE_KEYS: JSON.stringify({ default: publicKey }),
@@ -55,6 +56,9 @@ export function fixture() {
     R2_ACCESS_KEY_ID: "synthetic-access",
     R2_SECRET_ACCESS_KEY: "synthetic-secret",
     MEDIA_PIPELINE_ENABLED: "false",
+    MEDIA_TRIAL_ACCOUNT_IDS: JSON.stringify([owner, other]),
+    MEDIA_TRIAL_STARTS_AT: "2026-01-01T00:00:00.000Z",
+    MEDIA_TRIAL_EXPIRES_AT: "2026-01-01T00:20:00.000Z",
     LIFECYCLE_JOB_SECRET: jobSecret,
   };
   const runtime: AuthRuntime = {
@@ -125,7 +129,8 @@ export function fixture() {
       effects.push(`remove:${key}`);
       return Promise.resolve(true);
     },
-    pipelineEnabled: () => env.MEDIA_PIPELINE_ENABLED === "true",
+    getEnv: runtime.getEnv,
+    now: () => clock.now,
     capacity: () => {},
   };
   const lifecycle = {
@@ -162,6 +167,7 @@ export function fixture() {
     accepted,
     valid,
     env,
+    clock,
     auth,
     storage,
     lifecycle,

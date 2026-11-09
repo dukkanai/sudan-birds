@@ -7,6 +7,58 @@ import 'package:sudan_birds/repository.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+  test('taxonomy requests only listing reference data', () async {
+    final paths = <String>[];
+    final client = SupabaseClient(
+      'https://example.test',
+      'public-test-key',
+      httpClient: MockClient((request) async {
+        paths.add(request.url.path);
+        return http.Response(
+          '[]',
+          200,
+          headers: {'content-type': 'application/json'},
+          request: request,
+        );
+      }),
+    );
+    final result = await SupabaseBirdsRepository(
+      client,
+      authRedirect: '',
+    ).taxonomy();
+    expect(result.isSuccess, isTrue);
+    expect(paths, ['/rest/v1/bird_types', '/rest/v1/locations']);
+    await client.dispose();
+  });
+  test('both feed kinds query only listings with their own kind', () async {
+    final requests = <Uri>[];
+    final client = SupabaseClient(
+      'https://example.test',
+      'public-test-key',
+      httpClient: MockClient((request) async {
+        requests.add(request.url);
+        return http.Response(
+          '[]',
+          200,
+          headers: {'content-type': 'application/json'},
+          request: request,
+        );
+      }),
+    );
+    final repo = SupabaseBirdsRepository(client, authRedirect: '');
+    expect(FeedKind.values, [FeedKind.request, FeedKind.offer]);
+    expect(ReportKind.values, [ReportKind.listing, ReportKind.account]);
+    for (final kind in FeedKind.values) {
+      expect((await repo.feed(kind, const FeedFilter())).isSuccess, isTrue);
+      expect(requests.last.path, '/rest/v1/listings');
+      expect(requests.last.queryParameters['kind'], 'eq.${kind.name}');
+      expect(
+        requests.last.queryParameters['select'],
+        '*,locations(state_ar,city_ar)',
+      );
+    }
+    await client.dispose();
+  });
   test(
     'search and keyset filters coexist with deterministic ordering',
     () async {
@@ -60,7 +112,7 @@ void main() {
     final result = await SupabaseBirdsRepository(
       client,
       authRedirect: '',
-    ).feed(FeedKind.education, const FeedFilter());
+    ).feed(FeedKind.request, const FeedFilter());
     expect(result.isSuccess, isFalse);
     expect(result.failure!.message, isNot(contains('private-token')));
     await client.dispose();

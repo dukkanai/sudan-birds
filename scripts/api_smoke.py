@@ -93,28 +93,28 @@ def main():
         ]
         for identifier, title in zip(ids, titles):
             inserts.append(
-                "insert into public.posts(id,owner_id,kind,title,body,created_at) values("
-                f"{literal(identifier)},{literal(owner)},'education',{literal(title)},"
-                f"'Synthetic fixture only',{literal(timestamp)});"
+                "insert into public.listings(id,owner_id,kind,title,description,quantity,created_at) values("
+                f"{literal(identifier)},{literal(owner)},'request',{literal(title)},"
+                f"'Synthetic fixture only',1,{literal(timestamp)});"
             )
         inserts.append("commit;")
         sql("\n".join(inserts))
         fixture_created = True
         common = [("select", "id,title,created_at"), scope,
                   ("order", "created_at.desc,id.desc"), ("limit", "2")]
-        code, rows = api_call("posts", common)
+        code, rows = api_call("listings", common)
         expect(code == 200 and [r["id"] for r in rows] == ids[:2],
                "timestamp ties are ordered deterministically")
         cursor = f"(created_at.lt.{timestamp},and(created_at.eq.{timestamp},id.lt.{ids[1]}))"
-        code, rows = api_call("posts", common + [("or", cursor)])
+        code, rows = api_call("listings", common + [("or", cursor)])
         expect(code == 200 and [r["id"] for r in rows] == ids[2:4],
                "keyset second page has no repeat at timestamp ties")
         final_cursor = f"(created_at.lt.{timestamp},and(created_at.eq.{timestamp},id.lt.{ids[3]}))"
-        code, rows = api_call("posts", common + [("or", final_cursor)])
+        code, rows = api_call("listings", common + [("or", final_cursor)])
         expect(code == 200 and [r["id"] for r in rows] == ids[4:],
                "keyset final page does not omit timestamp-tied rows")
-        code, rows = api_call("posts", common + [
-            ("or", '(title.ilike."%alpha%",body.ilike."%alpha%")'),
+        code, rows = api_call("listings", common + [
+            ("or", '(title.ilike."%alpha%",description.ilike."%alpha%")'),
             ("or", cursor),
         ])
         expect(code == 200 and [r["id"] for r in rows] == ids[3:5],
@@ -124,16 +124,23 @@ def main():
         like = needle.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
         quoted = like.replace("\\", "\\\\").replace('"', '\\"')
         pattern = '"%' + quoted + '%"'
-        code, rows = api_call("posts", [("select", "id"), scope,
-            ("or", f"(title.ilike.{pattern},body.ilike.{pattern})")])
+        code, rows = api_call("listings", [("select", "id"), scope,
+            ("or", f"(title.ilike.{pattern},description.ilike.{pattern})")])
         expect(code == 200 and [r["id"] for r in rows] == [ids[0]],
                "quotes, commas, parentheses, slashes and wildcards remain literal")
 
+        for removed in ("posts", "replies", "topics"):
+            code, _ = api_call(removed, [("select", "*"), ("limit", "1")])
+            expect(code == 404, f"removed {removed} endpoint is absent")
+        code, _ = api_call("rpc/reserve_upload", method="POST", body={
+            "p_post": None, "p_listing": ids[0], "p_bytes": 100, "p_mime": "image/jpeg",
+        })
+        expect(code == 404, "removed four-argument upload RPC is absent")
         for table in ("profile_contacts", "reports", "moderator_roles", "upload_intents"):
             code, _ = api_call(table, [("select", "*"), ("limit", "1")])
             expect(code in (401, 403), f"anonymous access to {table} is denied")
-        code, _ = api_call("posts", method="POST", body={
-            "kind": "education", "title": "Anonymous negative fixture", "body": "Denied",
+        code, _ = api_call("listings", method="POST", body={
+            "kind": "request", "title": "Anonymous negative fixture", "description": "Denied", "quantity": 1,
         })
         expect(code in (401, 403), "anonymous posting is denied at the actual API")
         print(f"PASS {passed} live local PostgREST checks")

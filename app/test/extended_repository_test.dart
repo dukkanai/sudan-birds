@@ -155,7 +155,7 @@ void main() {
     );
   });
   test(
-    'reports use reply/account target columns without private data',
+    'reports use listing/account target columns without private data',
     () async {
       final bodies = <Map<String, dynamic>>[];
       final client = await authenticated((r) {
@@ -165,8 +165,8 @@ void main() {
       final repo = SupabaseBirdsRepository(client, authRedirect: '');
       expect(
         (await repo.reportTarget(
-          ReportKind.reply,
-          'reply-id',
+          ReportKind.listing,
+          'listing-id',
           'سبب واضح',
         )).isSuccess,
         true,
@@ -180,7 +180,7 @@ void main() {
         true,
       );
       expect(bodies, [
-        {'reply_id': 'reply-id', 'reason': 'سبب واضح'},
+        {'listing_id': 'listing-id', 'reason': 'سبب واضح'},
         {'account_id': userId, 'reason': 'سبب واضح'},
       ]);
       await client.dispose();
@@ -200,6 +200,38 @@ void main() {
       await client.dispose();
     },
   );
+  test('moderation queue selects only listing and account targets', () async {
+    Uri? query;
+    final client = await authenticated((r) {
+      if (r.url.path.endsWith('moderator_roles')) {
+        return jsonResponse(r, [
+          {'role': 'moderator'},
+        ]);
+      }
+      query = r.url;
+      return jsonResponse(r, [
+        {
+          'id': 'report',
+          'listing_id': 'listing',
+          'account_id': null,
+          'reason': 'سبب واضح',
+          'state': 'open',
+          'created_at': '2026-01-01T00:00:00Z',
+        },
+      ]);
+    });
+    final result = await SupabaseBirdsRepository(
+      client,
+      authRedirect: '',
+    ).moderationReports('open');
+    expect(result.isSuccess, isTrue);
+    expect(result.value!.single.kind, ReportKind.listing);
+    expect(
+      query!.queryParameters['select'],
+      'id,listing_id,account_id,reason,state,created_at',
+    );
+    await client.dispose();
+  });
   test(
     'deleted moderation targets and pending deletion are decoded honestly',
     () async {
@@ -219,7 +251,7 @@ void main() {
           ]);
         }
         return jsonResponse(r, [
-          {'missing': true, 'target_kind': 'reply', 'target_id': 'deleted'},
+          {'missing': true, 'target_kind': 'listing', 'target_id': 'deleted'},
         ]);
       });
       final repo = SupabaseBirdsRepository(client, authRedirect: '');
@@ -228,7 +260,7 @@ void main() {
         reason: 'reason',
         state: 'open',
         createdAt: DateTime.utc(2026),
-        kind: ReportKind.reply,
+        kind: ReportKind.listing,
         targetId: 'deleted',
       );
       final target = await repo.moderationTarget(report);

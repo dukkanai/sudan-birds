@@ -41,13 +41,12 @@ Future<Result<T>> protect<T>(
   }
 }
 
-enum FeedKind { request, offer, education }
+enum FeedKind { request, offer }
 
 extension FeedKindLabel on FeedKind {
   String get label => switch (this) {
     FeedKind.request => 'طلبات',
     FeedKind.offer => 'معروضات',
-    FeedKind.education => 'محتوى تعليمي',
   };
 }
 
@@ -61,16 +60,13 @@ class FeedEntry {
     this.price,
     this.currency,
     this.location = '',
-    this.category = '',
     this.status = '',
     this.author = '',
     this.priceUnit = 'bird',
     this.ownerId = '',
     this.statusCode = 'active',
-    this.replyCount = 0,
     this.birdId,
     this.locationId,
-    this.topicId,
     this.quantity = 1,
     this.age,
     this.ageUnit = 'month',
@@ -80,14 +76,13 @@ class FeedEntry {
       title,
       body,
       location,
-      category,
       status,
       author,
       priceUnit,
       ownerId,
       statusCode;
-  final int replyCount, quantity;
-  final int? birdId, locationId, topicId, age;
+  final int quantity;
+  final int? birdId, locationId, age;
   final String ageUnit;
   final bool negotiable;
   final FeedKind kind;
@@ -100,11 +95,9 @@ class FeedFilter {
   const FeedFilter({
     this.search = '',
     this.location = '',
-    this.category = '',
     this.before,
     this.birdId,
     this.locationId,
-    this.topicId,
     this.status = 'active',
     this.currency = '',
     this.minPrice,
@@ -116,18 +109,16 @@ class FeedFilter {
     this.ageUnit = 'month',
   });
   final FeedEntry? before;
-  final int? birdId, locationId, topicId, minAge, maxAge;
+  final int? birdId, locationId, minAge, maxAge;
   final String status, currency, ageUnit;
   final num? minPrice, maxPrice;
   final DateTime? since, until;
   FeedFilter withCursor(FeedEntry? cursor, {String? query}) => FeedFilter(
     search: query ?? search,
     location: location,
-    category: category,
     before: cursor,
     birdId: birdId,
     locationId: locationId,
-    topicId: topicId,
     status: status,
     currency: currency,
     minPrice: minPrice,
@@ -138,7 +129,7 @@ class FeedFilter {
     maxAge: maxAge,
     ageUnit: ageUnit,
   );
-  final String search, location, category;
+  final String search, location;
 }
 
 String normalizeDigits(String value) {
@@ -177,7 +168,6 @@ class Publication {
     this.state = '',
     this.city = '',
     this.quantity = 1,
-    this.category = 'information',
     this.amount,
     this.currency = 'SDG',
     this.age,
@@ -187,18 +177,16 @@ class Publication {
     this.displayName = '',
     this.birdId,
     this.locationId,
-    this.topicId,
     this.status = 'active',
   });
   final FeedKind kind;
-  final int? birdId, locationId, topicId;
+  final int? birdId, locationId;
   final String status;
   final String title,
       body,
       birdType,
       state,
       city,
-      category,
       currency,
       ageUnit,
       priceUnit,
@@ -248,15 +236,6 @@ abstract interface class BirdsRepository {
     Publication publication, {
     FeedEntry? existing,
   });
-  Future<Result<List<ReplyEntry>>> replyPage(
-    String postId, {
-    ReplyEntry? after,
-  });
-  Future<Result<bool>> sendReply(
-    String postId,
-    String body, {
-    String? parentId,
-  });
   bool get isPreview;
   bool get signedIn;
   Stream<void> get authChanges;
@@ -273,8 +252,6 @@ abstract interface class BirdsRepository {
   Future<Result<bool>> signIn(String provider);
   Future<Result<bool>> signOut();
   Future<Result<bool>> publish(Publication publication);
-  Future<Result<List<String>>> replies(String postId);
-  Future<Result<bool>> reply(String postId, String body);
   Future<Result<bool>> report(FeedEntry entry, String reason);
 }
 
@@ -355,18 +332,6 @@ class PreviewRepository implements BirdsRepository {
     FeedEntry? existing,
   }) async => Result.failure(_unavailable.failure!);
   @override
-  Future<Result<List<ReplyEntry>>> replyPage(
-    String postId, {
-    ReplyEntry? after,
-  }) async => const Result.success([]);
-  @override
-  Future<Result<bool>> sendReply(
-    String postId,
-    String body, {
-    String? parentId,
-  }) async => _unavailable;
-
-  @override
   String? get currentUserId => null;
   @override
   Future<Result<bool>> updateEntry(
@@ -396,11 +361,6 @@ class PreviewRepository implements BirdsRepository {
   Future<Result<bool>> signOut() async => _unavailable;
   @override
   Future<Result<bool>> publish(Publication publication) async => _unavailable;
-  @override
-  Future<Result<List<String>>> replies(String postId) async =>
-      const Result.success([]);
-  @override
-  Future<Result<bool>> reply(String postId, String body) async => _unavailable;
   @override
   Future<Result<bool>> report(FeedEntry entry, String reason) async =>
       _unavailable;
@@ -450,12 +410,8 @@ class LocationOption {
 }
 
 class Taxonomy {
-  const Taxonomy({
-    this.birds = const [],
-    this.topics = const [],
-    this.locations = const [],
-  });
-  final List<NamedOption> birds, topics;
+  const Taxonomy({this.birds = const [], this.locations = const []});
+  final List<NamedOption> birds;
   final List<LocationOption> locations;
 }
 
@@ -469,20 +425,6 @@ class ContactData {
   const ContactData(this.kind, this.value, this.consent);
   final String kind, value;
   final bool consent;
-}
-
-class ReplyEntry {
-  const ReplyEntry({
-    required this.id,
-    required this.body,
-    required this.createdAt,
-    required this.ownerId,
-    this.author = '',
-    this.parentId,
-  });
-  final String id, body, ownerId, author;
-  final String? parentId;
-  final DateTime createdAt;
 }
 
 class MediaAsset {
@@ -512,7 +454,7 @@ class DeletionStatus {
   final int retryAfter;
 }
 
-enum ReportKind { post, listing, reply, account }
+enum ReportKind { listing, account }
 
 class ModerationReport {
   const ModerationReport({

@@ -29,7 +29,6 @@ void main() {
     final repo = PreviewRepository();
     expect(repo.signedIn, isFalse);
     expect((await repo.signIn('google')).isSuccess, isFalse);
-    expect((await repo.reply('id', 'hello')).isSuccess, isFalse);
     expect(
       (await repo.feed(FeedKind.request, const FeedFilter())).value,
       isEmpty,

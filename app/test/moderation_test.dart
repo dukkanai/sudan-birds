@@ -68,7 +68,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('مراجعة البلاغات (للمشرفين)'), findsOneWidget);
   });
-  testWidgets('guest cannot send account or reply reports', (tester) async {
+  testWidgets('guest cannot send account or listing reports', (tester) async {
     final repo = ModerationFixture(authenticated: false);
     await tester.pumpWidget(
       MaterialApp(

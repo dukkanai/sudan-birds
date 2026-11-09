@@ -1,7 +1,7 @@
 -- LOCAL DEVELOPMENT REFERENCE DATA ONLY.
 -- Reviewed production reference data must be provisioned separately; this is not
 -- a production migration or a complete geography/taxonomy of Sudan.
--- No accounts, contacts, listings, posts, replies or reports are created.
+-- No accounts, contacts, listings or reports are created.
 insert into public.bird_types(name_ar) values
  ('حمام'),
  ('دجاج'),
@@ -12,15 +12,6 @@ insert into public.bird_types(name_ar) values
  ('كناري'),
  ('بادجي'),
  ('كوكتيل')
-on conflict (name_ar) do nothing;
-
-insert into public.topics(name_ar) values
- ('التغذية'),
- ('الرعاية اليومية'),
- ('التكاثر والتفريخ'),
- ('المسكن والنظافة'),
- ('صحة الطيور'),
- ('إرشادات للمبتدئين')
 on conflict (name_ar) do nothing;
 
 insert into public.locations(state_ar,city_ar) values

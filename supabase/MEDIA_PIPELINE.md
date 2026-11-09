@@ -48,7 +48,7 @@ never receive R2 credentials or a Supabase service key.
 
 POST `media` with JSON and authenticated user bearer token:
 
-- reserve: `{action:"reserve", post_id OR listing_id, bytes, mime:"image/jpeg"}`
+- reserve: `{action:"reserve", listing_id, bytes, mime:"image/jpeg"}`
   returns intent_id, put_url, expires_in120 and exact Content-Type/Content-Length/If-None-Match headers.
 - complete: `{action:"complete", intent_id, alt_text?:string<=500}` returns
   `{media_id,status:"verified"}` only after successful canonical commit.

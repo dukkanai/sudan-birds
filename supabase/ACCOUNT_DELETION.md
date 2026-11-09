@@ -21,7 +21,7 @@ Missing/stale/revoked authentication yields403 recent_sign_in_required. The UI m
   at commit. Any failure returns pending, never completed. The tombstones remain.
 - Database readiness requires ALL registered payloads removed and fenced, not merely one batch.
   Only then does the server delete the Auth user; profile, private contacts, owned
-  content, replies, blocks, roles and quota events cascade.
+  listings, blocks, roles and quota events cascade.
 - A final RPC verifies Auth absence before marking completed. Repeated Auth deletion
   is considered successful only after a confirmed404 lookup. A network error is not
   proof of absence.
@@ -40,7 +40,7 @@ keys or an arbitrary user ID for deletion.
 
 ## Reviewable retention choices, not a finalized privacy policy
 
-- No automatic copy of deleted post/reply/profile/image content is retained.
+- No automatic copy of deleted listing/profile/image content is retained.
 - Other users' reports keep target UUIDs and their report reason after a target is
   removed; a moderation screen must say the target is missing, not fabricate content.
 - Reports submitted by the deleted account currently cascade with that reporter.

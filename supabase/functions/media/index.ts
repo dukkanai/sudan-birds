@@ -8,7 +8,7 @@ import {
   writeVerified,
 } from "../_shared/r2.ts";
 import { requireCodecCapacity, singleVerification } from "../_shared/codec_capacity.ts";
-import { IMAGE_LIMITS } from "../_shared/images.ts";
+import { uploadInput } from "../_shared/upload_input.ts";
 import { completeMedia } from "../_shared/media_service.ts";
 // Pure JS decode is synchronous. Do not pretend a Promise timeout preempts it.
 // One in-flight verification per isolate bounds retained buffers/SDK responses.
@@ -31,19 +31,7 @@ Deno.serve(boundary(async (req) => {
     requiredEnv("R2_ACCESS_KEY_ID");
     requiredEnv("R2_SECRET_ACCESS_KEY");
     requiredEnv("R2_BUCKET");
-    const post = input.post_id == null ? null : uuid(input.post_id),
-      listing = input.listing_id == null ? null : uuid(input.listing_id);
-    if (
-      (post === null) === (listing === null) || !Number.isInteger(input.bytes) ||
-      typeof input.bytes !== "number" || input.bytes < 1 || input.bytes > IMAGE_LIMITS.maxBytes ||
-      input.mime !== "image/jpeg"
-    ) throw new ApiError(400, "invalid_upload");
-    const { data, error } = await client.rpc("reserve_upload", {
-      p_post: post,
-      p_listing: listing,
-      p_bytes: input.bytes,
-      p_mime: input.mime,
-    });
+    const { data, error } = await client.rpc("reserve_upload", uploadInput(input));
     if (error || !data) throw new ApiError(403, "upload_denied");
     return json({
       intent_id: data.id,

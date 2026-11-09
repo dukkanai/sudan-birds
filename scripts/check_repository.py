@@ -2,6 +2,7 @@
 """Small defense-in-depth policy checks, not a full security assessment."""
 from pathlib import Path
 import re
+import hashlib
 import sys
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -17,7 +18,17 @@ for path in workflows.glob("*.yml"):
     if "contents: read" not in content:
         failures.append(f"{path.name}: explicit read-only token required")
 
-schema = "\n".join(p.read_text() for p in (ROOT / "supabase/migrations").glob("*.sql"))
+migrations = ROOT / "supabase/migrations"
+# These files have been applied remotely. Destructive feature removal must be a
+# new migration, never a rewrite of deployed database history.
+for name, digest in {
+    "202611080001_foundation.sql": "d45a802eb7f778eb602d578d1aaf744ea64b96636d05634345ce9e7ad72c4693",
+    "202611090001_verified_media_and_deletion.sql": "da37035a01eb5c8ca4bbe0ef9937a69581d28c331ca9b40d240b8aad5d119cbe",
+}.items():
+    path = migrations / name
+    if not path.exists() or hashlib.sha256(path.read_bytes()).hexdigest() != digest:
+        failures.append(f"{name}: applied migration history changed")
+schema = "\n".join(p.read_text() for p in sorted(migrations.glob("*.sql")))
 tables = re.findall(r"create table(?: if not exists)? public\.([a-z_]+)", schema, re.I)
 for table in tables:
     if not re.search(rf"alter table public\.{table}\s+enable row level security", schema, re.I):
@@ -27,6 +38,25 @@ for table in tables:
 for forbidden in ("likes", "reactions", "follows", "reposts", "subscriptions", "payments"):
     if forbidden in tables:
         failures.append(f"Out-of-scope social/payment table: {forbidden}")
+
+# Only an ordered CREATE/DROP model, not a replacement for executing migrations.
+active_tables = set()
+for match in re.finditer(r"(create|drop) table(?: if (?:not )?exists)? public\.([a-z_]+)", schema, re.I):
+    action, table = match.groups()
+    if action.lower() == "create":
+        active_tables.add(table.lower())
+    else:
+        active_tables.discard(table.lower())
+for removed in ("posts", "replies", "topics"):
+    if removed in active_tables:
+        failures.append(f"Discontinued table remains in final schema: {removed}")
+    if re.search(rf"public\.{removed}\b", (ROOT / "supabase/seed.sql").read_text()):
+        failures.append(f"Seed still references discontinued table: {removed}")
+for path in migrations.glob("*.sql"):
+    if path.name > "202611090001_verified_media_and_deletion.sql" and re.search(
+        r"drop\s+(?:table|column|function)\b[^;]*\bcascade\b", path.read_text(), re.I
+    ):
+        failures.append(f"{path.name}: broad cascading drop needs explicit dependency review")
 
 for path in (ROOT / "app/lib").rglob("*.dart"):
     text = path.read_text()
@@ -39,4 +69,4 @@ if failures:
     print("Repository policy checks failed:")
     print("\n".join(f"- {f}" for f in failures))
     sys.exit(1)
-print(f"Repository policy checks passed ({len(tables)} tables checked).")
+print(f"Repository policy checks passed ({len(tables)} historical table definitions checked).")

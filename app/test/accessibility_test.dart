@@ -26,7 +26,7 @@ class AccessibleRepository extends PreviewRepository {
   ) async => const Result.success(
     ModerationTarget(
       id: 'target',
-      kind: ReportKind.post,
+      kind: ReportKind.listing,
       title: 'محتوى يحتاج إلى المراجعة',
       body: 'نص عام للمراجعة دون معلومات اتصال خاصة.',
       hidden: false,
@@ -41,7 +41,6 @@ class AccessibleRepository extends PreviewRepository {
     Taxonomy(
       birds: [NamedOption(1, 'نوع طيور ذو اسم عربي طويل للاختبار')],
       locations: [LocationOption(1, 'ولاية الخرطوم', 'الخرطوم')],
-      topics: [NamedOption(1, 'الرعاية والصحة')],
     ),
   );
   @override
@@ -75,7 +74,7 @@ void smallLargeText(WidgetTester tester) {
 
 void main() {
   testWidgets(
-    'three tabs and home remain usable at 320px and 200 percent Arabic text',
+    'two tabs and home remain usable at 320px and 200 percent Arabic text',
     (tester) async {
       smallLargeText(tester);
       final handle = tester.ensureSemantics();
@@ -83,7 +82,7 @@ void main() {
       await tester.pumpWidget(BirdsApp(repository: PreviewRepository()));
       await tester.pumpAndSettle();
       expect(tester.takeException(), isNull);
-      expect(find.byType(NavigationDestination), findsNWidgets(3));
+      expect(find.byType(NavigationDestination), findsNWidgets(2));
       expect(find.byTooltip('الحساب والإعدادات'), findsOneWidget);
       expect(find.bySemanticsLabel('إضافة طلب'), findsOneWidget);
       await expectLater(tester, meetsGuideline(androidTapTargetGuideline));
@@ -104,7 +103,11 @@ void main() {
           initial: const FeedFilter(),
         ),
         PublicationPage(repository: repo, kind: FeedKind.offer),
-        ReportPage(repository: repo, kind: ReportKind.reply, targetId: 'reply'),
+        ReportPage(
+          repository: repo,
+          kind: ReportKind.listing,
+          targetId: 'listing',
+        ),
         DeleteAccountPage(repository: repo),
         const DraftLegalPage(privacy: true),
         ModerationQueuePage(repository: repo),
@@ -115,7 +118,7 @@ void main() {
             reason: 'سبب بلاغ للمراجعة',
             state: 'open',
             createdAt: DateTime.utc(2026),
-            kind: ReportKind.post,
+            kind: ReportKind.listing,
             targetId: 'target',
           ),
         ),
@@ -161,8 +164,8 @@ void main() {
         arabicPage(
           ReportPage(
             repository: repo,
-            kind: ReportKind.reply,
-            targetId: 'reply',
+            kind: ReportKind.listing,
+            targetId: 'listing',
           ),
         ),
       );

@@ -4,9 +4,9 @@
 
 Flutter calls Supabase with the current user session. PostgreSQL RLS, constraints and explicit column grants decide access. Profiles and contact information are separate. An authenticated viewer may reveal contact details only if the owner consented and block checks pass. Report details never become public.
 
-Listings model both requests and offers. An offer requires a numeric price, currency and unit. Requests may use an optional budget. Currency is part of any price comparison. Educational information and consultations share one chronological feed. No payment or social-engagement tables are part of this version.
+Listings model both requests and offers. An offer requires a numeric price, currency and unit. Requests may use an optional budget. Currency is part of any price comparison. The application has exactly two tabs, requests and offers. Images belong to listings; reports target a listing or an account. No payment or social-engagement tables are part of this version.
 
-Cloudflare R2 is private object storage. A server may issue short-lived, object-specific upload permissions after verifying session, ownership and quota. A completed upload is not automatically publishable. The trusted verifier must decode bytes, reject malformed images and excessive dimensions, remove metadata, and write a verified canonical object. The foundation must remain fail-closed where that pipeline is not yet implemented.
+Cloudflare R2 is private object storage. A server may issue short-lived, object-specific upload permissions after verifying session, ownership and quota. A completed upload is not automatically publishable. The trusted verifier must decode bytes, reject malformed images and excessive dimensions, remove metadata, and write a verified canonical object. The pipeline stays disabled until hosted resource and real-storage integration checks pass.
 
 ## The requested try/catch envelope
 
@@ -23,3 +23,7 @@ The staged R2 bucket is private and empty. No production bucket or Supabase prod
 ## Deferred gates
 
 See `verification.md` for executed checks and `release-runbook.md` for blocked deployment gates. Do not infer that a class, endpoint or screen is operational merely because it compiles.
+
+## Schema evolution
+
+The first two migrations are immutable because they were already applied and recorded on staging. A new forward migration removes the retired feature from the live schema and rewrites shared policies and RPCs for listings only. Its preflight guards reject any remaining affected user content instead of silently deleting it. Historical SQL is an audit trail, not an active application capability. Never modify an applied migration or use broad cascading drops to bypass dependencies.

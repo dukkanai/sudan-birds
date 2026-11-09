@@ -78,9 +78,7 @@ class SupabaseBirdsRepository implements BirdsRepository {
     }
     var query = client
         .from('reports')
-        .select(
-          'id,post_id,reply_id,listing_id,account_id,reason,state,created_at',
-        )
+        .select('id,listing_id,account_id,reason,state,created_at')
         .eq('state', state);
     if (before != null) {
       final stamp = before.createdAt.toUtc().toIso8601String();
@@ -187,10 +185,7 @@ class SupabaseBirdsRepository implements BirdsRepository {
     final rows = await client
         .from('media')
         .select('id,alt_text')
-        .eq(
-          entry.kind == FeedKind.education ? 'post_id' : 'listing_id',
-          entry.id,
-        )
+        .eq('listing_id', entry.id)
         .order('verified_at')
         .limit(MediaPolicy.maxImages);
     return rows
@@ -210,7 +205,7 @@ class SupabaseBirdsRepository implements BirdsRepository {
         }
         final data = await edge('media', {
           'action': 'reserve',
-          entry.kind == FeedKind.education ? 'post_id' : 'listing_id': entry.id,
+          'listing_id': entry.id,
           'bytes': bytes,
           'mime': 'image/jpeg',
         });
@@ -329,14 +324,9 @@ class SupabaseBirdsRepository implements BirdsRepository {
     if (entry.ownerId != currentUserId) {
       throw const AppFailure('يمكن لصاحب المحتوى وحده تعديله.');
     }
-    final educational = entry.kind == FeedKind.education;
     final rows = await client
-        .from(educational ? 'posts' : 'listings')
-        .update({
-          'title': title,
-          educational ? 'body' : 'description': body,
-          if (!educational) 'status': status,
-        })
+        .from('listings')
+        .update({'title': title, 'description': body, 'status': status})
         .eq('id', entry.id)
         .eq('owner_id', currentUserId!)
         .select('id');
@@ -394,60 +384,40 @@ class SupabaseBirdsRepository implements BirdsRepository {
     FeedKind kind,
     FeedFilter filter,
   ) => protect(() async {
-    final education = kind == FeedKind.education;
-    var query = client
-        .from(education ? 'posts' : 'listings')
-        .select(
-          education
-              ? '*,profiles(display_name),replies(count)'
-              : '*,locations(state_ar,city_ar)',
-        );
-    if (!education) {
-      query = query.eq('kind', kind.name).eq('status', filter.status);
-      if (filter.status == 'active' || filter.status == 'reserved') {
-        query = query.gt(
-          'expires_at',
-          DateTime.now().toUtc().toIso8601String(),
-        );
-      }
-      if (filter.locationId != null) {
-        query = query.eq('location_id', filter.locationId!);
-      }
-      if (filter.currency.isNotEmpty) {
-        query = query.eq('currency', filter.currency);
-      }
-      if ((filter.minPrice != null || filter.maxPrice != null) &&
-          filter.currency.isEmpty) {
-        throw const AppFailure('اختر العملة عند تصفية السعر.');
-      }
-      if (filter.minPrice != null) query = query.gte('price', filter.minPrice!);
-      if (filter.maxPrice != null) query = query.lte('price', filter.maxPrice!);
-      if (filter.minAge != null || filter.maxAge != null) {
-        query = query.eq('age_unit', filter.ageUnit);
-      }
-      if (filter.minAge != null) query = query.gte('age_value', filter.minAge!);
-      if (filter.maxAge != null) query = query.lte('age_value', filter.maxAge!);
-      if (filter.location.isNotEmpty) {
-        final locations = await client
-            .from('locations')
-            .select('id')
-            .eq('state_ar', filter.location);
-        if (locations.isEmpty) return <FeedEntry>[];
-        query = query.inFilter(
-          'location_id',
-          locations.map((r) => r['id']).toList(),
-        );
-      }
-    } else if (filter.category.isNotEmpty) {
-      query = query.eq(
-        'kind',
-        filter.category == 'information' ? 'education' : 'consultation',
+    var query = client.from('listings').select('*,locations(state_ar,city_ar)');
+    query = query.eq('kind', kind.name).eq('status', filter.status);
+    if (filter.status == 'active' || filter.status == 'reserved') {
+      query = query.gt('expires_at', DateTime.now().toUtc().toIso8601String());
+    }
+    if (filter.locationId != null) {
+      query = query.eq('location_id', filter.locationId!);
+    }
+    if (filter.currency.isNotEmpty) {
+      query = query.eq('currency', filter.currency);
+    }
+    if ((filter.minPrice != null || filter.maxPrice != null) &&
+        filter.currency.isEmpty) {
+      throw const AppFailure('اختر العملة عند تصفية السعر.');
+    }
+    if (filter.minPrice != null) query = query.gte('price', filter.minPrice!);
+    if (filter.maxPrice != null) query = query.lte('price', filter.maxPrice!);
+    if (filter.minAge != null || filter.maxAge != null) {
+      query = query.eq('age_unit', filter.ageUnit);
+    }
+    if (filter.minAge != null) query = query.gte('age_value', filter.minAge!);
+    if (filter.maxAge != null) query = query.lte('age_value', filter.maxAge!);
+    if (filter.location.isNotEmpty) {
+      final locations = await client
+          .from('locations')
+          .select('id')
+          .eq('state_ar', filter.location);
+      if (locations.isEmpty) return <FeedEntry>[];
+      query = query.inFilter(
+        'location_id',
+        locations.map((r) => r['id']).toList(),
       );
     }
     if (filter.birdId != null) query = query.eq('bird_type_id', filter.birdId!);
-    if (education && filter.topicId != null) {
-      query = query.eq('topic_id', filter.topicId!);
-    }
     if (filter.since != null) {
       query = query.gte('created_at', filter.since!.toUtc().toIso8601String());
     }
@@ -457,9 +427,7 @@ class SupabaseBirdsRepository implements BirdsRepository {
     if (filter.search.isNotEmpty) {
       // Use a quoted PostgREST value; user input cannot inject filter operators.
       final pattern = quotedSearchPattern(filter.search);
-      query = query.or(
-        'title.ilike.$pattern,${education ? 'body' : 'description'}.ilike.$pattern',
-      );
+      query = query.or('title.ilike.$pattern,description.ilike.$pattern');
     }
     final before = filter.before;
     if (before != null) {
@@ -507,28 +475,11 @@ class SupabaseBirdsRepository implements BirdsRepository {
   }
 
   @override
-  Future<Result<List<String>>> replies(String postId) => protect(() async {
-    final rows = await client
-        .from('replies')
-        .select('body')
-        .eq('post_id', postId)
-        .order('created_at')
-        .order('id')
-        .limit(100);
-    return rows.map((row) => row['body'] as String).toList();
-  });
-  @override
-  Future<Result<bool>> reply(String postId, String body) => protect(() async {
-    requireAccount();
-    await client.from('replies').insert({'post_id': postId, 'body': body});
-    return true;
-  });
-  @override
   Future<Result<bool>> report(FeedEntry entry, String reason) =>
       protect(() async {
         requireAccount();
         await client.from('reports').insert({
-          entry.kind == FeedKind.education ? 'post_id' : 'listing_id': entry.id,
+          'listing_id': entry.id,
           'reason': reason,
         });
         return true;
@@ -536,7 +487,6 @@ class SupabaseBirdsRepository implements BirdsRepository {
   @override
   Future<Result<Taxonomy>> taxonomy() => protect(() async {
     final birds = await client.from('bird_types').select().order('name_ar');
-    final topics = await client.from('topics').select().order('name_ar');
     final locations = await client
         .from('locations')
         .select()
@@ -544,9 +494,6 @@ class SupabaseBirdsRepository implements BirdsRepository {
         .order('city_ar');
     return Taxonomy(
       birds: birds
-          .map((r) => NamedOption(r['id'] as int, r['name_ar'] as String))
-          .toList(),
-      topics: topics
           .map((r) => NamedOption(r['id'] as int, r['name_ar'] as String))
           .toList(),
       locations: locations
@@ -680,14 +627,12 @@ class SupabaseBirdsRepository implements BirdsRepository {
         (existing.ownerId != currentUserId || existing.kind != p.kind)) {
       throw const AppFailure('لا يمكنك تعديل محتوى حساب آخر.');
     }
-    final education = p.kind == FeedKind.education;
     if (p.title.trim().length < 3 ||
         p.title.length > 120 ||
         p.body.trim().isEmpty) {
       throw const AppFailure('العنوان والوصف مطلوبان.');
     }
-    if (!education &&
-        (p.birdId == null || p.locationId == null || p.quantity < 1)) {
+    if (p.birdId == null || p.locationId == null || p.quantity < 1) {
       throw const AppFailure('اختر نوع الطيور والموقع والعدد.');
     }
     if (p.kind == FeedKind.offer &&
@@ -696,29 +641,24 @@ class SupabaseBirdsRepository implements BirdsRepository {
     }
     final data = <String, dynamic>{
       'title': p.title.trim(),
-      education ? 'body' : 'description': p.body.trim(),
+      'description': p.body.trim(),
       'bird_type_id': p.birdId,
-      if (education) 'topic_id': p.topicId,
-      if (!education) ...{
-        'location_id': p.locationId,
-        'quantity': p.quantity,
-        'price': p.amount,
-        'currency': p.currency,
-        'price_unit': p.priceUnit == 'group' ? 'group' : 'bird',
-        'negotiable': p.negotiable,
-        'age_value': p.age,
-        'age_unit': p.age == null ? null : p.ageUnit,
-      },
+      'location_id': p.locationId,
+      'quantity': p.quantity,
+      'price': p.amount,
+      'currency': p.currency,
+      'price_unit': p.priceUnit == 'group' ? 'group' : 'bird',
+      'negotiable': p.negotiable,
+      'age_value': p.age,
+      'age_unit': p.age == null ? null : p.ageUnit,
     };
-    final table = education ? 'posts' : 'listings';
+    const table = 'listings';
     Map<String, dynamic> row;
     if (existing == null) {
-      data['kind'] = education
-          ? (p.category == 'consultation' ? 'consultation' : 'education')
-          : p.kind.name;
+      data['kind'] = p.kind.name;
       row = await client.from(table).insert(data).select().single();
     } else {
-      if (!education) data['status'] = p.status;
+      data['status'] = p.status;
       final rows = await client
           .from(table)
           .update(data)
@@ -734,55 +674,6 @@ class SupabaseBirdsRepository implements BirdsRepository {
     }
     return decodeEntry(row, p.kind);
   });
-  @override
-  Future<Result<List<ReplyEntry>>> replyPage(
-    String postId, {
-    ReplyEntry? after,
-  }) => protect(() async {
-    var query = client
-        .from('replies')
-        .select('id,body,created_at,owner_id,parent_id,profiles(display_name)')
-        .eq('post_id', postId);
-    if (after != null) {
-      final time = after.createdAt.toUtc().toIso8601String();
-      query = query.or(
-        'created_at.gt.$time,and(created_at.eq.$time,id.gt.${after.id})',
-      );
-    }
-    final rows = await query.order('created_at').order('id').limit(20);
-    return rows
-        .map(
-          (r) => ReplyEntry(
-            id: r['id'] as String,
-            body: r['body'] as String,
-            createdAt: DateTime.parse(r['created_at'] as String),
-            ownerId: r['owner_id'] as String,
-            parentId: r['parent_id'] as String?,
-            author:
-                (r['profiles'] as Map<String, dynamic>?)?['display_name']
-                    as String? ??
-                '',
-          ),
-        )
-        .toList();
-  });
-  @override
-  Future<Result<bool>> sendReply(
-    String postId,
-    String body, {
-    String? parentId,
-  }) => protect(() async {
-    requireAccount();
-    if (body.trim().isEmpty || body.length > 5000) {
-      throw const AppFailure('اكتب رداً من حرف إلى ٥٠٠٠ حرف.');
-    }
-    await client.from('replies').insert({
-      'post_id': postId,
-      'body': body.trim(),
-      'parent_id': ?parentId,
-    });
-    return true;
-  });
 }
 
 FeedEntry decodeEntry(Map<String, dynamic> row, FeedKind kind) {
@@ -792,28 +683,21 @@ FeedEntry decodeEntry(Map<String, dynamic> row, FeedKind kind) {
     id: row['id'] as String,
     ownerId: row['owner_id'] as String,
     title: row['title'] as String,
-    body: row[kind == FeedKind.education ? 'body' : 'description'] as String,
+    body: row['description'] as String,
     kind: kind,
     createdAt: DateTime.parse(row['created_at'] as String),
     price: row['price'] as num?,
     currency: row['currency'] as String?,
-    category: row['kind'] as String,
     location: place == null ? '' : '${place['state_ar']}، ${place['city_ar']}',
     author:
         (row['profiles'] as Map<String, dynamic>?)?['display_name']
             as String? ??
         '',
-    replyCount:
-        ((row['replies'] as List<dynamic>?)?.firstOrNull
-                as Map<String, dynamic>?)?['count']
-            as int? ??
-        0,
     priceUnit: row['price_unit'] as String? ?? 'bird',
     statusCode: status,
     status: statusLabel(status, kind),
     birdId: row['bird_type_id'] as int?,
     locationId: row['location_id'] as int?,
-    topicId: row['topic_id'] as int?,
     quantity: row['quantity'] as int? ?? 1,
     age: row['age_value'] as int?,
     ageUnit: row['age_unit'] as String? ?? 'month',

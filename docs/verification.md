@@ -1,56 +1,67 @@
 # Verification record
 
-Date: 2026-11-08. Environments: disposable Linux workspace, GitHub CI, and the empty designated Supabase staging project. Synthetic fixtures only; no real user data. This record describes development verification, not release approval.
+This is development evidence, not release approval. Tests use synthetic data and the owner's designated staging services. A check for an older commit does not validate later changes.
 
-## Executed checks
+## Current two-tab revision, 2026-11-09
 
-- Real PostgreSQL 17.6 migration, reference-seed idempotency and negative security harness: **48 assertions passed** after the final backend changes.
-- Concurrency: six simultaneous attachment reservations allowed exactly three; ownership, privileged-column spoofing, price validation, report/contact privacy, blocks, reply identity, moderation audit and deletion-resistant quotas tested.
-- Foundation CI passed on exact SHA `d9952c74385a960b31d61686f94263ca9edd3cd8`: Flutter, database (**24 pgTAP assertions**), Edge checks, repository security, Android debug compile and unsigned iOS simulator compile. [Required checks](https://github.com/dukkanai/sudan-birds/actions/runs/42520396936), [native checks](https://github.com/dukkanai/sudan-birds/actions/runs/42520396938). Later commits require their own results.
-- Edge handlers: Deno 2.5.6 strict type checks, formatting, lint and five request-boundary tests executed.
-- Dependency audit: initial AWS SDK dependency audit found a critical transitive advisory. Pins were updated to 3.1164.0 and the final npm audit returned zero known vulnerabilities. This is a point-in-time audit, not proof of absence of vulnerabilities.
-- Native compile success is not device testing or store distribution.
-- Gitleaks 8.21.2 local source scan: no leaks found. CI also scans Git history with redacted output.
-- Repository policy and workflow YAML parsing checks executed.
-- Flutter 3.38.5 / Dart 3.10.4: formatting passed, analysis reported no issues, and **12 tests passed** (domain, search escaping, HTTP-mocked repository pagination/error handling, and Arabic widget flows).
+The requested scope is now requests and offers only. Application, backend, fixtures, active documentation and seed data are being updated together. The first two already-applied migrations remain immutable; a third forward migration removes the retired tables and rewrites shared listing security. It must fail if affected user data remains, and must preserve populated listings and their media, moderation and account-deletion safeguards.
 
-The local SQL harness creates minimal synthetic `auth.users` / `auth.uid()` equivalents. It tests real PostgreSQL grants, transactions and RLS, but is not the complete Supabase Auth/PostgREST runtime. A separate pgTAP suite runs against a disposable Supabase stack in CI. Do not confuse the two environments.
+Current local checks:
 
-## Security review and regression work
+- PostgreSQL 17.6: 100/100 assertions passed, including a populated-listing upgrade, empty fresh install, rollback guards, listing ownership, blocking, quotas/concurrency, media races, reports and account deletion.
+- Deno 2.5.6: 47 tests passed, plus formatting, lint and all six endpoint type checks. npm audit reported zero known vulnerabilities.
+- Python: 10 harness tests, syntax compilation and repository policy checks passed.
+- Final removal migration SHA-256: `577f7cbb6e39a6934f4c1f0a027d01fcbc134d858e2254f3433a2ef99b97d487`.
 
-Source review identified upload-quota reset via content deletion, report-queue deletion via cascading foreign keys, and incorrect search quoting. All three source findings were fixed and re-reviewed. Regression tests cover deletion-resistant quotas, report preservation and layered search escaping. CI must still confirm the final PR commit before approval. The review did not establish an RLS ownership bypass. The real local PostgREST 16.5 regression script passed ten checks, including tied-timestamp pagination, combined search/cursor conditions, literal special-character search, and anonymous access denials. It used a temporary loopback adapter and PostgreSQL 17.6; the full Supabase gateway version runs separately in CI.
+Flutter formatting passed. Local analysis/tests are awaiting a cold dependency restore; independent review and exact-commit CI remain in progress. Hosted removal has not been executed. Do not treat historical results below as a pass for this revision.
 
-## Phase-two local verification
+## Read-only hosted preflight, 2026-11-09
 
-The expanded source in this revision passed the following checks with synthetic data before publication:
+Direct SQL confirmed:
 
-- Flutter: **40 tests**, exact formatting and analysis. Includes 320×568 Arabic screens at 200% text scaling, three-tab semantics, touch targets, duplicate submission and navigation-after-await, image metadata stripping, moderation contracts, deletion status, and native staging callback configuration.
-- Backend: **93 real PostgreSQL assertions** and **39 Deno tests**, endpoint type checks, formatting, lint, npm audit and secret scan. Tests cover private data/role boundaries, signed create-only uploads, metadata sanitization, concurrent finalization, durable cleanup failures, live-session recent-authentication requirements and report-resolution auditing.
-- Independent source review identified and repaired account-wide recent-auth checks, hidden permanent deletion failures, legacy-key precedence, unbounded upload-response draining and incomplete retention disclosures. The staging source review is conditional on keeping media disabled until hosted tests pass.
-- Frozen migration SHA-256: `da37035a01eb5c8ca4bbe0ef9937a69581d28c331ca9b40d240b8aad5d119cbe`.
+- Zero Auth users, listings, posts, replies and consultation-target media/upload intents.
+- Zero consultation-target reports, moderation actions and publication events.
+- Six seeded topic reference rows remain until the approved removal migration.
+- Migration history contains exactly `202611080001` and `202611090001`.
+- The Edge function list is empty. No previous function deployment was submitted before the scope change.
 
-These are local source checks, not successful hosted media/deletion/OAuth flows. GitHub checks for this exact revision must pass separately. The preceding diagnostic-only commit `a2bad5f0b901d6cdf444a70e1115ccc5fc31be9e` passed all six jobs, including 24 pgTAP assertions and ten actual PostgREST API checks in the disposable full Supabase stack: [required checks](https://github.com/dukkanai/sudan-birds/actions/runs/42524075116), [native compilation](https://github.com/dukkanai/sudan-birds/actions/runs/42524075028).
+No data, security settings, credentials or functions were changed by this preflight.
 
-## Hosted staging verification
+## Previous exact-commit baseline, 2026-11-08
 
-- Applied only foundation migration `202611080001`, verified 14 public tables with RLS and 25 policies, and registered its exact 110 statements in migration history using the official CLI schema.
-- Reference seed applied twice with stable totals: 9 bird types, 6 topics, 5 locations. No auth users created.
-- Existing public publishable key used for read-only API checks: public taxonomy and empty feeds returned HTTP 200; contacts, reports, moderator roles and upload intents returned HTTP 401 to anonymous clients.
-- No service credentials generated, no R2 object uploads, no production deployment.
+Commit `d8340621792ac3d2a1e33577aa71231925faee07`, before the two-tab change, passed all seven CI jobs:
 
-## Temporary codec diagnostic
+- Flutter 3.38.5: formatting, static analysis and 40 tests, including Arabic 320×568 screens at 200% text scale, touch targets, duplicate submission, navigation after asynchronous operations, image metadata stripping and native staging callback configuration.
+- Disposable full Supabase stack: 49 pgTAP assertions and 10 actual PostgREST checks.
+- Deno 2.5.6: formatting, lint, six endpoint type checks, 43 tests and npm dependency audit.
+- Repository policy and full-history redacted secret scan.
+- Android debug and unsigned iOS simulator compilation.
+- Local bounded codec resource experiment and 10 harness tests.
 
-A fail-closed fixed-synthetic diagnostic is included for a separately approved staging resource test. Its committed entry is expired. It accepts no arbitrary images, database operations, R2 operations or user data. A fresh literal expiry and an explicitly approved temporary secret are both required. Local codec timing or process RSS is not proof of Supabase's per-isolate memory behavior; the image feature remains disabled until hosted resource and end-to-end tests pass.
+[Required checks](https://github.com/dukkanai/sudan-birds/actions/runs/42530133576), [native compilation](https://github.com/dukkanai/sudan-birds/actions/runs/42530133723), [local resource experiment](https://github.com/dukkanai/sudan-birds/actions/runs/42530133708).
 
-## Not yet verified / not delivered
+A separate PostgreSQL 17.6 harness passed 93 security assertions. It uses minimal synthetic Auth/session equivalents and real PostgreSQL transactions, grants and RLS. It is not the complete Supabase Auth/PostgREST runtime.
 
-- Connected end-to-end authenticated API flow.
-- Real Google/Apple sign-in and secure callback configuration.
-- Actual R2 image delivery, conditional writes/fencing, deletion and abuse scenarios. Local decoder/EXIF tests pass, but the deployed media feature deliberately remains disabled.
-- Real-device VoiceOver/TalkBack, large-screen/font behavior across devices, network interruption and upload recovery.
-- Signed Android/iOS beta delivery, store review or production release.
-- Final privacy/retention policy, support channel, and hosted account-deletion/moderator flows. The source includes deletion and moderation, but end-to-end hosted verification is pending.
+Earlier review repaired deletion-resistant upload quotas, report retention, search quoting, session-bound recent authentication, durable cleanup-error visibility, API-key precedence, upload-response timeouts and retention disclosures. Those safeguards must remain covered after the scope change.
 
-Native compile workflows build an Android debug package and an unsigned iOS simulator app. Even if they pass, neither establishes real-device runtime behavior or TestFlight/Google Play delivery.
+## Hosted baseline established before the scope change
 
-Do not deploy with real data until all release gates are fulfilled and explicitly approved. Failed, blocked or unexecuted required checks remain blockers, not waived successes.
+Both migrations were applied atomically and registered with their exact source statements. The second migration has SHA-256 `da37035a01eb5c8ca4bbe0ef9937a69581d28c331ca9b40d240b8aad5d119cbe`. All 14 pre-removal public tables had RLS. Private registries and ten service-only RPCs denied client access. Thirteen live anonymous API checks passed without creating or modifying rows. No moderator roles, scheduled cleanup, service credentials or R2 uploads were created.
+
+## Local codec limits and temporary diagnostic
+
+The previous resource run passed 20/20 sequential requests for one fixed synthetic 640×640 JPEG. It retained production R2 and Auth helper imports without calling their services. Official Edge Runtime v1.69.28 used 256MiB memory supervision and its local per-worker CPU policy. Codec time was 136–180ms. Maximum sampled post-processing heap-used plus external memory was 51.9MiB; this is not a continuous peak measurement. Warm workers handled up to seven requests before expected retirement.
+
+The local CPU policy differs from hosted behavior. These results do not establish hosted capacity, real SDK network allocations, adversarial image safety or R2 integration. Media remains disabled.
+
+The committed hosted diagnostic is expired and fail-closed. It accepts only its fixed synthetic fixture, never arbitrary images, database or R2 work. A separately approved temporary credential and literal short deadline are still required. It has not been deployed.
+
+## Unverified or undelivered gates
+
+- New revision's complete local and exact-commit CI checks, and guarded hosted schema cleanup.
+- Connected authenticated API, Google/Apple sign-in, native callbacks and hosted moderation/deletion flows.
+- Real R2 image delivery, conditional writes, retained deletion fences, cleanup and abuse scenarios.
+- Real-device VoiceOver/TalkBack, weak-network interruption and upload recovery.
+- Final privacy/retention terms, support operations, signed beta distribution and store review.
+
+Native compilation does not establish runtime behavior or store delivery. Failed, blocked or unexecuted required checks remain blockers. No merge or production release is authorized by this record.

@@ -136,7 +136,7 @@ class _ProfilePageState extends State<ProfilePage> {
                 style: TextStyle(fontSize: 24),
               ),
               const Text(
-                'احفظ الملف أولاً. لن تُدرج وسيلة التواصل في المنشورات أو الملف العام. إذا وافقت أدناه، يستطيع مستخدم مسجل طلبها عبر إعلان نشط لك. يمكن إيقاف المشاركة لاحقاً، لكن لا يمكن سحب ما سبق أن رآه الآخرون.',
+                'احفظ الملف أولاً. لن تُدرج وسيلة التواصل في الإعلانات أو الملف العام. إذا وافقت أدناه، يستطيع مستخدم مسجل طلبها عبر إعلان نشط لك. يمكن إيقاف المشاركة لاحقاً، لكن لا يمكن سحب ما سبق أن رآه الآخرون.',
               ),
               DropdownButtonFormField<String>(
                 isExpanded: true,
@@ -212,12 +212,9 @@ class _FilterPageState extends State<FilterPage> {
   Taxonomy data = const Taxonomy();
   bool loading = true;
   String? error;
-  late int? bird = widget.initial.birdId,
-      location = widget.initial.locationId,
-      topic = widget.initial.topicId;
+  late int? bird = widget.initial.birdId, location = widget.initial.locationId;
   late String status = widget.initial.status,
       currency = widget.initial.currency,
-      category = widget.initial.category,
       ageUnit = widget.initial.ageUnit;
   late DateTime? since = widget.initial.since, until = widget.initial.until;
   late final min = TextEditingController(
@@ -324,9 +321,7 @@ class _FilterPageState extends State<FilterPage> {
         search: widget.initial.search,
         birdId: bird,
         locationId: location,
-        topicId: topic,
         status: status,
-        category: category,
         currency: currency,
         minPrice: low,
         maxPrice: high,
@@ -348,27 +343,7 @@ class _FilterPageState extends State<FilterPage> {
             padding: const EdgeInsets.all(20),
             children: [
               options('نوع الطيور', bird, data.birds, (v) => bird = v),
-              if (widget.kind == FeedKind.education) ...[
-                options('الموضوع', topic, data.topics, (v) => topic = v),
-                DropdownButtonFormField<String>(
-                  isExpanded: true,
-                  itemHeight: null,
-                  initialValue: category,
-                  decoration: const InputDecoration(labelText: 'نوع المحتوى'),
-                  items: const [
-                    DropdownMenuItem(value: '', child: Text('الكل')),
-                    DropdownMenuItem(
-                      value: 'information',
-                      child: Text('معلومة للمربي'),
-                    ),
-                    DropdownMenuItem(
-                      value: 'consultation',
-                      child: Text('استشارة'),
-                    ),
-                  ],
-                  onChanged: (v) => category = v!,
-                ),
-              ] else ...[
+              ...[
                 options(
                   'الولاية والمدينة',
                   location,
@@ -518,13 +493,8 @@ class _PublicationPageState extends State<PublicationPage> {
         text: widget.existing?.price?.toString() ?? '',
       ),
       age = TextEditingController(text: widget.existing?.age?.toString() ?? '');
-  late int? bird = widget.existing?.birdId,
-      place = widget.existing?.locationId,
-      topic = widget.existing?.topicId;
-  late String category = widget.existing?.category == 'consultation'
-          ? 'consultation'
-          : 'information',
-      currency = widget.existing?.currency ?? 'SDG',
+  late int? bird = widget.existing?.birdId, place = widget.existing?.locationId;
+  late String currency = widget.existing?.currency ?? 'SDG',
       ageUnit = widget.existing?.ageUnit ?? 'month',
       priceUnit = widget.existing?.priceUnit ?? 'bird',
       status = widget.existing?.statusCode ?? 'active';
@@ -532,7 +502,6 @@ class _PublicationPageState extends State<PublicationPage> {
   Taxonomy data = const Taxonomy();
   bool loading = true, ready = false, busy = false, deletionPending = false;
   String? error;
-  bool get education => widget.kind == FeedKind.education;
   @override
   void initState() {
     super.initState();
@@ -617,9 +586,7 @@ class _PublicationPageState extends State<PublicationPage> {
         body: body.text,
         birdId: bird,
         locationId: place,
-        topicId: topic,
         quantity: int.tryParse(normalizeDigits(quantity.text)) ?? 1,
-        category: category,
         amount: parseAmount(amount.text),
         currency: currency,
         age: int.tryParse(normalizeDigits(age.text)),
@@ -698,30 +665,9 @@ class _PublicationPageState extends State<PublicationPage> {
                   bird,
                   data.birds,
                   (v) => bird = v,
-                  required: !education,
+                  required: true,
                 ),
-                if (education) ...[
-                  select('الموضوع', topic, data.topics, (v) => topic = v),
-                  DropdownButtonFormField<String>(
-                    isExpanded: true,
-                    itemHeight: null,
-                    initialValue: category,
-                    decoration: const InputDecoration(labelText: 'نوع المنشور'),
-                    items: const [
-                      DropdownMenuItem(
-                        value: 'information',
-                        child: Text('معلومة للمربي'),
-                      ),
-                      DropdownMenuItem(
-                        value: 'consultation',
-                        child: Text('استشارة'),
-                      ),
-                    ],
-                    onChanged: widget.existing != null || busy
-                        ? null
-                        : (v) => category = v!,
-                  ),
-                ] else ...[
+                ...[
                   select(
                     'الولاية والمدينة',
                     place,
@@ -887,50 +833,16 @@ class DetailPage extends StatefulWidget {
 class _DetailPageState extends State<DetailPage> {
   late FeedEntry entry = widget.entry;
   final text = TextEditingController();
-  final List<ReplyEntry> replies = [];
-  ReplyEntry? parent;
-  bool busy = false, loading = true, more = false;
+  bool busy = false;
   String? error;
   ContactData? revealed;
-  @override
-  void initState() {
-    super.initState();
-    load();
-  }
-
   @override
   void dispose() {
     text.dispose();
     super.dispose();
   }
 
-  Future<void> load({bool next = false}) async {
-    if (entry.kind != FeedKind.education) {
-      setState(() => loading = false);
-      return;
-    }
-    setState(() {
-      loading = true;
-      error = null;
-    });
-    final result = await widget.repository.replyPage(
-      entry.id,
-      after: next && replies.isNotEmpty ? replies.last : null,
-    );
-    if (mounted) {
-      setState(() {
-        loading = false;
-        error = result.failure?.message;
-        if (result.isSuccess) {
-          if (!next) replies.clear();
-          replies.addAll(result.value!);
-          more = result.value!.length == 20;
-        }
-      });
-    }
-  }
-
-  Future<void> send({required bool report}) async {
+  Future<void> sendReport() async {
     if (busy) return;
     if (!widget.repository.signedIn) {
       setState(
@@ -938,25 +850,15 @@ class _DetailPageState extends State<DetailPage> {
       );
       return;
     }
-    if (text.text.trim().length < (report ? 5 : 1)) {
-      setState(
-        () => error = report
-            ? 'اكتب سبب الإبلاغ في خمسة أحرف على الأقل.'
-            : 'اكتب الرد أولاً.',
-      );
+    if (text.text.trim().length < 5) {
+      setState(() => error = 'اكتب سبب الإبلاغ في خمسة أحرف على الأقل.');
       return;
     }
     setState(() {
       busy = true;
       error = null;
     });
-    final result = report
-        ? await widget.repository.report(entry, text.text.trim())
-        : await widget.repository.sendReply(
-            entry.id,
-            text.text.trim(),
-            parentId: parent?.id,
-          );
+    final result = await widget.repository.report(entry, text.text.trim());
     if (!mounted) return;
     setState(() {
       busy = false;
@@ -964,13 +866,9 @@ class _DetailPageState extends State<DetailPage> {
     });
     if (result.isSuccess) {
       text.clear();
-      parent = null;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(report ? 'تم إرسال البلاغ للمراجعة' : 'تم نشر الرد'),
-        ),
-      );
-      if (!report) await load();
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('تم إرسال البلاغ للمراجعة')));
     }
   }
 
@@ -1061,7 +959,7 @@ class _DetailPageState extends State<DetailPage> {
             icon: const Icon(Icons.report_outlined),
             label: const Text('إبلاغ عن الحساب'),
           ),
-        if (entry.kind != FeedKind.education) ...[
+        ...[
           OutlinedButton(
             onPressed: busy ? null : reveal,
             child: const Text('طلب وسيلة التواصل'),
@@ -1097,85 +995,17 @@ class _DetailPageState extends State<DetailPage> {
             icon: const Icon(Icons.block),
             label: const Text('حظر صاحب المحتوى'),
           ),
-        if (entry.kind == FeedKind.education) ...[
-          const Text('الردود', style: TextStyle(fontSize: 24)),
-          for (final reply in replies)
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(12),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('${reply.author} • ${arabicDate(reply.createdAt)}'),
-                    if (reply.parentId != null) const Text('رد على رد سابق'),
-                    Text(reply.body),
-                    TextButton(
-                      onPressed: () => Navigator.of(context).push<void>(
-                        MaterialPageRoute(
-                          builder: (_) => ReportPage(
-                            repository: widget.repository,
-                            kind: ReportKind.reply,
-                            targetId: reply.id,
-                          ),
-                        ),
-                      ),
-                      child: const Text('إبلاغ عن الرد'),
-                    ),
-
-                    TextButton(
-                      onPressed: () => setState(() => parent = reply),
-                      child: const Text('الرد على هذا الرد'),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          if (loading)
-            const LinearProgressIndicator(semanticsLabel: 'تحميل الردود'),
-          if (!loading && replies.isEmpty) const Text('لا توجد ردود حتى الآن.'),
-          if (more)
-            TextButton(
-              onPressed: loading ? null : () => load(next: true),
-              child: const Text('تحميل المزيد من الردود'),
-            ),
-          if (parent != null)
-            ListTile(
-              title: Text('الرد على ${parent!.author}'),
-              subtitle: Text(
-                parent!.body,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-              ),
-              trailing: IconButton(
-                onPressed: () => setState(() => parent = null),
-                tooltip: 'إلغاء الرد على رد',
-                icon: const Icon(Icons.close),
-              ),
-            ),
-        ],
         TextField(
           controller: text,
           maxLines: 3,
           maxLength: 2000,
-          decoration: const InputDecoration(
-            labelText: 'نص الرد أو سبب الإبلاغ',
-          ),
+          decoration: const InputDecoration(labelText: 'سبب الإبلاغ'),
         ),
         if (error != null) ...[
           Semantics(liveRegion: true, child: Text(error!)),
-          if (entry.kind == FeedKind.education)
-            TextButton(
-              onPressed: () => load(),
-              child: const Text('إعادة تحميل الردود'),
-            ),
         ],
-        if (entry.kind == FeedKind.education)
-          FilledButton(
-            onPressed: busy ? null : () => send(report: false),
-            child: const Text('إرسال الرد'),
-          ),
         OutlinedButton.icon(
-          onPressed: busy ? null : () => send(report: true),
+          onPressed: busy ? null : sendReport,
           icon: const Icon(Icons.flag_outlined),
           label: const Text('إبلاغ عن المحتوى'),
         ),

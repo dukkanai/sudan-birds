@@ -29,24 +29,55 @@ class RecordingRepository extends PreviewRepository {
 }
 
 void main() {
-  testWidgets('exactly three Arabic tabs, RTL and honest preview', (
+  testWidgets('exactly two Arabic tabs, RTL and honest preview', (
     tester,
   ) async {
     await tester.pumpWidget(BirdsApp(repository: PreviewRepository()));
     await tester.pumpAndSettle();
-    expect(find.byType(NavigationDestination), findsNWidgets(3));
+    expect(find.byType(NavigationDestination), findsNWidgets(2));
     expect(find.text('طلبات'), findsOneWidget);
     expect(find.text('معروضات'), findsOneWidget);
-    expect(find.text('محتوى تعليمي'), findsOneWidget);
+    expect(find.text('محتوى تعليمي'), findsNothing);
+    expect(find.byIcon(Icons.menu_book), findsNothing);
     expect(
       Directionality.of(tester.element(find.byType(NavigationBar))),
       TextDirection.rtl,
     );
     expect(find.textContaining('لا بيانات تجريبية وهمية'), findsOneWidget);
-    await tester.tap(find.text('محتوى تعليمي'));
+    await tester.tap(find.text('معروضات'));
     await tester.pumpAndSettle();
-    expect(find.text('نوع المحتوى والموقع وبقية الفلاتر'), findsOneWidget);
+    expect(find.text('نوع الطيور والموقع وبقية الفلاتر'), findsOneWidget);
     expect(find.byIcon(Icons.favorite), findsNothing);
+  });
+  testWidgets('listing details retain safety and contact without a timeline', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: DetailPage(
+          repository: PreviewRepository(),
+          entry: FeedEntry(
+            id: 'listing',
+            title: 'عرض طيور',
+            body: 'وصف الإعلان',
+            ownerId: 'owner',
+            kind: FeedKind.offer,
+            createdAt: DateTime.utc(2026),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('طلب وسيلة التواصل'), findsOneWidget);
+    expect(find.text('إبلاغ عن الحساب'), findsOneWidget);
+    expect(find.text('حظر صاحب المحتوى'), findsOneWidget);
+    expect(find.text('الردود'), findsNothing);
+    expect(find.text('إرسال الرد'), findsNothing);
+    expect(find.text('سبب الإبلاغ'), findsOneWidget);
+    await tester.tap(find.text('طلب وسيلة التواصل'));
+    await tester.pumpAndSettle();
+    expect(find.text('سجّل الدخول لطلب وسيلة التواصل.'), findsOneWidget);
+    expect(find.byType(AlertDialog), findsNothing);
   });
   testWidgets('publishing is auth gated in preview', (tester) async {
     await tester.pumpWidget(BirdsApp(repository: PreviewRepository()));

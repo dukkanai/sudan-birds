@@ -4,27 +4,27 @@ select plan(25);
 insert into auth.users(id) values('00000000-0000-4000-8000-000000000003');
 insert into auth.sessions(id,user_id,created_at,updated_at) values('00000000-0000-4000-8000-000000000003','00000000-0000-4000-8000-000000000003',now(),now());
 insert into public.profiles(id,display_name,accepted_terms_at) values('00000000-0000-4000-8000-000000000003','Media test',now());
-insert into public.posts(id,owner_id,kind,title,body) values
- ('30000000-0000-4000-8000-000000000001','00000000-0000-4000-8000-000000000003','education','Image target','Body');
+insert into public.listings(id,owner_id,kind,title,description,quantity) values
+ ('30000000-0000-4000-8000-000000000001','00000000-0000-4000-8000-000000000003','request','Image target','Body',1);
 
-insert into public.reports(id,reporter_id,post_id,reason) values('40000000-0000-4000-8000-000000000001','00000000-0000-4000-8000-000000000003','30000000-0000-4000-8000-000000000001','Synthetic report');
+insert into public.reports(id,reporter_id,listing_id,reason) values('40000000-0000-4000-8000-000000000001','00000000-0000-4000-8000-000000000003','30000000-0000-4000-8000-000000000001','Synthetic report');
 set local role authenticated;
 select set_config('request.jwt.claim.sub','00000000-0000-4000-8000-000000000003',true);
 select throws_ok($$select public.resolve_report('40000000-0000-4000-8000-000000000001','resolved','Reviewed report')$$,'42501','Moderation denied','ordinary user cannot resolve reports');
 select throws_ok($$select * from public.moderator_report_target('40000000-0000-4000-8000-000000000001')$$,'42501','Moderation denied','ordinary user cannot inspect hidden targets');
 reset role;
 insert into public.moderator_roles values('00000000-0000-4000-8000-000000000003','moderator');
-update public.posts set moderation_state='hidden' where id='30000000-0000-4000-8000-000000000001';
+update public.listings set moderation_state='hidden' where id='30000000-0000-4000-8000-000000000001';
 set local role authenticated;
 select is((select moderation_state from public.moderator_report_target('40000000-0000-4000-8000-000000000001')),'hidden','moderator reviews hidden target through sanitized RPC');
 select lives_ok($$select public.resolve_report('40000000-0000-4000-8000-000000000001','reviewing','Review started')$$,'authorized report state change');
 select is((select count(*)::integer from public.moderation_actions where target_id='40000000-0000-4000-8000-000000000001' and action='report_reviewing'),1,'report action audited');
 reset role;
-update public.posts set moderation_state='visible' where id='30000000-0000-4000-8000-000000000001';
+update public.listings set moderation_state='visible' where id='30000000-0000-4000-8000-000000000001';
 set local role authenticated;
 
-select throws_ok($$select public.reserve_upload('30000000-0000-4000-8000-000000000001',null,100,'image/png')$$,'22023','Invalid upload','JPEG only');
-select set_config('test.intent',(select id::text from public.reserve_upload('30000000-0000-4000-8000-000000000001',null,100,'image/jpeg')),true);
+select throws_ok($$select public.reserve_upload('30000000-0000-4000-8000-000000000001',100,'image/png')$$,'22023','Invalid upload','JPEG only');
+select set_config('test.intent',(select id::text from public.reserve_upload('30000000-0000-4000-8000-000000000001',100,'image/jpeg')),true);
 select throws_ok($$select * from public.prepare_media_verification(auth.uid(),current_setting('test.intent')::uuid)$$,'42501',null,'clients cannot prepare canonical keys');
 select throws_ok($$select public.begin_account_deletion(auth.uid(),auth.uid(),floor(extract(epoch from clock_timestamp()))::bigint)$$,'42501',null,'clients cannot start deletion by direct service RPC');
 select is(public.is_cleanup_admin(),false,'ordinary user cannot run admin cleanup');
@@ -42,9 +42,9 @@ select ok((select not_before>now() from public.get_deletion_job(current_setting(
 select throws_ok($$select public.deletion_ready_for_auth(current_setting('test.job')::uuid)$$,'P0001','Cleanup pending','Auth cannot precede cleanup');
 set local role authenticated;
 select set_config('request.jwt.claim.sub','00000000-0000-4000-8000-000000000003',true);
-select is((select count(*)::integer from public.posts where owner_id=auth.uid()),0,'pending deletion hides account content');
-select throws_ok($$insert into public.posts(kind,title,body) values('education','Forbidden post','Body')$$,'42501','Account deletion pending','pending deletion freezes writes');
-select throws_ok($$select public.reserve_upload('30000000-0000-4000-8000-000000000001',null,100,'image/jpeg')$$,'42501','Upload denied','pending deletion freezes uploads');
+select is((select count(*)::integer from public.listings where owner_id=auth.uid()),0,'pending deletion hides account content');
+select throws_ok($$insert into public.listings(kind,title,description,quantity) values('request','Forbidden post','Body',1)$$,'42501','Account deletion pending','pending deletion freezes writes');
+select throws_ok($$select public.reserve_upload('30000000-0000-4000-8000-000000000001',100,'image/jpeg')$$,'42501','Upload denied','pending deletion freezes uploads');
 reset role;
 select set_config('request.jwt.claim.sub','',true);
 update private.account_deletion_jobs set not_before=now()-interval '1 second' where id=current_setting('test.job')::uuid;

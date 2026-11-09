@@ -1,24 +1,39 @@
 # Backend foundation and release gates
 
-The first foundation migration is verified in staging. Public taxonomy reads returned
-200 and protected-table reads returned401 in the recorded hosted checks. The second
-migration and new image/deletion/moderation functions are locally implemented but
-not yet deployed. No credential is contained here. The staging R2 bucket is private;
-bucket existence does not mean image upload or verification is operational.
+The two historical migrations are immutable deployment history. The third forward
+migration removes the discontinued timeline and changes uploads to listing-only.
+This removal has not been applied to hosted staging. Local results below are not
+hosted deployment evidence. No credential is contained here.
+
+## Timeline removal and compatibility
+
+`202611090002_remove_timeline.sql` uses a transaction and exclusive locks, fails
+if timeline content, related media/reservations/reports, audit actions or publishing
+history exist, and removes only the six known development topic labels. Unknown
+topic labels also block migration. A populated instance needs a separately approved
+retention/export/cleanup plan. It never deletes the shared object registry.
+
+Tables `posts`, `replies`, `topics`, their local policies/indexes/triggers and the
+reply validator are removed. Reports keep listing/account targets. Media and upload
+intents require a listing. The old four-argument `reserve_upload` RPC is removed;
+the new arguments are `p_listing`, `p_bytes`, `p_mime`. Old endpoints or payloads
+fail closed. The Edge reserve endpoint rejects legacy and unknown input fields,
+including a `post_id` even when null. Coordinate the database, Edge and client
+release; old clients are incompatible. No hosted cleanup or deployment is implied
+by this source change.
 
 ## Data/API contract
 
-- Anonymous reads: visible profiles, listings, posts, replies and verified media metadata.
+- Anonymous reads: visible profiles, listings and verified media metadata.
 - Authenticated mutations use caller JWT + RLS; IDs, owners, ranking timestamps,
-  expiry, moderation state and reply parent links cannot be changed by clients.
+  expiry and moderation state cannot be changed by clients.
 - Offers require finite nonnegative numeric `price`; requests allow an optional budget.
   Currency is an ISO-shaped three-letter code. Prices must be filtered by currency.
 - Listing states: active, reserved (offers only), fulfilled, closed, expired. Display
   fulfilled as sold for an offer and found for a request. New expiry is 30 days.
 - Feed clients must filter active + `expires_at > now()` by default, order by
   `(created_at DESC,id DESC)`, and use both values as cursor. Historical content remains readable.
-- Post kinds: education, consultation. Replies have immutable post/parent identity.
-- Reports target exactly one listing, post, reply or account. Only reporter and
+- Reports target exactly one listing or account. Only reporter and
   trusted moderators read them. No client may mutate report processing state. Target
   deletion preserves the report and its target UUID; no deleted-content snapshot is
   retained. The moderation UI must show a missing/deleted target honestly. Reporter
@@ -29,18 +44,18 @@ bucket existence does not mean image upload or verification is operational.
 - Profile contacts are owner-only. `reveal_listing_contact(p_listing,
   p_explicit_consent)` only reveals an owner's opted-in contact for a live listing
   after explicit requester consent. Blocks deny this RPC in both directions.
-- Blocks filter logged-in API reads, replies and contact access. Anonymous content
+- Blocks filter logged-in API reads and contact access. Anonymous content
   remains public by product design; blocking is not a confidentiality boundary
   against somebody signing out or using a different account.
 - Moderator/admin roles are provisioned only by trusted maintenance, never JWT
-  user metadata. `moderate_content` supports audited hide/restore; `resolve_report`
+  user metadata. `moderate_content` supports listing-only audited hide/restore; `resolve_report`
   supports audited reviewing/resolved/dismissed states, and `moderator_report_target`
   exposes only sanitized target content, including an explicit missing-target state.
   Private contacts are excluded. Account bans and permanent moderator account
   deletion are not part of these RPCs.
 - All public tables have RLS. Private quota events survive content deletion and
   impose serialized rolling daily budgets. Configure `private.publish_limits`
-  through trusted maintenance only (50 posts, 50 listings, 200 replies, 20 reports).
+  through trusted maintenance only (50 listings and 20 reports).
 
 ## Edge boundaries
 
@@ -98,23 +113,19 @@ users and local database roles, binds PostgreSQL to loopback, disables Unix sock
 uses no external service and stops/deletes its database on completion. It uses a minimal
 auth.uid stub; it does not emulate Supabase Auth, API gateway or PostgREST.
 
-Actual verification performed locally:
-- Migration applied to real PostgreSQL 17.6 and 93 database/security assertions passed,
-  including deletion-resistant daily upload quotas and a six-concurrent-request test that allowed exactly three reservations.
-- Deno 2.5.6 type checking, formatting and lint passed; 39 HTTP, codec, streaming, concurrency, lifecycle, signing and diagnostic tests passed.
-- Final npm audit reported zero known vulnerabilities after updating AWS SDK to 3.1164.0.
-- The foundation at commit `d9952c` passed all six recorded required/native jobs:
-  [required CI42520396936](https://github.com/dukkanai/sudan-birds/actions/runs/42520396936)
-  and [native CI42520396938](https://github.com/dukkanai/sudan-birds/actions/runs/42520396938).
-  The foundation's24pgTAP checks passed there. These results do not certify the
-  subsequent unpublished second migration or new Edge functions.
-- This phase adds 25 pgTAP assertions (49 total); the new suite has not yet run in full Supabase CI.
-- No deployed Supabase/R2 integration, provider login, email verification, account
-  deletion, mobile integration, load test or penetration-test certification is claimed.
+## Verification evidence
+
+Run the current migration chain and suites on the exact release candidate. Past
+foundation test counts do not certify this removal. The independent PostgreSQL
+suite tests the final schema, preserved listing security and upgrade guardrails.
+Deno tests include rejection of legacy upload targets. Actual API smoke exercises
+listing pagination/search and removed endpoint rejection. These tests do not
+replace hosted Supabase/R2 integration, load tests or a security release review.
 
 ## Mandatory remaining gates
 
-Apply/review the second staging migration and approved service configuration, run
+Review the forward removal migration and obtain action-time approval before applying
+it to hosted staging. Verify approved service configuration, run
 connected hosted API flows, verify deployed image/account-deletion flows and finalize retention,
 complete moderation/report workflows, test expiry/search/Arabic on representative data,
 exercise PostgREST JWT/RLS and expired/revoked sessions, test rate limits under load,
@@ -123,7 +134,7 @@ is not production ready. Do not expose a service-role key to Flutter or commit s
 
 ## Local starter reference data
 
-`supabase/seed.sql` supplies nine common Arabic bird labels, six educational topics
+`supabase/seed.sql` supplies nine common Arabic bird labels
 and a deliberately small five-location subset: الخرطوم، أم درمان، بحري، كسلا،
 بورتسودان. Local Supabase database initialization/reset loads it through `[db.seed]`.
 It creates no fake users or user content and is idempotent by the reference tables'
@@ -131,7 +142,7 @@ unique names/location pairs. It does not overwrite existing labels or assume fix
 
 This is local development starter data, not a complete or officially validated
 geography or species taxonomy. Review names, permitted bird categories, location
-coverage and educational topics, and complete the reference catalog before public
+coverage, and complete the reference catalog before public
 launch. The seed is not an automatic production migration; provision reviewed
 reference data in staging/production as a separate explicit deployment step.
 

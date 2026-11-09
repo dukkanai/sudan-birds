@@ -78,7 +78,6 @@ class _HomePageState extends State<HomePage> {
   List<FeedEntry> entries = [];
   final search = TextEditingController();
   final location = TextEditingController();
-  String category = '';
   FeedFilter filters = const FeedFilter();
   FeedKind get kind => FeedKind.values[index];
   @override
@@ -314,7 +313,7 @@ class _HomePageState extends State<HomePage> {
                           }
                         },
                         icon: const Icon(Icons.tune),
-                        label: const Text('نوع المحتوى والموقع وبقية الفلاتر'),
+                        label: const Text('نوع الطيور والموقع وبقية الفلاتر'),
                       ),
                       Align(
                         alignment: AlignmentDirectional.centerEnd,
@@ -398,7 +397,7 @@ class _HomePageState extends State<HomePage> {
                       contentPadding: const EdgeInsets.all(16),
                       title: Text(item.title),
                       subtitle: Text(
-                        '${item.kind == FeedKind.education ? '${item.author} • ${item.category == 'consultation' ? 'استشارة' : 'معلومة للمربي'} • ${arabicDate(item.createdAt)}\n${item.replyCount} ردود\n' : ''}${item.body}\n${item.location}${item.price == null ? '' : '\n${item.kind == FeedKind.request ? 'الميزانية' : 'السعر'}: ${item.price} ${item.currency}${item.kind == FeedKind.offer ? (item.priceUnit == 'group' ? ' للمجموعة' : ' للطائر') : ''}'}\n${item.status}',
+                        '${item.body}\n${item.location}${item.price == null ? '' : '\n${item.kind == FeedKind.request ? 'الميزانية' : 'السعر'}: ${item.price} ${item.currency}${item.kind == FeedKind.offer ? (item.priceUnit == 'group' ? ' للمجموعة' : ' للطائر') : ''}'}\n${item.status}',
                       ),
                       onTap: () async {
                         await Navigator.of(context).push<void>(
@@ -423,20 +422,13 @@ class _HomePageState extends State<HomePage> {
     floatingActionButton: FloatingActionButton.extended(
       onPressed: publish,
       icon: const Icon(Icons.add),
-      label: Text(
-        kind == FeedKind.education
-            ? 'إضافة منشور'
-            : kind == FeedKind.offer
-            ? 'إضافة عرض'
-            : 'إضافة طلب',
-      ),
+      label: Text(kind == FeedKind.offer ? 'إضافة عرض' : 'إضافة طلب'),
     ),
     bottomNavigationBar: NavigationBar(
       selectedIndex: index,
       onDestinationSelected: (value) {
         setState(() {
           index = value;
-          category = '';
           filters = const FeedFilter();
           search.clear();
           location.clear();
@@ -446,10 +438,6 @@ class _HomePageState extends State<HomePage> {
       destinations: const [
         NavigationDestination(icon: Icon(Icons.search), label: 'طلبات'),
         NavigationDestination(icon: Icon(Icons.storefront), label: 'معروضات'),
-        NavigationDestination(
-          icon: Icon(Icons.menu_book),
-          label: 'محتوى تعليمي',
-        ),
       ],
     ),
   );

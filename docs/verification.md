@@ -211,3 +211,32 @@ Official references:
 - https://plugins.gradle.org/docs/mirroring
 - https://docs.gradle.org/8.14/userguide/init_scripts.html
 - https://docs.gradle.org/8.14/userguide/filtering_repository_content.html
+
+### Workflow expression-context correction
+
+The first fetch-repair commit, `2c890a0a225f11da203b2fd5be2be0edeb29e21b`,
+failed GitHub workflow validation before native jobs started (run
+`42573052318`). YAML parsing had passed but did not validate expression contexts.
+Official actionlint 1.7.7 reproduced the exact defect at line 27: the `runner`
+context is not permitted in job-level `env`.
+
+The Android job now exports `GRADLE_USER_HOME` from the runner-provided
+`RUNNER_TEMP` through `GITHUB_ENV` in its first shell step. No dependency, SDK,
+repository routing or checksum changes are involved. The repository-security
+job now runs pinned actionlint 1.7.7 on all workflows to catch schema and
+expression-context errors. Optional external shellcheck/pyflakes integrations
+are disabled explicitly; this check does not claim shell or Python lint coverage.
+
+Validation: actionlint exits 1 on the previous workflow with the specific
+forbidden-context diagnostic, and exits 0 on all corrected workflows. The local
+validator came from the official GitHub release and matched its published
+SHA-256 checksum. Repository policy checks and `git diff --check` pass. The three
+Gradle 8.14 offline integration tests were rerun successfully after this change.
+Native compilation remains pending fresh exact-commit CI; local Android SDK is
+still unavailable. This source patch does not deploy functions, change hosted
+settings or authorize a mobile release.
+
+References:
+- https://github.com/rhysd/actionlint/releases/tag/v1.7.7
+- https://docs.github.com/en/actions/learn-github-actions/contexts#context-availability
+- https://docs.github.com/en/actions/using-workflows/workflow-commands-for-github-actions#setting-an-environment-variable

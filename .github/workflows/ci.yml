@@ -106,6 +106,8 @@ jobs:
         with:
           persist-credentials: false
           fetch-depth: 0
+      - name: Validate workflow schemas and expression contexts
+        run: go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.7 -shellcheck= -pyflakes=
       - name: Repository policy checks
         run: python3 scripts/check_repository.py
       - name: Secret scan (redacted, complete Git history)

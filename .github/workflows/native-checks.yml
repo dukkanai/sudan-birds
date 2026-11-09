@@ -23,9 +23,9 @@ jobs:
   android-debug:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
-    env:
-      GRADLE_USER_HOME: ${{ runner.temp }}/birds-gradle
     steps:
+      - name: Isolate Android Gradle state
+        run: echo "GRADLE_USER_HOME=$RUNNER_TEMP/birds-gradle" >> "$GITHUB_ENV"
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           persist-credentials: false

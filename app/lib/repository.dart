@@ -10,25 +10,48 @@ class SupabaseBirdsRepository implements BirdsRepository {
   final SupabaseClient client;
   final String authRedirect;
 
-  Future<Map<String, dynamic>> edge(
+  Future<Map<String, dynamic>> _edge(
     String name,
-    Map<String, dynamic> body,
-  ) async {
+    Map<String, dynamic> body, {
+    _AccountSession? account,
+    bool mutation = false,
+  }) async {
+    final token =
+        account?.authorization ??
+        (client.auth.currentSession == null
+            ? null
+            : 'Bearer ${client.auth.currentSession!.accessToken}');
     try {
-      final response = await client.functions.invoke(name, body: body);
+      final response = await client.functions.invoke(
+        name,
+        body: body,
+        headers: token == null ? null : {'Authorization': token},
+      );
       final data = response.data;
       if (data is! Map<String, dynamic>) {
-        throw const AppFailure(
+        throw AppFailure(
           'استجابة الخدمة غير مكتملة. لم نؤكد نجاح العملية.',
+          outcomeUnknown: mutation,
         );
       }
       if (response.status >= 400 || data['error'] != null) {
-        throw edgeFailure(response.status, data['error']);
+        final failure = edgeFailure(response.status, data['error']);
+        throw AppFailure(
+          failure.message,
+          outcomeUnknown: mutation && response.status >= 500,
+        );
       }
       return data;
     } on FunctionException catch (e) {
       final details = e.details;
-      throw edgeFailure(e.status, details is Map ? details['error'] : null);
+      final failure = edgeFailure(
+        e.status,
+        details is Map ? details['error'] : null,
+      );
+      throw AppFailure(
+        failure.message,
+        outcomeUnknown: mutation && e.status >= 500,
+      );
     }
   }
 
@@ -37,47 +60,52 @@ class SupabaseBirdsRepository implements BirdsRepository {
     ReportKind kind,
     String targetId,
     String reason,
-  ) => protect(() async {
-    requireAccount();
+  ) => protectMutation(() async {
+    final session = _accountSession();
     if (reason.trim().length < 5 || reason.length > 2000) {
       throw const AppFailure('اكتب سبباً واضحاً من ٥ إلى ٢٠٠٠ حرف.');
     }
-    await client.from('reports').insert({
-      '${kind.name}_id': targetId,
-      'reason': reason.trim(),
-    });
+    await client
+        .from('reports')
+        .setHeader('Authorization', session.authorization)
+        .insert({'${kind.name}_id': targetId, 'reason': reason.trim()});
     return true;
   });
-  Future<bool> verifiedModerator() async {
-    requireAccount();
+  Future<bool> _verifiedModerator([_AccountSession? initial]) async {
+    final session = initial ?? _accountSession();
     final row = await client
         .from('moderator_roles')
+        .setHeader('Authorization', session.authorization)
         .select('role')
-        .eq('user_id', currentUserId!)
+        .eq('user_id', session.userId)
         .maybeSingle();
+    requireSameAccount(session.userId);
     return row != null &&
         (row['role'] == 'moderator' || row['role'] == 'admin');
   }
 
-  Future<void> requireModerator() async {
-    if (!await verifiedModerator()) {
+  Future<void> _requireModerator(_AccountSession session) async {
+    if (!await _verifiedModerator(session)) {
       throw const AppFailure('لا تتوفر صلاحية الإشراف لهذا الحساب.');
     }
+    requireSameAccount(session.userId);
   }
 
   @override
-  Future<Result<bool>> isModerator() => protect(verifiedModerator);
+  Future<Result<bool>> isModerator() => protect(_verifiedModerator);
   @override
   Future<Result<List<ModerationReport>>> moderationReports(
     String state, {
     ModerationReport? before,
   }) => protect(() async {
-    await requireModerator();
+    final session = _accountSession();
+    await _requireModerator(session);
     if (!['open', 'reviewing', 'resolved', 'dismissed'].contains(state)) {
       throw const AppFailure('حالة بلاغ غير مدعومة.');
     }
     var query = client
         .from('reports')
+        .setHeader('Authorization', session.authorization)
         .select('id,listing_id,account_id,reason,state,created_at')
         .eq('state', state);
     if (before != null) {
@@ -105,46 +133,51 @@ class SupabaseBirdsRepository implements BirdsRepository {
     }).toList();
   });
   @override
-  Future<Result<ModerationTarget?>> moderationTarget(ModerationReport report) =>
-      protect(() async {
-        await requireModerator();
-        final rows =
-            await client.rpc(
-                  'moderator_report_target',
-                  params: {'p_report': report.id},
-                )
-                as List<dynamic>;
-        if (rows.isEmpty) return null;
-        final row = rows.first as Map<String, dynamic>;
-        if (row['missing'] == true) return null;
-        return ModerationTarget(
-          id: report.targetId,
-          kind: report.kind,
-          title:
-              row['title'] as String? ?? row['display_name'] as String? ?? '',
-          body: row['body'] as String? ?? '',
-          hidden: row['moderation_state'] == 'hidden',
-        );
-      });
+  Future<Result<ModerationTarget?>> moderationTarget(
+    ModerationReport report,
+  ) => protect(() async {
+    final session = _accountSession();
+    await _requireModerator(session);
+    final rows =
+        await client
+                .rpc('moderator_report_target', params: {'p_report': report.id})
+                .setHeader('Authorization', session.authorization)
+            as List<dynamic>;
+    if (rows.isEmpty) return null;
+    final row = rows.first as Map<String, dynamic>;
+    if (row['missing'] == true) return null;
+    return ModerationTarget(
+      id: report.targetId,
+      kind: report.kind,
+      title: row['title'] as String? ?? row['display_name'] as String? ?? '',
+      body: row['body'] as String? ?? '',
+      hidden: row['moderation_state'] == 'hidden',
+    );
+  });
   @override
   Future<Result<bool>> moderate(
     ModerationReport report,
     bool hidden,
     String reason,
   ) => protect(() async {
-    await requireModerator();
+    final session = _accountSession();
+    final accountId = session.userId;
+    await _requireModerator(session);
+    requireSameAccount(accountId);
     if (report.kind == ReportKind.account || reason.trim().length < 5) {
       throw const AppFailure('هذا الإجراء يتطلب محتوى محدداً وسبباً واضحاً.');
     }
-    await client.rpc(
-      'moderate_content',
-      params: {
-        'p_kind': report.kind.name,
-        'p_id': report.targetId,
-        'p_hidden': hidden,
-        'p_reason': reason.trim(),
-      },
-    );
+    await client
+        .rpc(
+          'moderate_content',
+          params: {
+            'p_kind': report.kind.name,
+            'p_id': report.targetId,
+            'p_hidden': hidden,
+            'p_reason': reason.trim(),
+          },
+        )
+        .setHeader('Authorization', session.authorization);
     return true;
   });
   @override
@@ -153,25 +186,34 @@ class SupabaseBirdsRepository implements BirdsRepository {
     String state,
     String reason,
   ) => protect(() async {
-    await requireModerator();
+    final session = _accountSession();
+    final accountId = session.userId;
+    await _requireModerator(session);
+    requireSameAccount(accountId);
     if (!['reviewing', 'resolved', 'dismissed'].contains(state) ||
         reason.trim().length < 5) {
       throw const AppFailure('اختر حالة مراجعة واكتب سبباً واضحاً.');
     }
-    await client.rpc(
-      'resolve_report',
-      params: {
-        'p_report': reportId,
-        'p_state': state,
-        'p_reason': reason.trim(),
-      },
-    );
+    await client
+        .rpc(
+          'resolve_report',
+          params: {
+            'p_report': reportId,
+            'p_state': state,
+            'p_reason': reason.trim(),
+          },
+        )
+        .setHeader('Authorization', session.authorization);
     return true;
   });
   @override
   Future<Result<DeletionStatus?>> deletionStatus() => protect(() async {
-    requireAccount();
-    final rows = await client.rpc('own_deletion_status') as List<dynamic>;
+    final session = _accountSession();
+    final rows =
+        await client
+                .rpc('own_deletion_status')
+                .setHeader('Authorization', session.authorization)
+            as List<dynamic>;
     if (rows.isEmpty) return null;
     final row = rows.first as Map<String, dynamic>;
     return DeletionStatus(
@@ -196,33 +238,44 @@ class SupabaseBirdsRepository implements BirdsRepository {
   });
   @override
   Future<Result<UploadIntent>> reserveImage(FeedEntry entry, int bytes) =>
-      protect(() async {
-        requireAccount();
+      protectMutation(() async {
+        final session = _accountSession();
         if (entry.ownerId != currentUserId ||
             bytes < 1 ||
             bytes > MediaPolicy.maxBytes) {
           throw const AppFailure('الصورة غير صالحة أو لا تملك هذا المحتوى.');
         }
-        final data = await edge('media', {
-          'action': 'reserve',
-          'listing_id': entry.id,
-          'bytes': bytes,
-          'mime': 'image/jpeg',
-        });
-        final url = data['put_url'] as String;
-        requirePrivateImageUrl(url);
-        final headers = Map<String, String>.from(
-          data['required_headers'] as Map,
+        final data = await _edge(
+          'media',
+          {
+            'action': 'reserve',
+            'listing_id': entry.id,
+            'bytes': bytes,
+            'mime': 'image/jpeg',
+          },
+          account: session,
+          mutation: true,
         );
-        validateUploadHeaders(headers, bytes);
-        return UploadIntent(
-          id: data['intent_id'] as String,
-          url: url,
-          expiresAt: DateTime.now().add(
-            Duration(seconds: (data['expires_in'] as num).toInt()),
-          ),
-          headers: headers,
-        );
+        try {
+          final url = data['put_url'] as String;
+          requirePrivateImageUrl(url);
+          final headers = Map<String, String>.from(
+            data['required_headers'] as Map,
+          );
+          validateUploadHeaders(headers, bytes);
+          return UploadIntent(
+            id: data['intent_id'] as String,
+            url: url,
+            expiresAt: DateTime.now().add(
+              Duration(seconds: (data['expires_in'] as num).toInt()),
+            ),
+            headers: headers,
+          );
+        } on AppFailure catch (failure) {
+          // Reservation may already exist even when its returned upload
+          // contract is unsafe. Never silently enable another reservation.
+          throw AppFailure(failure.message, outcomeUnknown: true);
+        }
       });
   @override
   Future<Result<bool>> putImage(
@@ -268,12 +321,12 @@ class SupabaseBirdsRepository implements BirdsRepository {
     UploadIntent intent,
     String altText,
   ) => protect(() async {
-    requireAccount();
-    final data = await edge('media', {
+    final session = _accountSession();
+    final data = await _edge('media', {
       'action': 'complete',
       'intent_id': intent.id,
       'alt_text': altText.trim(),
-    });
+    }, account: session);
     if (data['status'] != 'verified' || data['media_id'] is! String) {
       throw const AppFailure(
         'لم يؤكد الخادم التحقق من الصورة؛ لا تُعد منشورة بعد.',
@@ -283,24 +336,28 @@ class SupabaseBirdsRepository implements BirdsRepository {
   });
   @override
   Future<Result<String>> imageUrl(String mediaId) => protect(() async {
-    final data = await edge('media-read', {'media_id': mediaId});
+    final data = await _edge('media-read', {'media_id': mediaId});
     final url = data['url'] as String;
     requirePrivateImageUrl(url);
     return url;
   });
   @override
   Future<Result<DeletionStatus>> deleteOwnAccount() => protect(() async {
-    requireAccount();
-    final data = await edge('account-delete', {
+    final session = _accountSession();
+    final accountId = session.userId;
+    final data = await _edge('account-delete', {
       'confirmation': 'DELETE_MY_ACCOUNT',
-    });
+    }, account: session);
     if (data['status'] == 'completed') {
+      var cleanupRequired = false;
       try {
-        await client.auth.signOut(scope: SignOutScope.local);
+        if (currentUserId == accountId) {
+          await client.auth.signOut(scope: SignOutScope.local);
+        }
       } catch (_) {
-        /* The server confirmed deletion; session cleanup can be retried. */
+        cleanupRequired = true;
       }
-      return const DeletionStatus(true);
+      return DeletionStatus(true, sessionCleanupRequired: cleanupRequired);
     }
     if (data['status'] == 'pending') {
       return DeletionStatus(
@@ -320,15 +377,16 @@ class SupabaseBirdsRepository implements BirdsRepository {
     String body,
     String status,
   ) => protect(() async {
-    requireAccount();
+    final session = _accountSession();
     if (entry.ownerId != currentUserId) {
       throw const AppFailure('يمكن لصاحب المحتوى وحده تعديله.');
     }
     final rows = await client
         .from('listings')
+        .setHeader('Authorization', session.authorization)
         .update({'title': title, 'description': body, 'status': status})
         .eq('id', entry.id)
-        .eq('owner_id', currentUserId!)
+        .eq('owner_id', session.userId)
         .select('id');
     if (rows.length != 1) {
       throw const AppFailure(
@@ -339,27 +397,29 @@ class SupabaseBirdsRepository implements BirdsRepository {
   });
   @override
   Future<Result<List<String>>> blockedUsers() => protect(() async {
-    requireAccount();
+    final session = _accountSession();
     final rows = await client
         .from('user_blocks')
+        .setHeader('Authorization', session.authorization)
         .select('blocked_id')
-        .eq('blocker_id', currentUserId!);
+        .eq('blocker_id', session.userId);
     return rows.map((r) => r['blocked_id'] as String).toList();
   });
   @override
   Future<Result<bool>> block(String userId, bool blocked) => protect(() async {
-    requireAccount();
+    final session = _accountSession();
     if (userId == currentUserId) throw const AppFailure('لا يمكنك حظر حسابك.');
     if (blocked) {
-      await client.from('user_blocks').insert({
-        'blocker_id': currentUserId!,
-        'blocked_id': userId,
-      });
+      await client
+          .from('user_blocks')
+          .setHeader('Authorization', session.authorization)
+          .insert({'blocker_id': session.userId, 'blocked_id': userId});
     } else {
       final rows = await client
           .from('user_blocks')
+          .setHeader('Authorization', session.authorization)
           .delete()
-          .eq('blocker_id', currentUserId!)
+          .eq('blocker_id', session.userId)
           .eq('blocked_id', userId)
           .select('blocked_id');
       if (rows.length != 1) {
@@ -375,6 +435,23 @@ class SupabaseBirdsRepository implements BirdsRepository {
   @override
   Stream<void> get authChanges =>
       client.auth.onAuthStateChange.map<void>((_) {});
+  _AccountSession _accountSession() {
+    requireAccount();
+    final session = client.auth.currentSession;
+    if (session == null || session.user.id != currentUserId) {
+      throw const AppFailure('أعد تسجيل الدخول قبل تنفيذ الإجراء.');
+    }
+    return _AccountSession(session.user.id, 'Bearer ${session.accessToken}');
+  }
+
+  void requireSameAccount(String expected) {
+    if (!signedIn || currentUserId != expected) {
+      throw const AppFailure(
+        'تغيرت جلسة الحساب. افتح الشاشة مجدداً قبل تنفيذ الإجراء.',
+      );
+    }
+  }
+
   void requireAccount() {
     if (!signedIn) throw const AppFailure('سجّل الدخول أولاً.');
   }
@@ -476,12 +553,12 @@ class SupabaseBirdsRepository implements BirdsRepository {
 
   @override
   Future<Result<bool>> report(FeedEntry entry, String reason) =>
-      protect(() async {
-        requireAccount();
-        await client.from('reports').insert({
-          'listing_id': entry.id,
-          'reason': reason,
-        });
+      protectMutation(() async {
+        final session = _accountSession();
+        await client
+            .from('reports')
+            .setHeader('Authorization', session.authorization)
+            .insert({'listing_id': entry.id, 'reason': reason});
         return true;
       });
   @override
@@ -509,11 +586,12 @@ class SupabaseBirdsRepository implements BirdsRepository {
   });
   @override
   Future<Result<ProfileData?>> profile() => protect(() async {
-    requireAccount();
+    final session = _accountSession();
     final row = await client
         .from('profiles')
+        .setHeader('Authorization', session.authorization)
         .select('display_name,accepted_terms_at')
-        .eq('id', currentUserId!)
+        .eq('id', session.userId)
         .maybeSingle();
     return row == null
         ? null
@@ -523,38 +601,48 @@ class SupabaseBirdsRepository implements BirdsRepository {
           );
   });
   @override
-  Future<Result<bool>> saveProfile(String name, bool accepted) => protect(
-    () async {
-      requireAccount();
-      if (name.trim().length < 2 || name.trim().length > 80 || !accepted) {
-        throw const AppFailure(
-          'أدخل اسم عرض من حرفين إلى ٨٠ حرفاً وأقرّ بقواعد النسخة التجريبية.',
-        );
-      }
-      final existing = await client
-          .from('profiles')
-          .select('id')
-          .eq('id', currentUserId!)
-          .maybeSingle();
-      final values = {
-        'display_name': name.trim(),
-        'accepted_terms_at': DateTime.now().toUtc().toIso8601String(),
-      };
-      if (existing == null) {
-        await client.from('profiles').insert({'id': currentUserId!, ...values});
-      } else {
-        await client.from('profiles').update(values).eq('id', currentUserId!);
-      }
-      return true;
-    },
-  );
+  Future<Result<bool>> saveProfile(String name, bool accepted) =>
+      protect(() async {
+        final session = _accountSession();
+        final accountId = session.userId;
+        if (name.trim().length < 2 || name.trim().length > 80 || !accepted) {
+          throw const AppFailure(
+            'أدخل اسم عرض من حرفين إلى ٨٠ حرفاً وأقرّ بقواعد النسخة التجريبية.',
+          );
+        }
+        final existing = await client
+            .from('profiles')
+            .setHeader('Authorization', session.authorization)
+            .select('id')
+            .eq('id', accountId)
+            .maybeSingle();
+        requireSameAccount(accountId);
+        final values = {
+          'display_name': name.trim(),
+          'accepted_terms_at': DateTime.now().toUtc().toIso8601String(),
+        };
+        if (existing == null) {
+          await client
+              .from('profiles')
+              .setHeader('Authorization', session.authorization)
+              .insert({'id': accountId, ...values});
+        } else {
+          await client
+              .from('profiles')
+              .setHeader('Authorization', session.authorization)
+              .update(values)
+              .eq('id', accountId);
+        }
+        return true;
+      });
   @override
   Future<Result<ContactData?>> contact() => protect(() async {
-    requireAccount();
+    final session = _accountSession();
     final row = await client
         .from('profile_contacts')
+        .setHeader('Authorization', session.authorization)
         .select('contact_kind,contact_value,reveal_consent')
-        .eq('owner_id', currentUserId!)
+        .eq('owner_id', session.userId)
         .maybeSingle();
     return row == null
         ? null
@@ -566,15 +654,18 @@ class SupabaseBirdsRepository implements BirdsRepository {
   });
   @override
   Future<Result<bool>> saveContact(ContactData contact) => protect(() async {
-    requireAccount();
+    final session = _accountSession();
+    final accountId = session.userId;
     if (contact.value.trim().length < 3 || contact.value.length > 160) {
       throw const AppFailure('أدخل وسيلة تواصل صحيحة من ٣ إلى ١٦٠ حرفاً.');
     }
     final old = await client
         .from('profile_contacts')
+        .setHeader('Authorization', session.authorization)
         .select('owner_id')
-        .eq('owner_id', currentUserId!)
+        .eq('owner_id', accountId)
         .maybeSingle();
+    requireSameAccount(accountId);
     final values = {
       'contact_kind': contact.kind,
       'contact_value': contact.value.trim(),
@@ -584,15 +675,16 @@ class SupabaseBirdsRepository implements BirdsRepository {
           : null,
     };
     if (old == null) {
-      await client.from('profile_contacts').insert({
-        'owner_id': currentUserId!,
-        ...values,
-      });
+      await client
+          .from('profile_contacts')
+          .setHeader('Authorization', session.authorization)
+          .insert({'owner_id': accountId, ...values});
     } else {
       await client
           .from('profile_contacts')
+          .setHeader('Authorization', session.authorization)
           .update(values)
-          .eq('owner_id', currentUserId!);
+          .eq('owner_id', accountId);
     }
     return true;
   });
@@ -601,13 +693,15 @@ class SupabaseBirdsRepository implements BirdsRepository {
     String listingId,
     bool confirmed,
   ) => protect(() async {
-    requireAccount();
+    final session = _accountSession();
     if (!confirmed) throw const AppFailure('يلزم تأكيد طلب وسيلة التواصل.');
     final rows =
-        await client.rpc(
-              'reveal_listing_contact',
-              params: {'p_listing': listingId, 'p_explicit_consent': true},
-            )
+        await client
+                .rpc(
+                  'reveal_listing_contact',
+                  params: {'p_listing': listingId, 'p_explicit_consent': true},
+                )
+                .setHeader('Authorization', session.authorization)
             as List<dynamic>;
     if (rows.isEmpty) return null;
     final row = rows.first as Map<String, dynamic>;
@@ -621,8 +715,8 @@ class SupabaseBirdsRepository implements BirdsRepository {
   Future<Result<FeedEntry>> savePublication(
     Publication p, {
     FeedEntry? existing,
-  }) => protect(() async {
-    requireAccount();
+  }) => protectMutation(() async {
+    final session = _accountSession();
     if (existing != null &&
         (existing.ownerId != currentUserId || existing.kind != p.kind)) {
       throw const AppFailure('لا يمكنك تعديل محتوى حساب آخر.');
@@ -656,14 +750,20 @@ class SupabaseBirdsRepository implements BirdsRepository {
     Map<String, dynamic> row;
     if (existing == null) {
       data['kind'] = p.kind.name;
-      row = await client.from(table).insert(data).select().single();
+      row = await client
+          .from(table)
+          .setHeader('Authorization', session.authorization)
+          .insert(data)
+          .select()
+          .single();
     } else {
       data['status'] = p.status;
       final rows = await client
           .from(table)
+          .setHeader('Authorization', session.authorization)
           .update(data)
           .eq('id', existing.id)
-          .eq('owner_id', currentUserId!)
+          .eq('owner_id', session.userId)
           .select();
       if (rows.length != 1) {
         throw const AppFailure(
@@ -771,4 +871,10 @@ void validateUploadHeaders(Map<String, String> headers, int bytes) {
       'عقد الرفع الآمن غير مكتمل. لن نرفع دون شرط منع الكتابة فوق الملفات.',
     );
   }
+}
+
+/// In-memory request scope. Never persist or log its authorization value.
+class _AccountSession {
+  const _AccountSession(this.userId, this.authorization);
+  final String userId, authorization;
 }

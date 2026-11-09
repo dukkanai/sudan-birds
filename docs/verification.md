@@ -6,9 +6,21 @@ This is development evidence, not release approval. Tests use synthetic data and
 
 Five application entrypoints now register testable handlers. Strict field/action checks, complete storage configuration before reservations, validation before privileged client construction, returned deletion-job ownership checks and bounded JSON stream failures are covered by 84 passing local Deno tests. The 37 new endpoint tests use the actual Supabase SDK and authentication/RPC adapters with a synthetic transport; no network or real credentials are involved. An independent rerun passed all 84 tests. Formatting, lint and all six entrypoint type checks also passed.
 
-The disposable-loopback PostgREST harness now exercises synthetic caller JWTs for CRUD ownership, terms gating, price constraints, bilateral blocks, contact consent, private reports, moderator operations, search/pagination and invalid/expired tokens. Its 31 offline boundary tests passed, including an independent rerun. At this pre-CI checkpoint, the 173 planned live assertions have only been statically counted, not executed. The live suite is configured to run against the full disposable Supabase stack in CI; it is not a GoTrue sign-in, refresh, revocation or hosted integration test. Check the exact commit's [GitHub Actions results](https://github.com/dukkanai/sudan-birds/actions) before relying on live-suite success. The unchanged schema separately passed 100 PostgreSQL assertions again.
+The disposable-loopback PostgREST harness now exercises synthetic caller JWTs for CRUD ownership, terms gating, price constraints, bilateral blocks, contact consent, private reports, moderator operations, search/pagination and invalid/expired tokens. Its 31 offline boundary tests passed, including an independent rerun. Commit `d1b80b6332bbe489b25adea57e3bbdd0829bb32f` then passed all 173 live assertions and 58 pgTAP assertions in the [full disposable Supabase CI stack](https://github.com/dukkanai/sudan-birds/actions/runs/42565327769). This is not a GoTrue sign-in, refresh, revocation or hosted integration test. The unchanged schema separately passed 100 PostgreSQL assertions again.
+
+The codec experiment for that commit stopped before image processing: its import preflight still expected five R2 function exports after the configuration helper made six. The harness now retains all six R2 and seven Auth functions, checks the updated marker, and has a reviewed-export regression. All 11 harness tests passed locally and independently. Token, JWT, loopback, resource limits and twenty-request bounds were not relaxed. The resource experiment must pass again on the final commit; the failed preflight is not a codec capacity result.
 
 No hosted function, diagnostic credential, storage key or production deployment is implied by these local changes. Media remains disabled. Historical baseline counts below apply only to their named commits.
+
+## Client recovery and account isolation, 2026-11-09
+
+Flutter formatting, analysis and all 86 tests passed on frozen source, including an independent full-suite rerun. Reviewed changes preserve pagination/search state on failure, safely retry recoverable reads and edits, prevent duplicate confirmations, and recover image verification without repeating a completed upload.
+
+Account-bound routes, dialogs and deferred navigation hide stale private data and reject actions after identity changes. Authenticated requests carry a per-request snapshot of the initiating account token instead of adopting a later account through the SDK. Tests switch accounts during SDK encoding, profile/contact read-write gaps, deletion/moderation confirmations, lazy route construction and delayed responses. Completing an earlier account deletion does not sign out a different later account.
+
+Uncertain publication, report and image-reservation outcomes stop same-screen repeat submission and ask the user to check server state. A timeout does not cancel an already dispatched operation. This is conservative recovery, not guaranteed cross-session idempotency: persisted draft request IDs and a server uniqueness/replay contract remain necessary for that stronger guarantee.
+
+These are local widget/repository tests. Final-commit [CI results](https://github.com/dukkanai/sudan-birds/actions), native compilation, hosted authentication/storage and physical accessibility/network tests remain separate evidence.
 
 ## Two-tab implementation baseline, 2026-11-09
 
@@ -70,7 +82,7 @@ Both migrations were applied atomically and registered with their exact source s
 
 ## Local codec limits and temporary diagnostic
 
-The current implementation's resource run passed 20/20 sequential requests for one fixed synthetic 640×640 JPEG. It retained production R2 and Auth helper imports without calling their services. Official Edge Runtime v1.69.28 used 256MiB memory supervision and its local per-worker CPU policy. Codec time was 225–275ms. Maximum sampled post-processing heap-used plus external memory was 51.43MiB; this is not a continuous peak measurement. Warm workers handled up to four requests before expected retirement.
+The earlier `4acb569` resource run passed 20/20 sequential requests for one fixed synthetic 640×640 JPEG. It retained production R2 and Auth helper imports without calling their services. Official Edge Runtime v1.69.28 used 256MiB memory supervision and its local per-worker CPU policy. Codec time was 225–275ms. Maximum sampled post-processing heap-used plus external memory was 51.43MiB; this is not a continuous peak measurement. Warm workers handled up to four requests before expected retirement.
 
 The local CPU policy differs from hosted behavior. These results do not establish hosted capacity, real SDK network allocations, adversarial image safety or R2 integration. Media remains disabled.
 

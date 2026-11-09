@@ -15,6 +15,15 @@ import urllib.request
 
 TOKEN = 'LOCAL_SYNTHETIC_CODEC_TEST_ONLY_'.ljust(43, 'x')
 PROJECT = 'birds-codec-resource'
+# Review namespace changes alongside the resource experiment. All exported
+# helper functions stay retained, including configuration-only helpers.
+SDK_EXPORTS = {
+    'r2': ('storageConfiguration', 'signUpload', 'signRead', 'downloadImage',
+           'writeVerified', 'removePayloadAndFence'),
+    'auth': ('requiredEnv', 'authenticated', 'serviceClient', 'requireRecentSignIn',
+             'supabaseKey', 'resolveReadContext', 'publicReadClient'),
+}
+SDK_IMPORT_MARKER = f'r2-{len(SDK_EXPORTS["r2"])}-auth-{len(SDK_EXPORTS["auth"])}'
 
 
 class NoRedirect(urllib.request.HTTPRedirectHandler):
@@ -137,19 +146,20 @@ def local_entrypoint(deadline):
         # Retain actual exported function objects in the request closure. Do not call them.
         '  const r2Exports = Object.values(r2);\n'
         '  const authExports = Object.values(auth);\n'
-        '  if (r2Exports.length !== 5 || authExports.length !== 7 ||\n'
+        f'  if (r2Exports.length !== {len(SDK_EXPORTS["r2"])} || '
+        f'authExports.length !== {len(SDK_EXPORTS["auth"])} ||\n'
         '      ![...r2Exports, ...authExports].every((value) => typeof value === "function")) {\n'
         '    return new Response(null, { status: 503 });\n'
         '  }\n'
         '  const response = await diagnostic(req);\n'
-        '  response.headers.set("x-local-sdk-imports", "r2-5-auth-7");\n'
+        f'  response.headers.set("x-local-sdk-imports", {json.dumps(SDK_IMPORT_MARKER)});\n'
         '  return response;\n'
         '});\n'
     )
 
 
 def require_sdk_import_marker(value):
-    if value != 'r2-5-auth-7':
+    if value != SDK_IMPORT_MARKER:
         raise ValueError('production helper import marker missing')
 
 

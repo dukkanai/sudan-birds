@@ -1,9 +1,11 @@
 import copy
 import json
+from pathlib import Path
+import re
 import unittest
 import urllib.request
 import urllib.error
-from codec_resource import local_entrypoint, require_sdk_import_marker, endpoint, metrics, NoRedirect, TOKEN, require_verified_gateway, safe_failure, diagnostic_error, diagnostic_details
+from codec_resource import local_entrypoint, require_sdk_import_marker, endpoint, metrics, NoRedirect, TOKEN, require_verified_gateway, safe_failure, diagnostic_error, diagnostic_details, SDK_EXPORTS, SDK_IMPORT_MARKER
 
 
 class Boundaries(unittest.TestCase):
@@ -13,7 +15,7 @@ class Boundaries(unittest.TestCase):
         self.assertIn('import * as auth from "../_shared/auth.ts";', source)
         self.assertIn('Object.values(r2)', source)
         self.assertIn('Object.values(auth)', source)
-        self.assertIn('r2Exports.length !== 5', source)
+        self.assertIn('r2Exports.length !== 6', source)
         self.assertIn('authExports.length !== 7', source)
         self.assertIn('await diagnostic(req)', source)
         self.assertIn('"2026-11-08T00:20:00.000Z"', source)
@@ -23,10 +25,23 @@ class Boundaries(unittest.TestCase):
             self.assertNotIn(forbidden, source[source.index('const diagnostic'):])
 
     def test_sdk_import_marker_required(self):
-        require_sdk_import_marker('r2-5-auth-7')
-        for value in (None, '', 'true', 'r2-5-auth-7-extra'):
+        self.assertEqual(SDK_IMPORT_MARKER, 'r2-6-auth-7')
+        require_sdk_import_marker(SDK_IMPORT_MARKER)
+        for value in (None, '', 'true', 'r2-5-auth-7', 'r2-6-auth-7-extra'):
             with self.assertRaises(ValueError):
                 require_sdk_import_marker(value)
+
+    def test_retained_namespaces_match_reviewed_helper_exports(self):
+        root = Path(__file__).resolve().parents[1]
+        for module, expected in SDK_EXPORTS.items():
+            source = (root / 'supabase/functions/_shared' / f'{module}.ts').read_text()
+            # These reviewed modules export functions and erased interfaces only.
+            # Fail on a new runtime export before running the expensive experiment.
+            exports = re.findall(r'^export (?:async )?function (\w+)', source, re.M)
+            self.assertCountEqual(exports, expected, module)
+            for line in source.splitlines():
+                if line.startswith('export '):
+                    self.assertRegex(line, r'^export (?:(?:async )?function|interface) ', module)
 
     def test_failure_memory_is_numeric_and_allowlisted(self):
         payload = {'error': 'diagnostic_unavailable', 'calls': 3, 'secret': 'hidden',

@@ -16,6 +16,12 @@ Flutter error hooks catch framework and asynchronous failures as a final safety 
 
 Error reporting must use a fixed event identifier and safe category. Do not log exception strings, request bodies, URLs containing tokens, sessions, user contacts or secrets. Add a production observability provider only after its data-sharing and privacy settings are approved.
 
+## Account identity and interrupted writes
+
+Private screens, confirmations and deferred navigation belong to the account that started them. Identity changes invalidate their data and actions, including owner-visible hidden listings and moderator report details. Repository requests pin an in-memory authorization snapshot per call; they never change shared client headers or silently use a subsequently signed-in account. Prerequisite reads are followed by identity checks before writes.
+
+An uncertain non-idempotent mutation is not a safe retry. Publication, report and image-reservation flows disable same-screen resubmission after uncertain transport or response outcomes and direct the user to verify server state. Timeouts do not cancel server work. This does not provide exactly-once recovery across app restarts; that would require persisted operation IDs and a server replay contract. Stable media completion and deletion jobs use their existing replay-safe server identifiers.
+
 ## Environment separation
 
 The staged R2 bucket is private and empty. No production bucket or Supabase production project is configured in this code. Staging and production must have separate projects, sessions, secrets, storage and build identifiers. Public source code contains only example configuration.

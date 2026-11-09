@@ -2,8 +2,9 @@ import 'dart:async';
 import 'dart:typed_data';
 
 class AppFailure {
-  const AppFailure(this.message);
+  const AppFailure(this.message, {this.outcomeUnknown = false});
   final String message;
+  final bool outcomeUnknown;
 }
 
 class Result<T> {
@@ -17,6 +18,7 @@ class Result<T> {
 Future<Result<T>> protect<T>(
   Future<T> Function() action, {
   Duration? timeout = const Duration(seconds: 20),
+  bool mutation = false,
 }) async {
   try {
     final pending = action();
@@ -24,22 +26,42 @@ Future<Result<T>> protect<T>(
       await (timeout == null ? pending : pending.timeout(timeout)),
     );
   } on TimeoutException {
-    return const Result.failure(
+    return Result.failure(
       AppFailure(
         'انتهت مهلة الاتصال. قد تكون العملية وصلت للخادم؛ تحقق من المحتوى قبل إعادة الإرسال.',
+        outcomeUnknown: mutation,
       ),
     );
   } on AppFailure catch (failure) {
     return Result.failure(failure);
   } catch (_) {
     // Never expose raw exceptions: SDK errors may contain credentials or PII.
-    return const Result.failure(
+    return Result.failure(
       AppFailure(
-        'تعذر إتمام العملية. تحقق من الاتصال والصلاحيات ثم حاول مجدداً.',
+        mutation
+            ? 'لم تتأكد نتيجة العملية. قد يكون الخادم نفذها؛ تحقق من الحالة قبل إرسال طلب جديد.'
+            : 'تعذر إتمام العملية. تحقق من الاتصال والصلاحيات ثم حاول مجدداً.',
+        outcomeUnknown: mutation,
       ),
     );
   }
 }
+
+Future<Result<T>> protectMutation<T>(Future<T> Function() action) =>
+    protect(action, mutation: true);
+
+/// Last-resort boundary for UI callers. Repository timeouts remain authoritative;
+/// adding a second timer here could release a write lock while work still runs.
+Future<Result<T>> guardResult<T>(
+  Future<Result<T>> Function() action, {
+  bool mutation = false,
+}) async {
+  final result = await protect(action, timeout: null, mutation: mutation);
+  return result.value ?? Result.failure(result.failure!);
+}
+
+Future<Result<T>> guardMutation<T>(Future<Result<T>> Function() action) =>
+    guardResult(action, mutation: true);
 
 enum FeedKind { request, offer }
 
@@ -449,8 +471,9 @@ class DeletionStatus {
     this.completed, {
     this.retryAfter = 30,
     this.requiresOperator = false,
+    this.sessionCleanupRequired = false,
   });
-  final bool completed, requiresOperator;
+  final bool completed, requiresOperator, sessionCleanupRequired;
   final int retryAfter;
 }
 

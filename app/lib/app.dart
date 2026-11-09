@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'domain.dart';
+import 'account_session.dart';
 import 'screens.dart';
 import 'moderation_screens.dart';
 export 'screens.dart' show PublicationPage, DetailPage;
@@ -72,9 +73,14 @@ class _HomePageState extends State<HomePage> {
   int index = 0;
   int generation = 0;
   bool loading = true;
+  bool accountOpen = false, authBusy = false, publicationOpen = false;
   bool loadingMore = false, hasMore = false;
   StreamSubscription<void>? authSubscription;
-  String? error;
+  String? error, moreError;
+  FeedEntry? cursor;
+  String? entriesUserId;
+  bool entriesSignedIn = false;
+  FeedFilter appliedFilter = const FeedFilter();
   List<FeedEntry> entries = [];
   final search = TextEditingController();
   final location = TextEditingController();
@@ -83,9 +89,16 @@ class _HomePageState extends State<HomePage> {
   @override
   void initState() {
     super.initState();
-    authSubscription = widget.repository.authChanges.listen((_) {
-      if (mounted) refresh();
-    });
+    authSubscription = widget.repository.authChanges.listen(
+      (_) {
+        if (mounted) refresh();
+      },
+      onError: (Object _, StackTrace _) {
+        if (mounted) {
+          setState(() => error = 'تعذر تحديث حالة الحساب. أعد المحاولة.');
+        }
+      },
+    );
     refresh();
   }
 
@@ -98,25 +111,46 @@ class _HomePageState extends State<HomePage> {
   }
 
   Future<void> refresh({bool more = false}) async {
-    if (more && (loadingMore || entries.isEmpty)) return;
-    final before = more ? entries.last : null;
+    if (more && (loading || loadingMore || !hasMore || cursor == null)) return;
+    final before = more ? cursor : null;
     final request = ++generation;
+    final requestUserId = widget.repository.currentUserId;
+    final requestSignedIn = widget.repository.signedIn;
+    if (!more) {
+      appliedFilter = filters.withCursor(null, query: search.text.trim());
+    }
     setState(() {
       loading = !more;
       loadingMore = more;
       error = null;
+      moreError = null;
     });
-    final result = await widget.repository.feed(
-      kind,
-      filters.withCursor(before, query: search.text.trim()),
+    final result = await guardResult(
+      () => widget.repository.feed(kind, appliedFilter.withCursor(before)),
     );
     if (!mounted || request != generation) return;
     setState(() {
       loading = false;
       loadingMore = false;
-      error = result.failure?.message;
-      hasMore = (result.value?.length ?? 0) == 20;
-      entries = more ? [...entries, ...?result.value] : result.value ?? [];
+      if (!result.isSuccess) {
+        if (more) {
+          moreError = result.failure!.message;
+        } else {
+          error = result.failure!.message;
+          entries = [];
+          cursor = null;
+          hasMore = false;
+        }
+        return;
+      }
+      entriesUserId = requestUserId;
+      entriesSignedIn = requestSignedIn;
+      final page = result.value ?? [];
+      final seen = more ? entries.map((item) => item.id).toSet() : <String>{};
+      final additions = page.where((item) => seen.add(item.id)).toList();
+      entries = more ? [...entries, ...additions] : additions;
+      cursor = page.isEmpty ? before : page.last;
+      hasMore = page.length == 20 && (!more || cursor?.id != before?.id);
     });
   }
 
@@ -127,124 +161,213 @@ class _HomePageState extends State<HomePage> {
   }
 
   Future<void> account() async {
+    if (accountOpen || authBusy) return;
+    accountOpen = true;
+    final originalUser = widget.repository.currentUserId;
+    final originalSignedIn = widget.repository.signedIn;
+    bool invalidated = false;
+    bool sameAccount() =>
+        !invalidated &&
+        mounted &&
+        widget.repository.currentUserId == originalUser &&
+        widget.repository.signedIn == originalSignedIn;
+    BuildContext? sheetContext;
+    void closeSheet() {
+      final sheet = sheetContext;
+      if (sheet != null &&
+          sheet.mounted &&
+          ModalRoute.of(sheet)?.isCurrent == true) {
+        Navigator.of(sheet).pop();
+      }
+    }
+
+    final sessionChanges = widget.repository.authChanges.listen(
+      (_) {
+        if (!sameAccount()) {
+          invalidated = true;
+          closeSheet();
+        }
+      },
+      onError: (Object _, StackTrace _) {
+        invalidated = true;
+        closeSheet();
+      },
+    );
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
-      builder: (context) => SafeArea(
-        child: SingleChildScrollView(
-          child: Padding(
-            padding: const EdgeInsets.all(24),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                const Text(
-                  'الحساب',
-                  style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+      builder: (context) => StreamBuilder<void>(
+        stream: widget.repository.authChanges,
+        builder: (context, snapshot) {
+          sheetContext = context;
+          if (!sameAccount() || snapshot.hasError) {
+            return SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.all(20),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Text(
+                      'تغيرت جلسة الحساب. أغلق هذه القائمة وافتحها مجدداً.',
+                    ),
+                    TextButton(
+                      onPressed: () => Navigator.pop(context),
+                      child: const Text('إغلاق'),
+                    ),
+                  ],
                 ),
-                if (widget.repository.isPreview)
-                  const Text(
-                    'معاينة محلية فقط. لا توجد جلسة أو بيانات محفوظة على خادم.',
-                  ),
-                if (!widget.repository.signedIn) ...[
-                  const Text(
-                    'التصفح متاح للجميع. النشر والرد والإبلاغ يتطلب تسجيل الدخول.',
-                  ),
-                  for (final provider in ['google', 'apple'])
-                    Padding(
-                      padding: const EdgeInsets.only(top: 12),
-                      child: OutlinedButton(
-                        onPressed: () async {
-                          Navigator.pop(context);
-                          final result = await widget.repository.signIn(
-                            provider,
-                          );
-                          message(
-                            result.failure?.message ??
-                                'أكمل تسجيل الدخول في المتصفح، ثم ارجع للتطبيق.',
-                          );
-                        },
-                        child: Text(
-                          provider == 'google'
-                              ? 'الدخول باستخدام Google'
-                              : 'الدخول باستخدام Apple',
-                        ),
+              ),
+            );
+          }
+          return SafeArea(
+            child: SingleChildScrollView(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    const Text(
+                      'الحساب',
+                      style: TextStyle(
+                        fontSize: 24,
+                        fontWeight: FontWeight.bold,
                       ),
                     ),
-                ] else
-                  FilledButton(
-                    onPressed: () async {
-                      Navigator.pop(context);
-                      final result = await widget.repository.signOut();
-                      if (mounted) setState(() {});
-                      message(result.failure?.message ?? 'تم تسجيل الخروج');
-                    },
-                    child: const Text('تسجيل الخروج'),
-                  ),
-                if (widget.repository.signedIn)
-                  TextButton(
-                    onPressed: () {
-                      Navigator.pop(context);
-                      Navigator.of(this.context).push<void>(
-                        MaterialPageRoute(
-                          builder: (_) =>
-                              BlockedUsersPage(repository: widget.repository),
+                    if (widget.repository.isPreview)
+                      const Text(
+                        'معاينة محلية فقط. لا توجد جلسة أو بيانات محفوظة على خادم.',
+                      ),
+                    if (!widget.repository.signedIn) ...[
+                      const Text(
+                        'التصفح متاح للجميع. النشر والإبلاغ يتطلب تسجيل الدخول.',
+                      ),
+                      for (final provider in ['google', 'apple'])
+                        Padding(
+                          padding: const EdgeInsets.only(top: 12),
+                          child: OutlinedButton(
+                            onPressed: () async {
+                              if (authBusy || !sameAccount()) return;
+                              authBusy = true;
+                              Navigator.pop(context);
+                              final result = await guardResult(
+                                () => widget.repository.signIn(provider),
+                              );
+                              authBusy = false;
+                              message(
+                                result.failure?.message ??
+                                    'أكمل تسجيل الدخول في المتصفح، ثم ارجع للتطبيق.',
+                              );
+                            },
+                            child: Text(
+                              provider == 'google'
+                                  ? 'الدخول باستخدام Google'
+                                  : 'الدخول باستخدام Apple',
+                            ),
+                          ),
                         ),
-                      );
-                    },
-                    child: const Text('الحسابات المحظورة وإلغاء الحظر'),
-                  ),
-                if (widget.repository.signedIn)
-                  FilledButton(
-                    onPressed: () {
-                      Navigator.pop(context);
-                      Navigator.of(this.context).push<void>(
-                        MaterialPageRoute(
-                          builder: (_) =>
-                              ProfilePage(repository: widget.repository),
-                        ),
-                      );
-                    },
-                    child: const Text('الملف الشخصي وإعدادات التواصل'),
-                  ),
-                if (widget.repository.signedIn) ...[
-                  DeletionStatusPanel(repository: widget.repository),
-                  ModeratorAccessTile(repository: widget.repository),
-                ],
-                const DraftLegalLinks(),
-                const SizedBox(height: 16),
-                const Text(
-                  'نسخة تأسيسية غير جاهزة للنشر العام. سياسة الخصوصية القانونية واختبارات التشغيل الفعلي قيد الإكمال.',
+                    ] else
+                      FilledButton(
+                        onPressed: () async {
+                          if (authBusy || !sameAccount()) return;
+                          authBusy = true;
+                          Navigator.pop(context);
+                          final result = await guardResult(
+                            () => widget.repository.signOut(),
+                          );
+                          authBusy = false;
+                          if (mounted) setState(() {});
+                          message(result.failure?.message ?? 'تم تسجيل الخروج');
+                        },
+                        child: const Text('تسجيل الخروج'),
+                      ),
+                    if (widget.repository.signedIn)
+                      TextButton(
+                        onPressed: () {
+                          if (!sameAccount()) return;
+                          Navigator.pop(context);
+                          Navigator.of(this.context).push<void>(
+                            accountPageRoute(
+                              repository: widget.repository,
+                              builder: (_) => BlockedUsersPage(
+                                repository: widget.repository,
+                              ),
+                            ),
+                          );
+                        },
+                        child: const Text('الحسابات المحظورة وإلغاء الحظر'),
+                      ),
+                    if (widget.repository.signedIn)
+                      FilledButton(
+                        onPressed: () {
+                          if (!sameAccount()) return;
+                          Navigator.pop(context);
+                          Navigator.of(this.context).push<void>(
+                            accountPageRoute(
+                              repository: widget.repository,
+                              builder: (_) =>
+                                  ProfilePage(repository: widget.repository),
+                            ),
+                          );
+                        },
+                        child: const Text('الملف الشخصي وإعدادات التواصل'),
+                      ),
+                    if (widget.repository.signedIn) ...[
+                      DeletionStatusPanel(repository: widget.repository),
+                      ModeratorAccessTile(repository: widget.repository),
+                    ],
+                    const DraftLegalLinks(),
+                    const SizedBox(height: 16),
+                    const Text(
+                      'نسخة تأسيسية غير جاهزة للنشر العام. سياسة الخصوصية القانونية واختبارات التشغيل الفعلي قيد الإكمال.',
+                    ),
+                  ],
                 ),
-              ],
+              ),
             ),
-          ),
-        ),
+          );
+        },
       ),
     );
+    accountOpen = false;
     if (mounted) setState(() {});
+    await sessionChanges.cancel();
   }
 
   Future<void> publish() async {
+    if (publicationOpen) return;
     if (!widget.repository.signedIn) {
       await account();
       return;
     }
+    publicationOpen = true;
+    final authorId = widget.repository.currentUserId;
     final saved = await Navigator.of(context).push<FeedEntry>(
-      MaterialPageRoute(
+      accountPageRoute(
+        repository: widget.repository,
         builder: (_) =>
             PublicationPage(repository: widget.repository, kind: kind),
       ),
     );
-    if (saved != null && mounted) {
+    publicationOpen = false;
+    if (saved != null &&
+        mounted &&
+        widget.repository.signedIn &&
+        widget.repository.currentUserId == authorId) {
       await refresh();
-      if (!mounted) return;
+      if (!mounted ||
+          !widget.repository.signedIn ||
+          widget.repository.currentUserId != authorId) {
+        return;
+      }
       await Navigator.of(context).push<void>(
-        MaterialPageRoute(
+        accountPageRoute(
+          repository: widget.repository,
           builder: (_) =>
               DetailPage(repository: widget.repository, entry: saved),
         ),
       );
+      if (mounted) await refresh();
     }
   }
 
@@ -299,7 +422,8 @@ class _HomePageState extends State<HomePage> {
                         onPressed: () async {
                           final selected = await Navigator.of(context)
                               .push<FeedFilter>(
-                                MaterialPageRoute(
+                                accountPageRoute(
+                                  repository: widget.repository,
                                   builder: (_) => FilterPage(
                                     repository: widget.repository,
                                     kind: kind,
@@ -379,19 +503,36 @@ class _HomePageState extends State<HomePage> {
                   if (i == entries.length) {
                     return Padding(
                       padding: const EdgeInsets.all(16),
-                      child: hasMore
-                          ? TextButton(
+                      child: Column(
+                        children: [
+                          if (moreError != null)
+                            Semantics(
+                              liveRegion: true,
+                              child: Text(moreError!),
+                            ),
+                          if (hasMore)
+                            TextButton(
                               onPressed: loadingMore
                                   ? null
                                   : () => refresh(more: true),
                               child: Text(
-                                loadingMore ? 'جارٍ التحميل…' : 'تحميل المزيد',
+                                loadingMore
+                                    ? 'جارٍ التحميل…'
+                                    : moreError != null
+                                    ? 'إعادة تحميل المزيد'
+                                    : 'تحميل المزيد',
                               ),
                             )
-                          : const Text('وصلت إلى نهاية النتائج.'),
+                          else
+                            const Text('وصلت إلى نهاية النتائج.'),
+                        ],
+                      ),
                     );
                   }
                   final item = entries[i];
+                  final itemGeneration = generation;
+                  final itemUserId = entriesUserId;
+                  final itemSignedIn = entriesSignedIn;
                   return Card(
                     child: ListTile(
                       contentPadding: const EdgeInsets.all(16),
@@ -400,8 +541,17 @@ class _HomePageState extends State<HomePage> {
                         '${item.body}\n${item.location}${item.price == null ? '' : '\n${item.kind == FeedKind.request ? 'الميزانية' : 'السعر'}: ${item.price} ${item.currency}${item.kind == FeedKind.offer ? (item.priceUnit == 'group' ? ' للمجموعة' : ' للطائر') : ''}'}\n${item.status}',
                       ),
                       onTap: () async {
+                        if (loading ||
+                            generation != itemGeneration ||
+                            widget.repository.currentUserId != itemUserId ||
+                            widget.repository.signedIn != itemSignedIn) {
+                          return;
+                        }
                         await Navigator.of(context).push<void>(
-                          MaterialPageRoute(
+                          accountPageRoute(
+                            repository: widget.repository,
+                            isAllowed: () =>
+                                mounted && generation == itemGeneration,
                             builder: (_) => DetailPage(
                               repository: widget.repository,
                               entry: item,
@@ -450,10 +600,19 @@ class BlockedUsersPage extends StatefulWidget {
   State<BlockedUsersPage> createState() => _BlockedUsersPageState();
 }
 
-class _BlockedUsersPageState extends State<BlockedUsersPage> {
+class _BlockedUsersPageState extends State<BlockedUsersPage>
+    with AccountBoundState<BlockedUsersPage> {
+  @override
+  BirdsRepository get accountRepository => widget.repository;
+  @override
+  void clearAccountData() {
+    users = [];
+  }
+
   List<String> users = [];
-  bool loading = true;
+  bool loading = true, changing = false;
   String? error;
+  int generation = 0;
   @override
   void initState() {
     super.initState();
@@ -461,8 +620,11 @@ class _BlockedUsersPageState extends State<BlockedUsersPage> {
   }
 
   Future<void> load() async {
-    final result = await widget.repository.blockedUsers();
-    if (mounted) {
+    if (!isAccountCurrent) return;
+    final request = ++generation;
+    setState(() => loading = true);
+    final result = await guardResult(() => widget.repository.blockedUsers());
+    if (mounted && isAccountCurrent && request == generation) {
       setState(() {
         loading = false;
         error = result.failure?.message;
@@ -472,56 +634,64 @@ class _BlockedUsersPageState extends State<BlockedUsersPage> {
   }
 
   @override
-  Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: const Text('الحسابات المحظورة')),
-    body: loading
-        ? const Center(child: CircularProgressIndicator())
-        : ListView(
-            padding: const EdgeInsets.all(20),
-            children: [
-              const Text(
-                'لا تكشف الخدمة ملفات الحسابات المحظورة. يُعرض معرّف الحساب بدلاً من الاسم.',
-              ),
-              if (error != null) ...[
-                Text(error!),
-                TextButton(
-                  onPressed: load,
-                  child: const Text('إعادة المحاولة'),
+  Widget build(BuildContext context) => protectAccount(
+    Scaffold(
+      appBar: AppBar(title: const Text('الحسابات المحظورة')),
+      body: loading
+          ? const Center(child: CircularProgressIndicator())
+          : ListView(
+              padding: const EdgeInsets.all(20),
+              children: [
+                const Text(
+                  'لا تكشف الخدمة ملفات الحسابات المحظورة. يُعرض معرّف الحساب بدلاً من الاسم.',
                 ),
-              ],
-              if (users.isEmpty && error == null)
-                const Text('لا توجد حسابات محظورة.'),
-              for (final id in users)
-                Card(
-                  child: Padding(
-                    padding: const EdgeInsets.all(12),
-                    child: Column(
-                      children: [
-                        Text(id),
-                        TextButton(
-                          onPressed: () async {
-                            setState(() => loading = true);
-                            final result = await widget.repository.block(
-                              id,
-                              false,
-                            );
-                            if (!mounted) return;
-                            if (result.isSuccess) {
-                              await load();
-                            } else {
-                              setState(() {
-                                loading = false;
-                                error = result.failure!.message;
-                              });
-                            }
-                          },
-                          child: const Text('إلغاء الحظر'),
-                        ),
-                      ],
+                if (error != null) ...[
+                  Text(error!),
+                  TextButton(
+                    onPressed: load,
+                    child: const Text('إعادة المحاولة'),
+                  ),
+                ],
+                if (users.isEmpty && error == null)
+                  const Text('لا توجد حسابات محظورة.'),
+                for (final id in users)
+                  Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(12),
+                      child: Column(
+                        children: [
+                          Text(id),
+                          TextButton(
+                            onPressed: changing
+                                ? null
+                                : () async {
+                                    if (!isAccountCurrent || changing) return;
+                                    setState(() {
+                                      changing = true;
+                                      loading = true;
+                                    });
+                                    final result = await guardResult(
+                                      () => widget.repository.block(id, false),
+                                    );
+                                    if (!mounted || !isAccountCurrent) return;
+                                    setState(() => changing = false);
+                                    if (result.isSuccess) {
+                                      await load();
+                                    } else {
+                                      setState(() {
+                                        loading = false;
+                                        error = result.failure!.message;
+                                      });
+                                    }
+                                  },
+                            child: const Text('إلغاء الحظر'),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
-                ),
-            ],
-          ),
+              ],
+            ),
+    ),
   );
 }

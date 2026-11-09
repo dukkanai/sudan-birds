@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'domain.dart';
+import 'account_session.dart';
 import 'media_screens.dart';
 
 String reportKindLabel(ReportKind kind) => switch (kind) {
@@ -28,9 +29,17 @@ class ReportPage extends StatefulWidget {
   State<ReportPage> createState() => _ReportPageState();
 }
 
-class _ReportPageState extends State<ReportPage> {
+class _ReportPageState extends State<ReportPage>
+    with AccountBoundState<ReportPage> {
+  @override
+  BirdsRepository get accountRepository => widget.repository;
+  @override
+  void clearAccountData() {
+    reason.clear();
+  }
+
   final reason = TextEditingController();
-  bool busy = false;
+  bool busy = false, uncertain = false;
   String? error;
   @override
   void dispose() {
@@ -39,7 +48,8 @@ class _ReportPageState extends State<ReportPage> {
   }
 
   Future<void> send() async {
-    if (busy) return;
+    if (!isAccountCurrent) return;
+    if (busy || uncertain) return;
     if (!widget.repository.signedIn) {
       setState(() => error = 'سجّل الدخول وأكمل الملف الشخصي أولاً.');
       return;
@@ -52,12 +62,14 @@ class _ReportPageState extends State<ReportPage> {
       busy = true;
       error = null;
     });
-    final result = await widget.repository.reportTarget(
-      widget.kind,
-      widget.targetId,
-      reason.text,
+    final result = await guardMutation(
+      () => widget.repository.reportTarget(
+        widget.kind,
+        widget.targetId,
+        reason.text,
+      ),
     );
-    if (!mounted) return;
+    if (!mounted || !isAccountCurrent) return;
     if (result.isSuccess) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('أُرسل البلاغ إلى المراجعة.')),
@@ -67,33 +79,40 @@ class _ReportPageState extends State<ReportPage> {
       setState(() {
         busy = false;
         error = result.failure!.message;
+        uncertain = result.failure!.outcomeUnknown;
       });
     }
   }
 
   @override
-  Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: Text('إبلاغ عن ${reportKindLabel(widget.kind)}')),
-    body: ListView(
-      padding: const EdgeInsets.all(20),
-      children: [
-        const Text(
-          'اشرح المشكلة دون إضافة أرقام اتصال أو معلومات خاصة غير لازمة. يطّلع على البلاغ المشرفون المخوّلون ولا يُعرض لصاحب المحتوى.',
+  Widget build(BuildContext context) => protectAccount(
+    PopScope(
+      canPop: !busy,
+      child: Scaffold(
+        appBar: AppBar(title: Text('إبلاغ عن ${reportKindLabel(widget.kind)}')),
+        body: ListView(
+          padding: const EdgeInsets.all(20),
+          children: [
+            const Text(
+              'اشرح المشكلة دون إضافة أرقام اتصال أو معلومات خاصة غير لازمة. يطّلع على البلاغ المشرفون المخوّلون ولا يُعرض لصاحب المحتوى.',
+            ),
+            if (!widget.repository.signedIn)
+              const Text('تسجيل الدخول مطلوب لإرسال البلاغ.'),
+            TextField(
+              controller: reason,
+              enabled: !busy,
+              maxLength: 2000,
+              maxLines: 5,
+              decoration: const InputDecoration(labelText: 'سبب الإبلاغ'),
+            ),
+            if (error != null) Semantics(liveRegion: true, child: Text(error!)),
+            FilledButton(
+              onPressed: busy || uncertain ? null : send,
+              child: Text(busy ? 'جارٍ إرسال البلاغ…' : 'إرسال البلاغ'),
+            ),
+          ],
         ),
-        if (!widget.repository.signedIn)
-          const Text('تسجيل الدخول مطلوب لإرسال البلاغ.'),
-        TextField(
-          controller: reason,
-          maxLength: 2000,
-          maxLines: 5,
-          decoration: const InputDecoration(labelText: 'سبب الإبلاغ'),
-        ),
-        if (error != null) Semantics(liveRegion: true, child: Text(error!)),
-        FilledButton(
-          onPressed: busy ? null : send,
-          child: Text(busy ? 'جارٍ إرسال البلاغ…' : 'إرسال البلاغ'),
-        ),
-      ],
+      ),
     ),
   );
 }
@@ -115,7 +134,7 @@ class _ModeratorAccessTileState extends State<ModeratorAccessTile> {
   }
 
   Future<void> load() async {
-    final result = await widget.repository.isModerator();
+    final result = await guardResult(() => widget.repository.isModerator());
     if (mounted) {
       setState(() {
         loading = false;
@@ -154,12 +173,22 @@ class ModerationQueuePage extends StatefulWidget {
   State<ModerationQueuePage> createState() => _ModerationQueuePageState();
 }
 
-class _ModerationQueuePageState extends State<ModerationQueuePage> {
+class _ModerationQueuePageState extends State<ModerationQueuePage>
+    with AccountBoundState<ModerationQueuePage> {
+  @override
+  BirdsRepository get accountRepository => widget.repository;
+  @override
+  void clearAccountData() {
+    reports.clear();
+  }
+
   final List<ModerationReport> reports = [];
   String state = 'open';
   bool loading = true, more = false;
   String? error;
   int generation = 0;
+  bool failedNext = false;
+  ModerationReport? cursor;
   @override
   void initState() {
     super.initState();
@@ -167,91 +196,107 @@ class _ModerationQueuePageState extends State<ModerationQueuePage> {
   }
 
   Future<void> load({bool next = false}) async {
+    if (!isAccountCurrent) return;
+    if (next && (loading || !more || cursor == null)) return;
+    final before = next ? cursor : null;
     final request = ++generation;
     setState(() {
       loading = true;
       error = null;
+      if (!next) {
+        reports.clear();
+        more = false;
+        cursor = null;
+      }
     });
-    final result = await widget.repository.moderationReports(
-      state,
-      before: next && reports.isNotEmpty ? reports.last : null,
+    final result = await guardResult(
+      () => widget.repository.moderationReports(state, before: before),
     );
-    if (!mounted || generation != request) return;
+    if (!mounted || !isAccountCurrent || generation != request) return;
     setState(() {
       loading = false;
       error = result.failure?.message;
+      failedNext = next && !result.isSuccess;
       if (result.isSuccess) {
-        if (!next) reports.clear();
-        reports.addAll(result.value!);
-        more = result.value!.length == 20;
+        final page = result.value ?? [];
+        final seen = reports.map((report) => report.id).toSet();
+        reports.addAll(page.where((report) => seen.add(report.id)));
+        cursor = page.isEmpty ? before : page.last;
+        more = page.length == 20 && (!next || cursor?.id != before?.id);
       }
     });
   }
 
   @override
-  Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: const Text('مراجعة البلاغات')),
-    body: ListView(
-      padding: const EdgeInsets.all(20),
-      children: [
-        const Text(
-          'الصلاحية تُراجع من الخادم. لا تظهر هنا وسائل التواصل الخاصة. كل إجراء إشراف يُسجل مع سببه.',
-        ),
-        DropdownButtonFormField<String>(
-          isExpanded: true,
-          itemHeight: null,
-          initialValue: state,
-          decoration: const InputDecoration(labelText: 'حالة البلاغات'),
-          items: [
-            for (final s in ['open', 'reviewing', 'resolved', 'dismissed'])
-              DropdownMenuItem(value: s, child: Text(reportStateLabel(s))),
-          ],
-          onChanged: loading
-              ? null
-              : (v) {
-                  state = v!;
-                  load();
-                },
-        ),
-        if (loading)
-          const LinearProgressIndicator(semanticsLabel: 'تحميل البلاغات'),
-        if (error != null) ...[
-          Semantics(liveRegion: true, child: Text(error!)),
-          TextButton(
-            onPressed: () => load(),
-            child: const Text('إعادة تحميل البلاغات'),
+  Widget build(BuildContext context) => protectAccount(
+    Scaffold(
+      appBar: AppBar(title: const Text('مراجعة البلاغات')),
+      body: ListView(
+        padding: const EdgeInsets.all(20),
+        children: [
+          const Text(
+            'الصلاحية تُراجع من الخادم. لا تظهر هنا وسائل التواصل الخاصة. كل إجراء إشراف يُسجل مع سببه.',
           ),
-        ],
-        if (!loading && error == null && reports.isEmpty)
-          const Text('لا توجد بلاغات بهذه الحالة.'),
-        for (final report in reports)
-          Card(
-            child: ListTile(
-              title: Text(
-                '${reportKindLabel(report.kind)} • ${reportStateLabel(report.state)}',
-              ),
-              subtitle: Text(
-                '${report.reason}\n${arabicDate(report.createdAt)}',
-              ),
-              onTap: () async {
-                await Navigator.of(context).push<void>(
-                  MaterialPageRoute(
-                    builder: (_) => ReviewReportPage(
-                      repository: widget.repository,
-                      report: report,
-                    ),
-                  ),
-                );
-                if (mounted) await load();
-              },
+          DropdownButtonFormField<String>(
+            isExpanded: true,
+            itemHeight: null,
+            initialValue: state,
+            decoration: const InputDecoration(labelText: 'حالة البلاغات'),
+            items: [
+              for (final s in ['open', 'reviewing', 'resolved', 'dismissed'])
+                DropdownMenuItem(value: s, child: Text(reportStateLabel(s))),
+            ],
+            onChanged: loading
+                ? null
+                : (v) {
+                    state = v!;
+                    load();
+                  },
+          ),
+          if (loading)
+            const LinearProgressIndicator(semanticsLabel: 'تحميل البلاغات'),
+          if (error != null) ...[
+            Semantics(liveRegion: true, child: Text(error!)),
+            TextButton(
+              onPressed: loading ? null : () => load(next: failedNext),
+              child: const Text('إعادة تحميل البلاغات'),
             ),
-          ),
-        if (more)
-          TextButton(
-            onPressed: loading ? null : () => load(next: true),
-            child: const Text('تحميل بلاغات إضافية'),
-          ),
-      ],
+          ],
+          if (!loading && error == null && reports.isEmpty)
+            const Text('لا توجد بلاغات بهذه الحالة.'),
+          for (final report in reports)
+            Card(
+              child: ListTile(
+                title: Text(
+                  '${reportKindLabel(report.kind)} • ${reportStateLabel(report.state)}',
+                ),
+                subtitle: Text(
+                  '${report.reason}\n${arabicDate(report.createdAt)}',
+                ),
+                onTap: loading
+                    ? null
+                    : () async {
+                        await Navigator.of(context).push<void>(
+                          accountPageRoute(
+                            repository: widget.repository,
+                            isAllowed: () => mounted && isAccountCurrent,
+                            builder: (_) => ReviewReportPage(
+                              repository: widget.repository,
+                              report: report,
+                            ),
+                          ),
+                        );
+                        if (mounted) await load();
+                      },
+              ),
+            ),
+          if (more)
+            TextButton(
+              onPressed: loading ? null : () => load(next: true),
+              child: const Text('تحميل بلاغات إضافية'),
+            ),
+        ],
+      ),
     ),
   );
 }
@@ -268,11 +313,21 @@ class ReviewReportPage extends StatefulWidget {
   State<ReviewReportPage> createState() => _ReviewReportPageState();
 }
 
-class _ReviewReportPageState extends State<ReviewReportPage> {
+class _ReviewReportPageState extends State<ReviewReportPage>
+    with AccountBoundState<ReviewReportPage> {
+  @override
+  BirdsRepository get accountRepository => widget.repository;
+  @override
+  void clearAccountData() {
+    target = null;
+    reason.clear();
+  }
+
   final reason = TextEditingController();
   ModerationTarget? target;
   bool loading = true, busy = false, confirming = false;
   String? error, notice;
+  late String reportState = widget.report.state;
   @override
   void initState() {
     super.initState();
@@ -286,8 +341,15 @@ class _ReviewReportPageState extends State<ReviewReportPage> {
   }
 
   Future<void> load() async {
-    final result = await widget.repository.moderationTarget(widget.report);
-    if (mounted) {
+    if (!isAccountCurrent) return;
+    setState(() {
+      loading = true;
+      error = null;
+    });
+    final result = await guardResult(
+      () => widget.repository.moderationTarget(widget.report),
+    );
+    if (mounted && isAccountCurrent) {
       setState(() {
         loading = false;
         target = result.value;
@@ -297,7 +359,8 @@ class _ReviewReportPageState extends State<ReviewReportPage> {
   }
 
   Future<void> act({bool? hidden, String? state}) async {
-    if (busy || confirming) return;
+    if (!isAccountCurrent) return;
+    if (busy || confirming || loading) return;
     if (reason.text.trim().length < 5) {
       setState(() => error = 'اكتب سبب الإجراء في خمسة أحرف على الأقل.');
       return;
@@ -308,23 +371,25 @@ class _ReviewReportPageState extends State<ReviewReportPage> {
     setState(() => confirming = true);
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (c) => AlertDialog(
-        scrollable: true,
-        title: Text(action),
-        content: Text('سيُسجل هذا الإجراء وسببه: ${reason.text.trim()}'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(c, false),
-            child: const Text('إلغاء'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(c, true),
-            child: const Text('تأكيد الإجراء'),
-          ),
-        ],
+      builder: (c) => protectAccountDialog(
+        AlertDialog(
+          scrollable: true,
+          title: Text(action),
+          content: Text('سيُسجل هذا الإجراء وسببه: ${reason.text.trim()}'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(c, false),
+              child: const Text('إلغاء'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(c, true),
+              child: const Text('تأكيد الإجراء'),
+            ),
+          ],
+        ),
       ),
     );
-    if (!mounted) return;
+    if (!mounted || !isAccountCurrent) return;
     setState(() => confirming = false);
     if (confirmed != true) return;
     setState(() {
@@ -333,72 +398,90 @@ class _ReviewReportPageState extends State<ReviewReportPage> {
       notice = null;
     });
     final result = hidden != null
-        ? await widget.repository.moderate(widget.report, hidden, reason.text)
-        : await widget.repository.resolveReport(
-            widget.report.id,
-            state!,
-            reason.text,
+        ? await guardResult(
+            () =>
+                widget.repository.moderate(widget.report, hidden, reason.text),
+          )
+        : await guardResult(
+            () => widget.repository.resolveReport(
+              widget.report.id,
+              state!,
+              reason.text,
+            ),
           );
-    if (!mounted) return;
+    if (!mounted || !isAccountCurrent) return;
     setState(() {
       busy = false;
       error = result.failure?.message;
-      if (result.isSuccess) notice = 'أكد الخادم تنفيذ الإجراء وتسجيله.';
+      if (result.isSuccess) {
+        notice = 'أكد الخادم تنفيذ الإجراء وتسجيله.';
+        if (state != null) reportState = state;
+      }
     });
     if (result.isSuccess && hidden != null) await load();
   }
 
   @override
-  Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: const Text('مراجعة بلاغ')),
-    body: ListView(
-      padding: const EdgeInsets.all(20),
-      children: [
-        Text('سبب البلاغ: ${widget.report.reason}'),
-        if (loading)
-          const LinearProgressIndicator()
-        else if (target == null && error == null)
-          const Text(
-            'الهدف لم يعد موجوداً أو غير متاح للمراجعة. لا نعرض محتوى محذوفاً تخمينياً.',
-          )
-        else if (target != null) ...[
-          Text(target!.title, style: const TextStyle(fontSize: 22)),
-          SelectableText(target!.body),
-          Text(target!.hidden ? 'المحتوى مخفي' : 'المحتوى ظاهر'),
-        ],
-        TextField(
-          controller: reason,
-          maxLength: 2000,
-          maxLines: 3,
-          decoration: const InputDecoration(labelText: 'سبب إجراء الإشراف'),
-        ),
-        if (target != null && widget.report.kind != ReportKind.account)
-          OutlinedButton(
-            onPressed: busy || confirming
-                ? null
-                : () => act(hidden: !target!.hidden),
-            child: Text(
-              target!.hidden ? 'إعادة إظهار المحتوى' : 'إخفاء المحتوى',
+  Widget build(BuildContext context) => protectAccount(
+    PopScope(
+      canPop: !busy,
+      child: Scaffold(
+        appBar: AppBar(title: const Text('مراجعة بلاغ')),
+        body: ListView(
+          padding: const EdgeInsets.all(20),
+          children: [
+            Text('سبب البلاغ: ${widget.report.reason}'),
+            Text('حالة البلاغ: ${reportStateLabel(reportState)}'),
+            if (loading)
+              const LinearProgressIndicator()
+            else if (target == null && error == null)
+              const Text(
+                'الهدف لم يعد موجوداً أو غير متاح للمراجعة. لا نعرض محتوى محذوفاً تخمينياً.',
+              )
+            else if (target != null) ...[
+              Text(target!.title, style: const TextStyle(fontSize: 22)),
+              SelectableText(target!.body),
+              Text(target!.hidden ? 'المحتوى مخفي' : 'المحتوى ظاهر'),
+            ],
+            TextField(
+              controller: reason,
+              enabled: !busy && !confirming,
+              maxLength: 2000,
+              maxLines: 3,
+              decoration: const InputDecoration(labelText: 'سبب إجراء الإشراف'),
             ),
-          ),
-        if (widget.report.kind == ReportKind.account)
-          const Text(
-            'لا تمنح هذه الشاشة صلاحية تعليق الحسابات أو تغيير أدوارها. يمكن مراجعة البلاغ وتوثيق نتيجته.',
-          ),
-        for (final s in ['reviewing', 'resolved', 'dismissed'])
-          TextButton(
-            onPressed: busy || confirming ? null : () => act(state: s),
-            child: Text('تعيين الحالة: ${reportStateLabel(s)}'),
-          ),
-        if (error != null) ...[
-          Semantics(liveRegion: true, child: Text(error!)),
-          TextButton(
-            onPressed: busy || confirming ? null : load,
-            child: const Text('إعادة تحميل الهدف'),
-          ),
-        ],
-        if (notice != null) Semantics(liveRegion: true, child: Text(notice!)),
-      ],
+            if (target != null && widget.report.kind != ReportKind.account)
+              OutlinedButton(
+                onPressed: busy || confirming || loading
+                    ? null
+                    : () => act(hidden: !target!.hidden),
+                child: Text(
+                  target!.hidden ? 'إعادة إظهار المحتوى' : 'إخفاء المحتوى',
+                ),
+              ),
+            if (widget.report.kind == ReportKind.account)
+              const Text(
+                'لا تمنح هذه الشاشة صلاحية تعليق الحسابات أو تغيير أدوارها. يمكن مراجعة البلاغ وتوثيق نتيجته.',
+              ),
+            for (final s in ['reviewing', 'resolved', 'dismissed'])
+              TextButton(
+                onPressed: busy || confirming || loading || reportState == s
+                    ? null
+                    : () => act(state: s),
+                child: Text('تعيين الحالة: ${reportStateLabel(s)}'),
+              ),
+            if (error != null) ...[
+              Semantics(liveRegion: true, child: Text(error!)),
+              TextButton(
+                onPressed: busy || confirming || loading ? null : load,
+                child: const Text('إعادة تحميل الهدف'),
+              ),
+            ],
+            if (notice != null)
+              Semantics(liveRegion: true, child: Text(notice!)),
+          ],
+        ),
+      ),
     ),
   );
 }
@@ -420,7 +503,7 @@ class _DeletionStatusPanelState extends State<DeletionStatusPanel> {
   }
 
   Future<void> load() async {
-    final result = await widget.repository.deletionStatus();
+    final result = await guardResult(() => widget.repository.deletionStatus());
     if (mounted) {
       setState(() {
         status = result.value;

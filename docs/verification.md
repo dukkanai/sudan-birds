@@ -2,6 +2,27 @@
 
 This is development evidence, not release approval. Tests use synthetic data and the owner's designated staging services. A check for an older commit does not validate later changes.
 
+## Exact encoder revision and hosted indexes, 2026-11-09
+
+All seven CI jobs passed for `b4f39445b386dd3bd9ec682af5214b04233f9f41`:
+[required checks](https://github.com/dukkanai/sudan-birds/actions/runs/42638219830),
+[native compilation](https://github.com/dukkanai/sudan-birds/actions/runs/42638219836)
+and [local codec experiment](https://github.com/dukkanai/sudan-birds/actions/runs/42638219808).
+That revision includes the bounded encoder and exact scan exception below, not
+the separate mobile secure-storage work still under review. Passing checks do
+not establish hosted Auth/R2 or mobile release readiness.
+
+The six relationship indexes were then applied once to the designated empty
+staging database, after a fresh no-content/no-active-workload preflight. Supabase
+recorded `20261109145425`; the renamed migration keeps the exact reviewed SQL
+bytes. Postflight verified six exact valid/ready/live indexes, unchanged 28
+previous index definitions, unchanged eight security-metadata hashes, unchanged
+zero content/account counts and no remaining uncovered public foreign keys.
+The advisor's six missing-FK warnings disappeared. Remaining performance findings
+were not altered. [Full scope and limits](marketplace-indexes.md).
+No credential, account, function deployment, RLS/ACL change, deletion or upload
+enablement occurred in this step.
+
 ## Local bounded encoder and exact scan exception, 2026-11-09
 
 The [bounded encoder mitigation](codec-allocation-mitigation.md) preserves the

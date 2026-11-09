@@ -57,6 +57,8 @@ jobs:
           node supabase/tests/embedded_security.mjs
       - name: Local API harness boundary tests
         run: python3 -m unittest discover -s scripts -p 'api_smoke_test.py'
+      - name: Local Auth lifecycle harness boundary tests
+        run: python3 -m unittest discover -s scripts -p 'auth_lifecycle_test.py'
       - name: CLI installer boundary tests (offline)
         run: python3 -m unittest discover -s scripts -p 'install_supabase_test.py'
       - name: Install pinned Supabase CLI
@@ -82,6 +84,12 @@ jobs:
           trap 'rm -f "$RUNNER_TEMP/birds-status.json"' EXIT
           "$RUNNER_TEMP/birds-cli/node_modules/.bin/supabase" status --output json > "$RUNNER_TEMP/birds-status.json"
           python3 scripts/api_smoke.py "$RUNNER_TEMP/birds-status.json"
+      - name: Real local Auth lifecycle and user-bound RLS
+        run: |
+          umask 077
+          trap 'rm -f "$RUNNER_TEMP/birds-status.json"' EXIT
+          "$RUNNER_TEMP/birds-cli/node_modules/.bin/supabase" status --output json > "$RUNNER_TEMP/birds-status.json"
+          timeout --signal=TERM --kill-after=10s 180s python3 scripts/auth_lifecycle.py --local-disposable "$RUNNER_TEMP/birds-status.json"
       - name: Stop isolated services
         if: always()
         run: |

@@ -4,7 +4,7 @@
 
 The 2026-11-09 read-only Supabase performance advisor reported six unindexed
 foreign keys. Reviewing the complete migration chain and current queries confirmed
-these gaps. `20261109142510_index_marketplace_relations.sql` adds exactly six
+these gaps. `20261109145425_index_marketplace_relations.sql` adds exactly six
 non-unique, non-partial B-tree indexes:
 
 - `listings_location_id_idx`: `listings(location_id)`. Supports location equality
@@ -96,5 +96,32 @@ application evidence and does not close other release gates.
 
 Local verification on 2026-11-09: all 111 embedded PostgreSQL checks (100 existing
 plus 11 index-related checks), all 9 RLS-helper checks, Node syntax checks,
-repository policy and whitespace checks passed. These are working-tree results,
-not exact-commit CI or hosted rollout evidence. No hosted migration was applied.
+repository policy and whitespace checks passed.
+
+## Hosted application verified, 2026-11-09
+
+After all seven checks passed for `b4f39445b386dd3bd9ec682af5214b04233f9f41`,
+the six-index migration was applied once to the designated staging project.
+Preflight found zero accounts or rows in the affected tables, no other active
+client sessions/open transactions and no waiting locks. Each table occupied
+8 KiB excluding indexes. The existing index definitions and security metadata
+were captured before application; no same-name index or migration existed.
+
+Supabase recorded version `20261109145425`. The source filename was aligned to
+that recorded version without changing the SQL bytes, whose SHA-256 is
+`690ca988d78c35ffc8cc45033d5590b56716a1dd02abf34b3847e0fd70edf868`.
+Do not replay this migration.
+
+Read-only postflight verified all six indexes' exact definitions, valid/ready/live
+flags, nonunique/full B-tree shape and single target columns. All 28 pre-existing
+public/private index definitions were unchanged; every final public FK now has
+a usable leading B-tree key. Eight hashes covering table/RLS security, column
+grants, policies, functions, constraints, triggers, schema grants and default
+grants were identical. All recorded account/content counts remained zero.
+
+The performance advisor no longer reports the six uncovered FKs. It still reports
+12 per-row Auth RLS evaluations, two private event tables without primary keys
+and 14 unused indexes in this empty project. These are separate findings, not a
+reason to remove required indexes or change policies without review. This
+verification establishes schema consistency, not production performance, actual
+query-plan speedup, real-user behavior, image delivery or release readiness.

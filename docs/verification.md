@@ -164,3 +164,50 @@ The committed hosted diagnostic is expired and fail-closed. It accepts only its 
 - Final privacy/retention terms, support operations, signed beta distribution and store review.
 
 Native compilation does not establish runtime behavior or store delivery. Failed, blocked or unexecuted required checks remain blockers. No merge or production release is authorized by this record.
+
+## Android plugin compiler fetch repair, 2026-11-09
+
+Native run `42571518370`, including bounded retry job `129010775107`, failed
+before Android compilation: the Gradle Plugin Portal's compiler JAR redirect to
+GitHub returned HTTP 504. The app already declares Maven Central; that declaration
+does not configure the separate included build in the Flutter SDK.
+
+The Android CI job now installs a repository-owned Gradle init script into a
+job-local `GRADLE_USER_HOME`. It matches only the canonical Flutter tools build
+path supplied by `FLUTTER_ROOT`. Its plugin repositories exclusively resolve
+`org.jetbrains.kotlin:kotlin-compiler-embeddable` from official Maven Central,
+retaining the Plugin Portal for other modules. Dependency versions, the Gradle
+8.14 distribution URL/SHA-256, Flutter SDK files and application repositories
+remain unchanged. Central failure fails the build rather than falling back to
+the problematic redirect. This policy is CI-scoped, not a machine-wide setting.
+
+Evidence and checks for this source change:
+
+- Direct HTTPS download of the complete official Central 2.0.21 JAR succeeded
+  (58,272,093 bytes). Its SHA-1 matched Central's published `.jar.sha1`:
+  `79346ed53db48b18312a472602eb5c057070c54d`. Locally computed SHA-256:
+  `9fa8cdd1de0dccffe154c997d423ec6b5f53cd6d9177e3a77a9b0de03fb1bc81`.
+  These are fetch evidence, not a new dependency verification policy.
+- Three real Gradle 8.14 offline integration tests cover included-build scope,
+  absent SDK-path failure, default portal-only resolution failure versus the
+  exact-module route, no portal fallback for that module, unrelated-module
+  exclusion from Central, and continued resolution of portal-only modules. The resolution
+  fixture uses explicitly synthetic local Maven artifacts, not a cached compiler
+  or a claim that the Android build passed.
+- `python3 scripts/check_repository.py` and `git diff --check` pass.
+- Local `flutter build apk --debug --no-pub` cannot compile: no Android SDK is
+  installed. Fresh native CI for the exact pushed commit is still required.
+  No CI rerun, remote push, deployment, or release approval is performed here.
+
+Reproduce the offline tests with an official Gradle 8.14 binary:
+
+```sh
+GRADLE_TEST_BIN=/path/to/gradle-8.14/bin/gradle \
+  python3 -m unittest discover -s scripts -p flutter_plugin_repositories_test.py -v
+```
+
+Official references:
+- https://repo.maven.apache.org/maven2/org/jetbrains/kotlin/kotlin-compiler-embeddable/2.0.21/kotlin-compiler-embeddable-2.0.21.jar
+- https://plugins.gradle.org/docs/mirroring
+- https://docs.gradle.org/8.14/userguide/init_scripts.html
+- https://docs.gradle.org/8.14/userguide/filtering_repository_content.html

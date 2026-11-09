@@ -21,10 +21,11 @@ Use `supabase/config.toml` as the reviewed deployment target: `verify_jwt=false`
 for `contact`, `media`, `media-read`, `account-delete` and `lifecycle`, while
 `codec-diagnostic` remains `true` and undeployed. The owner approved disabling only
 these five legacy-secret gateway checks for modern signing-key compatibility.
-The latest recorded dashboard observation still had all five on; hosted application
-of the approved change and its verification are pending, not implied by this file.
-First redeploy all five wrappers pinned to the same newly checked immutable SHA
-containing the Auth response identity guard, then change the five approved switches.
+The approved staging change was applied after all seven checks passed for
+`3c0cecf232ca3ed4c4df5ae7c905ef6e9a6e9d7f`: all five wrappers were repinned to
+that immutable source before the five switches were saved off. All 29 direct
+negative/public-read checks passed; see `verification.md`. Do not infer a valid
+signed-in session or production readiness from that bounded result.
 
 Protected requests must still pass `Auth.getUser`, caller-RLS authorization and any
 endpoint-specific consent, role or recent-session checks before protected effects.
@@ -32,8 +33,9 @@ Malformed Auth success bodies must fail without a valid Auth-returned UUID ident
 Public image reads remain anonymous-RLS reads unless a user token is supplied; an
 invalid user token must fail, never downgrade to anonymous. Keep upload enablement
 off and do not create diagnostic/scheduler credentials or change RLS in this step.
-After changing the approved staging settings, verify each switch and exercise real
-modern-token sign-in, expiry/revocation and wrong-user/RLS cases on the exact source.
+The remaining hosted authentication gate must exercise real modern-token sign-in,
+expiry/revocation and wrong-user/RLS cases on the exact source with approved test
+identities or provider configuration.
 Synthetic SDK transport regressions are not hosted cryptographic proof. Neither
 this approval nor passing local tests authorizes a production release.
 

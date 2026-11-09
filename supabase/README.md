@@ -89,20 +89,21 @@ does not disable the handler's `Auth.getUser` verification or database RLS.
 The expired, undeployed `codec-diagnostic` retains `verify_jwt=true` and is outside
 this approval. Keep `MEDIA_PIPELINE_ENABLED` absent or `false`.
 
-At the latest recorded hosted observation, all five dashboard switches were still
-on. Read-only signing-key inspection found current ECC P-256, previous HS256 and an
-ES256 public JWKS. The owner approved turning the five legacy switches off after
-local checks; applying and verifying that hosted change is pending. Repository
-configuration is the approved target, not evidence of hosted settings. Redeploy
-all five wrappers pinned to the newly verified SHA containing the Auth identity
-guard before disabling the switches; never use a moving source branch. Do not deploy the diagnostic, generate
-credentials, configure a scheduler or enable uploads as part of this adjustment.
+Signing-key inspection found current ECC P-256, previous HS256 and an ES256 public
+JWKS. After explicit owner approval and all seven exact-commit checks, all five
+wrappers were updated to immutable source
+`3c0cecf232ca3ed4c4df5ae7c905ef6e9a6e9d7f`, containing the Auth identity guard,
+before the five legacy switches were saved off. Do not use a moving source branch.
+No diagnostic, credential, scheduler or upload enablement was added.
 
-After the authorized change, record the exact hosted settings and rerun anonymous,
-public-key, forged/expired-token and actual signed-in user boundaries. Local SDK
-transport tests use unsigned synthetic ES256-shaped strings and configured Auth
-responses, so they prove handler ordering and identity propagation, not real
-signature validation, modern GoTrue issuance/refresh/revocation or hosted RLS.
+All 29 actual handler-boundary checks passed: method restrictions, missing/public
+credentials and forged tokens for protected functions, plus anonymous media-read
+errors and refusal to downgrade an invalid user token. Every response included
+an application request ID and no-store caching. See `../docs/verification.md`.
+Unsigned expired-shaped forgeries are not valid-token expiry proof. Actual
+signed-in users, modern GoTrue issuance/refresh/revocation, cross-user hosted RLS
+and successful protected operations remain unverified. Custom secrets are empty
+and media mutations remain disabled.
 
 ## Verified media and self-account deletion
 

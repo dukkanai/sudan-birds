@@ -2,6 +2,52 @@
 
 This is development evidence, not release approval. Tests use synthetic data and the owner's designated staging services. A check for an older commit does not validate later changes.
 
+## Hosted modern JWT gateway change verified, 2026-11-09
+
+Implementation `3c0cecf232ca3ed4c4df5ae7c905ef6e9a6e9d7f` passed all seven
+exact-commit CI jobs before the hosted change. Android debug and unsigned iOS
+simulator compilation passed. Android also passed all four mandatory Gradle
+repository-policy tests after its successful build. Flutter passed 86 tests,
+Edge passed 97, database passed 58 pgTAP assertions and 173 live local PostgREST
+checks, and repository security included actionlint and the redacted history scan.
+All 61 Python tests independently passed locally. Earlier download, workflow-context
+and generated-wrapper failures are recorded below, not counted as successes.
+
+[Required checks](https://github.com/dukkanai/sudan-birds/actions/runs/42574373695),
+[native compilation](https://github.com/dukkanai/sudan-birds/actions/runs/42574373661),
+[local codec experiment](https://github.com/dukkanai/sudan-birds/actions/runs/42574373609).
+The local codec completed 20/20 fixed synthetic JPEG requests at 233–301 ms,
+with maximum sampled heap-used plus external memory of 51.29 MiB and up to four
+warm-worker calls. These are not hosted capacity or real R2 measurements.
+
+After the owner's specific approval, all five existing staging wrappers were
+updated to that immutable source before their legacy-only JWT switches were turned
+off and saved. The designated project remains `tkfhcjdxovivsrmoxpjm`, with the
+previously disclosed default-branch label `main PRODUCTION`. The five functions
+are `contact`, `media`, `media-read`, `account-delete` and `lifecycle`. No new
+function, credential, test account, role, schedule, database write or R2 object was
+created. Custom secrets remain empty, so uploads remain default-disabled; the
+expired `codec-diagnostic` stays undeployed.
+
+All 29 direct hosted checks passed without retries:
+- Five GET requests returned handler-level 405, proving each deployed handler was
+  reached after the gateway change.
+- Each of four protected functions returned handler-level 401 for no credentials,
+  public API key alone, public key as bearer, forged ES256-shaped token, and an
+  expired-shaped forgery (20 checks).
+- Public `media-read` returned 400 for missing input and 404 for a nonexistent
+  synthetic image with or without the public key. A forged user bearer returned
+  401 instead of falling back to anonymous access (four checks).
+- Every response had an application request ID and `Cache-Control: no-store`.
+
+The forged tokens were unsigned fixtures; the expired-shaped fixture does not
+prove rejection of an otherwise valid expired token. No valid-user sign-in,
+refresh/revocation, cross-user hosted RLS or successful protected operation was
+tested. Those checks, real storage, unattended deletion, provider setup, physical
+devices and signed distribution remain gates. This change is not a mobile or
+public production release. Later documentation-only commits do not change the
+recorded deployed implementation SHA.
+
 ## Approved modern JWT gateway compatibility, 2026-11-09
 
 Read-only inspection of the designated staging project's JWT signing keys found
@@ -11,20 +57,19 @@ gateway. The owner explicitly approved turning that gateway check off for only
 `contact`, `media`, `media-read`, `account-delete` and `lifecycle`, while preserving
 handler authentication, RLS, public image reads and disabled uploads.
 
-`supabase/config.toml` now records the approved five-function target. The latest
-recorded hosted observation remains all five switches on, and applying/verifying
-the hosted change is pending. `codec-diagnostic` remains undeployed with
-`verify_jwt=true`. No credential, account, schedule, storage object or hosted
-setting is created or changed by this repository patch. The historical deployment
-record below remains evidence of what was actually observed at that time.
+`supabase/config.toml` records the approved five-function target. During preparation,
+all five hosted switches were still on. The completed, verified change is recorded
+above; `codec-diagnostic` remains undeployed with `verify_jwt=true`. The source
+patch itself creates no credential, account, schedule or storage object. Historical
+records below describe the state observed at their respective stages.
 
 The shared Auth adapter now validates the SDK-returned user object and UUID before
 any protected work, mapping malformed identity/normalization failures to the same
 safe `401 invalid_session` response as Auth denial. This fixes a defense-in-depth
 gap found during testing: the SDK normalizes HTTP 200 `{user:null}` to a truthy
 response object. No decoded caller claim substitutes for the verified identity.
-All five hosted wrappers must be repinned to the newly checked immutable source
-containing this guard before the approved gateway switch changes.
+All five hosted wrappers were repinned to the checked immutable source containing
+this guard before the approved gateway switch changes recorded above.
 
 New direct-handler regressions bypass the gateway and use the actual Supabase SDK
 with synthetic Auth/PostgREST transport. They cover forged, expired, wrong-issuer
@@ -157,7 +202,7 @@ The committed hosted diagnostic is expired and fail-closed. It accepts only its 
 
 ## Unverified or undelivered gates
 
-- Valid-user integration of the deployed listing-only Edge functions, including signing-key compatibility.
+- Valid-user integration of the deployed listing-only Edge functions. The legacy gateway mismatch is corrected; real modern-token sign-in and lifecycle remain unverified.
 - Connected authenticated API, Google/Apple sign-in, native callbacks and hosted moderation/deletion flows.
 - Real R2 image delivery, conditional writes, retained deletion fences, cleanup and abuse scenarios.
 - Real-device VoiceOver/TalkBack, weak-network interruption and upload recovery.

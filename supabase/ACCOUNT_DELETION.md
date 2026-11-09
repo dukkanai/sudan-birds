@@ -70,8 +70,10 @@ After approval, place the same high-entropy base64url secret (minimum43character
 in the Edge environment and Supabase Vault, and store the exact staging lifecycle
 URL in Vault. Install/enable pg_cron and pg_net only if approved and absent. The
 approved application gateway configuration in `README.md` disables the legacy
-JWT check for all five application functions, including lifecycle; the hosted change
-is still pending. Lifecycle independently requires either Auth-verified identity
+JWT check for all five application functions, including lifecycle. This approved
+staging change is applied and its negative boundaries verified as recorded in
+`../docs/verification.md`; no scheduler is configured. Lifecycle independently
+requires either Auth-verified identity
 plus its caller-RLS admin check, or the scoped constant-time job header. Turning
 off the legacy gateway does not configure or authorize a scheduler. The separate
 undeployed diagnostic retains its gateway check.

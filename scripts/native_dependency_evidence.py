@@ -17,6 +17,8 @@ import sys
 MAX_TEXT = 1024 * 1024
 MAX_BUNDLE = 4 * MAX_TEXT
 MAX_BINARY = 256 * MAX_TEXT
+IOS_PROJECT_PATH = 'app/ios/Runner.xcodeproj/project.pbxproj'
+SCHEMAS = {'android': 1, 'ios': 2}
 COMMON_SOURCES = (
     'app/pubspec.yaml', 'app/pubspec.lock',
     '.github/workflows/native-checks.yml',
@@ -35,7 +37,7 @@ PLATFORM_SOURCES = {
         'app/android/app/src/main/kotlin/dev/sudanbirds/sudan_birds/MainActivity.kt',
     ),
     'ios': (
-        'app/ios/Runner.xcodeproj/project.pbxproj', 'app/ios/Runner/AppDelegate.swift',
+        IOS_PROJECT_PATH, 'app/ios/Runner/AppDelegate.swift',
         'app/ios/Runner/Info.plist', 'app/ios/Runner/Runner.entitlements',
     ),
 }
@@ -47,7 +49,8 @@ RAW_NAMES = {
 OUTPUT_NAMES = {
     'android': {'pubspec.lock', 'manifest.json', 'android-debugRuntimeClasspath.txt',
                 'android-tink-insight.txt'},
-    'ios': {'pubspec.lock', 'manifest.json', 'Podfile.lock', 'pod-resolution.json'},
+    'ios': {'pubspec.lock', 'manifest.json', 'Podfile.lock', 'pod-resolution.json',
+            'ios-project.pbxproj'},
 }
 BUILD_FILES = {
     'android': 'app/build/app/outputs/flutter-apk/app-debug.apk',
@@ -303,12 +306,21 @@ def stage(platform, repo, raw, output, commit, dirty, redaction_roots=()):
         files.update(android_reports(raw, (repo, *redaction_roots)))
     else:
         files.update(ios_resolution(repo))
+        # One fixed source file, never an arbitrary source directory or raw diff.
+        # Keep exact bytes; credentials/private paths fail instead of being redacted.
+        files['ios-project.pbxproj'] = read_file(repo, IOS_PROJECT_PATH)
+        scan(files['ios-project.pbxproj'])
     built = read_file(repo, BUILD_FILES[platform], MAX_BINARY)
+    sources = source_hashes(repo, platform)
+    if platform == 'ios':
+        require({item['path']: item['sha256'] for item in sources}[IOS_PROJECT_PATH]
+                == digest(files['ios-project.pbxproj']),
+                'iOS project snapshot changed during capture')
     manifest = {
-        'schema': 1, 'platform': platform, 'scope': SCOPES[platform],
+        'schema': SCHEMAS[platform], 'platform': platform, 'scope': SCOPES[platform],
         'checked_out_commit': commit, 'tracked_worktree_dirty_after_build': dirty,
         'source_snapshot': SOURCE_SNAPSHOT,
-        'source_sha256': source_hashes(repo, platform),
+        'source_sha256': sources,
         'tool_versions': tool_versions(platform, raw),
         'built_file': {'path': BUILD_FILES[platform], 'sha256': digest(built), 'bytes': len(built)},
         'evidence_sha256': {name: digest(data) for name, data in sorted(files.items())},
@@ -341,7 +353,7 @@ def validate(platform, output):
         scan(data)
     manifest = strict_json(files.pop('manifest.json'))
     require(isinstance(manifest, dict) and set(manifest) == MANIFEST_FIELDS
-            and manifest.get('schema') == 1
+            and manifest.get('schema') == SCHEMAS[platform]
             and manifest.get('platform') == platform and manifest.get('scope') == SCOPES[platform]
             and manifest.get('release_clearance') is False,
             'Evidence manifest scope is invalid')
@@ -377,6 +389,9 @@ def validate(platform, output):
             and 'app/lib/main.dart' in source_map
             and source_map['app/pubspec.lock'] == digest(files['pubspec.lock']),
             'Source snapshot does not match the evidence lock')
+    if platform == 'ios':
+        require(source_map[IOS_PROJECT_PATH] == digest(files['ios-project.pbxproj']),
+                'iOS project snapshot does not match the source manifest')
     versions = manifest['tool_versions']
     common = {'frameworkVersion', 'channel', 'frameworkRevision', 'engineRevision', 'dartSdkVersion'}
     extra = {'gradle', 'java'} if platform == 'android' else {'xcode', 'xcode_build', 'cocoapods'}

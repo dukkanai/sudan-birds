@@ -141,6 +141,139 @@ class EvidenceBoundaryTest(unittest.TestCase):
         self.assertNotIn('source', pod)
         evidence.validate('ios', self.out)
 
+    def test_ios_preserves_exact_public_project_snapshot_and_dirty_status(self):
+        self.raw_files('ios')
+        project = (ROOT / evidence.IOS_PROJECT_PATH).read_bytes()
+        self.write(evidence.IOS_PROJECT_PATH, project)
+        evidence.stage('ios', self.repo, self.raw, self.out, COMMIT, True)
+        self.assertEqual((self.out / 'ios-project.pbxproj').read_bytes(), project)
+        manifest = json.loads((self.out / 'manifest.json').read_text())
+        self.assertEqual(manifest['schema'], 2)
+        self.assertTrue(manifest['tracked_worktree_dirty_after_build'])
+        self.assertFalse(manifest['release_clearance'])
+        project_hash = hashlib.sha256(project).hexdigest()
+        self.assertEqual(manifest['evidence_sha256']['ios-project.pbxproj'], project_hash)
+        self.assertIn({'path': evidence.IOS_PROJECT_PATH, 'sha256': project_hash},
+                      manifest['source_sha256'])
+        evidence.validate('ios', self.out)
+
+    def test_missing_ios_project_fails_before_staging(self):
+        self.raw_files('ios')
+        (self.repo / evidence.IOS_PROJECT_PATH).unlink()
+        self.rejected('ios')
+
+    def test_ios_project_unsafe_file_types_fail_before_staging(self):
+        self.raw_files('ios')
+        project = self.repo / evidence.IOS_PROJECT_PATH
+        original = project.read_bytes()
+        for kind in ('symlink', 'hardlink', 'fifo'):
+            with self.subTest(kind=kind):
+                project.unlink()
+                if kind == 'symlink':
+                    project.symlink_to(self.repo / 'app/pubspec.lock')
+                elif kind == 'hardlink':
+                    os.link(self.repo / 'app/pubspec.lock', project)
+                else:
+                    os.mkfifo(project)
+                self.rejected('ios')
+                project.unlink()
+                project.write_bytes(original)
+
+    def test_ios_project_empty_or_oversized_fails_before_staging(self):
+        self.raw_files('ios')
+        for value in (b'', b'x' * (evidence.MAX_TEXT + 1)):
+            with self.subTest(length=len(value)):
+                self.write(evidence.IOS_PROJECT_PATH, value)
+                self.rejected('ios')
+
+    def test_ios_project_binary_or_control_text_fails_before_staging(self):
+        self.raw_files('ios')
+        for value in (b'\xff', b'\x00', b'\x1b[31m', b'\x7f'):
+            with self.subTest(value=value):
+                self.write(evidence.IOS_PROJECT_PATH, b'synthetic project\n' + value)
+                self.rejected('ios')
+
+    def test_ios_project_credentials_fail_without_echoing_content(self):
+        self.raw_files('ios')
+        value = b'password' + b'=synthetic-project-sensitive'
+        self.write(evidence.IOS_PROJECT_PATH, value)
+        with self.assertRaises(evidence.EvidenceError) as error:
+            self.stage('ios')
+        self.assertNotIn(value.decode(), str(error.exception))
+        self.assertFalse(self.out.exists())
+
+    def test_ios_project_private_paths_fail_without_redaction(self):
+        self.raw_files('ios')
+        for value in (b'/Users/another/private', b'C:\\Users\\person\\private',
+                      str(self.repo).encode() + b'/private'):
+            with self.subTest(value=value):
+                self.write(evidence.IOS_PROJECT_PATH, value)
+                self.rejected('ios')
+
+    def test_ios_project_change_during_capture_fails_before_staging(self):
+        self.raw_files('ios')
+        sources = evidence.source_hashes(self.repo, 'ios')
+        for item in sources:
+            if item['path'] == evidence.IOS_PROJECT_PATH:
+                item['sha256'] = '0' * 64
+        with patch.object(evidence, 'source_hashes', return_value=sources):
+            self.rejected('ios')
+
+    def test_ios_project_missing_output_fails_final_validation(self):
+        self.raw_files('ios')
+        self.stage('ios')
+        (self.out / 'ios-project.pbxproj').unlink()
+        with self.assertRaises(evidence.EvidenceError):
+            evidence.validate('ios', self.out)
+
+    def test_ios_project_tampering_fails_final_validation(self):
+        self.raw_files('ios')
+        self.stage('ios')
+        (self.out / 'ios-project.pbxproj').write_bytes(b'changed synthetic project\n')
+        with self.assertRaises(evidence.EvidenceError):
+            evidence.validate('ios', self.out)
+
+    def test_ios_project_output_symlink_fails_final_validation(self):
+        self.raw_files('ios')
+        self.stage('ios')
+        project = self.out / 'ios-project.pbxproj'
+        project.unlink()
+        project.symlink_to(self.repo / evidence.IOS_PROJECT_PATH)
+        with self.assertRaises(evidence.EvidenceError):
+            evidence.validate('ios', self.out)
+
+    def test_ios_unexpected_output_file_fails_final_validation(self):
+        self.raw_files('ios')
+        self.stage('ios')
+        (self.out / 'signing.p12').write_bytes(b'not a real credential')
+        with self.assertRaises(evidence.EvidenceError):
+            evidence.validate('ios', self.out)
+
+    def test_ios_project_evidence_hash_cannot_override_source_hash(self):
+        self.raw_files('ios')
+        self.stage('ios')
+        project = b'changed synthetic project\n'
+        (self.out / 'ios-project.pbxproj').write_bytes(project)
+        manifest = json.loads((self.out / 'manifest.json').read_text())
+        manifest['evidence_sha256']['ios-project.pbxproj'] = hashlib.sha256(project).hexdigest()
+        (self.out / 'manifest.json').write_text(json.dumps(manifest))
+        with self.assertRaises(evidence.EvidenceError):
+            evidence.validate('ios', self.out)
+
+    def test_ios_legacy_schema_cannot_claim_project_snapshot_evidence(self):
+        self.raw_files('ios')
+        self.stage('ios')
+        manifest = json.loads((self.out / 'manifest.json').read_text())
+        manifest['schema'] = 1
+        (self.out / 'manifest.json').write_text(json.dumps(manifest))
+        with self.assertRaises(evidence.EvidenceError):
+            evidence.validate('ios', self.out)
+
+    def test_ios_snapshot_keeps_bundle_limit(self):
+        self.raw_files('ios')
+        with patch.object(evidence, 'MAX_BUNDLE', 10):
+            self.rejected('ios')
+
     def test_missing_each_raw_input_fails(self):
         self.raw_files('android')
         for name in evidence.RAW_NAMES['android']:
@@ -439,7 +572,7 @@ class WorkflowBoundaryTest(unittest.TestCase):
         self.assertNotIn('|| true', ios)
         self.assertNotIn('if:', ios)
 
-    def test_native_jobs_upload_only_four_specific_files_after_scanning(self):
+    def test_native_jobs_upload_only_platform_allowlists_after_scanning(self):
         workflow = (ROOT / '.github/workflows/native-checks.yml').read_text()
         self.assertIn('contents: read', workflow)
         self.assertNotIn('contents: write', workflow)
@@ -468,7 +601,7 @@ class WorkflowBoundaryTest(unittest.TestCase):
                     '${{ runner.temp }}/native-evidence-' + platform + '/' + name
                     for name in evidence.OUTPUT_NAMES[platform]
                 })
-                self.assertEqual(len(lines), 4)
+                self.assertEqual(len(lines), 4 if platform == 'android' else 5)
 
     def test_capture_is_postbuild_offline_and_scoped(self):
         script = (ROOT / 'scripts/capture_native_dependency_evidence.sh').read_text()

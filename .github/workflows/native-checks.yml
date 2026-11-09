@@ -104,6 +104,7 @@ jobs:
             ${{ runner.temp }}/native-evidence-ios/manifest.json
             ${{ runner.temp }}/native-evidence-ios/Podfile.lock
             ${{ runner.temp }}/native-evidence-ios/pod-resolution.json
+            ${{ runner.temp }}/native-evidence-ios/ios-project.pbxproj
           if-no-files-found: error
           include-hidden-files: false
           retention-days: 7

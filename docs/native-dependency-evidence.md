@@ -8,7 +8,7 @@ The jobs remain Android **debug** and iOS **unsigned debug simulator** checks. T
 
 ## Exact artifact allowlists
 
-Each platform uploads exactly four named text files after its build, staging checks and redacted secret scan succeed. The workflow lists individual paths, not directories or globs, and treats missing files as errors. Artifacts are retained for seven days; download availability does not grant release approval.
+Android uploads exactly four named text files; iOS uploads exactly five. Upload happens only after the build, staging checks and redacted secret scan succeed. The workflow lists individual paths, not directories or globs, and treats missing files as errors. Artifacts are retained for seven days; download availability does not grant release approval.
 
 Common files:
 
@@ -26,6 +26,7 @@ iOS also includes:
 
 - `Podfile.lock`: exact CocoaPods lock bytes, required to byte-match `Pods/Manifest.lock`.
 - `pod-resolution.json`: the installed local pod identities, pod versions, SHA-256 of each local podspec, and normalized top-level/iOS dependency declarations. Private source/cache paths, authors and arbitrary podspec fields are excluded. Pod identities must occur at the same version in the lock. These declarations are not a second full resolver: `Podfile.lock` remains the resolved graph.
+- `ios-project.pbxproj`: exact post-build bytes from the single fixed source path `app/ios/Runner.xcodeproj/project.pbxproj`. The file is subject to the same regular-file, size, UTF-8, control-byte, credential and private-path checks as other evidence. It is never redacted. Its evidence digest must also match that path's source-manifest digest, both before staging and during final validation. A disagreement fails instead of presenting inconsistent source evidence.
 
 A missing/empty lock, mismatching installed manifest, missing local podspec metadata, unsafe entry, or inconsistent pod identity fails. There is no “simulator passed, so resolution evidence is optional” fallback. If the project moves to Swift Package Manager, explicitly implement and review collection of `Package.resolved` and local-package resolution evidence before changing this CocoaPods gate.
 
@@ -35,9 +36,15 @@ Pod and Dart package version namespaces can differ. For example, the reviewed se
 
 The source snapshot hashes the exact Dart lock and manifest, all files under `app/lib` (required to be Dart source), selected native build/entrypoint/privacy configuration, this capture implementation, and the native workflow. These paths are explicit in `scripts/native_dependency_evidence.py`. It is a bounded post-build snapshot, **not** a whole-repository source manifest, a reproducible-build proof, an attestation, or a signature. The actual Git commit can be a PR merge commit; the dirty flag does not include untracked files. The simulator executable hash does not cover all of `Runner.app` or its frameworks/native assets.
 
+The [run for candidate `40ad627c`](https://github.com/dukkanai/sudan-birds/actions/runs/42714845321) passed both native jobs and their secret scans. Its checkout was synthetic merge `262d808546f5a1283e4eaf13b9b65ec15848441c`, with the same tree as the candidate. Android's 30 captured source hashes matched. iOS reported a dirty tracked worktree: 23 of 24 captured source hashes matched, but `project.pbxproj` changed during the build. The original four-file iOS artifact contained only its hash, so it could not establish the exact change or its cause. A successful CI result does not imply unchanged effective iOS build inputs.
+
+The added fifth iOS file enables a later authorized run's complete project diff to be reviewed locally against the verified checkout blob. Compare hashes, checkout parents/tree and the exact downloaded snapshot before classifying any change as expected CocoaPods integration. Do not assume that cause from a successful build or a `pod install` log line. Inspect the full diff before deciding whether stable generated configuration belongs in source control. This one snapshot does not inventory every changed tracked file, and does not waive signing, runtime or release gates. The extension needs a new exact-candidate CI run; earlier artifacts do not contain it.
+
+iOS manifest schema is now `2`, requiring the fifth file. Android stays at schema `1` with four files. Validate older four-file iOS artifacts with their producing commit's validator and preserve their narrower scope; they cannot satisfy the new snapshot gate.
+
 The capture script writes raw command output to a fresh private temporary directory and removes it when the script exits. Raw output never becomes an artifact path and is not printed on command failure. No shell tracing, Gradle debug logging, build scans or environment dumps are used. Only known local root prefixes are redacted in the Android reports; unknown private absolute paths fail validation.
 
-Staging uses Python's standard library with explicit file allowlists. All expected input files must exist, be nonempty regular files, and remain within size bounds. Symlinks, hardlinks, special files, unexpected files in capture/podspec/staging directories, malformed/duplicate-key JSON, binary/control bytes, credential-like content, stale output directories, and digest mismatches fail closed. Source hashes are published instead of source-file content. Text inputs/outputs are limited to 1 MiB per file and the final bundle to 4 MiB; only the two fixed build-product paths may be read up to 256 MiB, for their hashes. No binary is staged.
+Staging uses Python's standard library with explicit file allowlists. All expected input files must exist, be nonempty regular files, and remain within size bounds. Symlinks, hardlinks, special files, unexpected files in capture/podspec/staging directories, malformed/duplicate-key JSON, binary/control bytes, credential-like content, stale output directories, and digest mismatches fail closed. Source hashes are published instead of source-file content, except for the one fixed iOS project snapshot described above. Text inputs/outputs are limited to 1 MiB per file and the final bundle to 4 MiB; only the two fixed build-product paths may be read up to 256 MiB, for their hashes. No binary is staged.
 
 The final exact-file-set, size, digest and content validation runs before and after the workflow's redacted Gitleaks v8.21.2 directory scan. A failed scanner/install or validation step prevents artifact upload. Neither the built-in content checks nor Gitleaks guarantees detection of every possible secret. This workflow is intended for unprivileged, secret-free CI; it is not a sandbox for hostile build code or a reason to inject credentials into builds.
 
@@ -53,7 +60,7 @@ The [first candidate native run](https://github.com/dukkanai/sudan-birds/actions
 
 The iOS job now explicitly provisions Go before building, with cache disabled. The official [`actions/setup-go` v7.0.0 release](https://github.com/actions/setup-go/releases/tag/v7.0.0) resolves to [`b7ad1dad31e06c5925ef5d2fc7ad053ef454303e`](https://github.com/actions/setup-go/commit/b7ad1dad31e06c5925ef5d2fc7ad053ef454303e). Go is fixed to `1.27.3`, verified as a stable release with macOS ARM64 and x64 distributions in the [official Go download metadata](https://go.dev/dl/?mode=json). The action adds the toolchain to `PATH`; no persistent credential or new workflow permission is added. Its standard Go configuration appears in job logs, not in evidence artifacts. Capture scripts do not dump the process environment.
 
-Gitleaks remains exactly v8.21.2. Pre-scan and post-scan validation, all four-file allowlists, failure behavior, unsigned build scope and upload ordering are unchanged. An offline regression test requires the exact setup action/version/cache configuration before the iOS build and scanner; removing the prerequisite or introducing an ignored-failure path fails that test. It does not prove the remote download or macOS execution, which requires the next CI run.
+Gitleaks remains exactly v8.21.2. Pre-scan and post-scan validation, explicit platform allowlists, failure behavior, unsigned build scope and upload ordering remain enforced. An offline regression test requires the exact setup action/version/cache configuration before the iOS build and scanner; removing the prerequisite or introducing an ignored-failure path fails that test. The `40ad627c` run verified this prerequisite on macOS; any later workflow change still needs its own exact-candidate CI run.
 
 ## Offline verification
 
@@ -67,7 +74,7 @@ bash -n scripts/capture_native_dependency_evidence.sh
 git diff --check
 ```
 
-The native-evidence tests use synthetic files and mocked Git identity. They cover both platform allowlists; exact lock preservation; source/binary hashes; path redaction; missing, unresolved or mismatched evidence; symlink/hardlink/FIFO/size/content boundaries; staging tampering; and workflow ordering/pins/path scope. No native tools, builds, network calls or uploads are performed by these tests. The existing Gradle integration tests require `GRADLE_TEST_BIN`; skipped tests are not passing integration evidence.
+The native-evidence tests use synthetic files and mocked Git identity, plus the public candidate lock and iOS project as exact-byte fixtures. They cover both platform allowlists; exact lock and project preservation; source/binary hashes; path redaction; missing, unresolved or mismatched evidence; symlink/hardlink/FIFO/size/content boundaries; staging tampering; and workflow ordering/pins/path scope. iOS project tests also reject missing or unsafe snapshots, credentials/private paths, changes between capture and source hashing, and disagreement between evidence and source-manifest hashes. No native tools, builds, network calls or uploads are performed by these tests. The existing Gradle integration tests require `GRADLE_TEST_BIN`; skipped tests are not passing integration evidence.
 
 ## Remaining native and release gates
 

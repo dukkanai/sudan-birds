@@ -47,6 +47,14 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           persist-credentials: false
+      - name: Platform RLS helper and PostgreSQL regression checks
+        run: |
+          npm install --prefix "$RUNNER_TEMP/birds-pg" --ignore-scripts --no-audit --no-fund embedded-postgres@17.6.0-beta.15
+          (cd "$RUNNER_TEMP/birds-pg/node_modules/@embedded-postgres/linux-x64" && node scripts/hydrate-symlinks.js)
+          export LD_LIBRARY_PATH="$RUNNER_TEMP/birds-pg/node_modules/@embedded-postgres/linux-x64/native/lib"
+          export EMBEDDED_POSTGRES_MODULE="$RUNNER_TEMP/birds-pg/node_modules/embedded-postgres/dist/index.js"
+          node supabase/tests/rls_auto_enable_security.mjs
+          node supabase/tests/embedded_security.mjs
       - name: Local API harness boundary tests
         run: python3 -m unittest discover -s scripts -p 'api_smoke_test.py'
       - name: CLI installer boundary tests (offline)

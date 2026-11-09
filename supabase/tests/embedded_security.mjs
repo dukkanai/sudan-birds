@@ -26,7 +26,7 @@ try {
  await q(bootstrap);
  const names=(await readdir(new URL('../migrations/',import.meta.url))).filter(n=>n.endsWith('.sql')).sort();
  const migrations=await Promise.all(names.map(n=>readFile(new URL('../migrations/'+n,import.meta.url),'utf8')));
- assert.equal(migrations.length,3,'Expected immutable first two migrations plus removal migration');
+ assert.equal(migrations.length,4,'Expected immutable history plus removal and helper-hardening migrations');
  await migrationCases({q,check,migrations,bootstrap});
  for(const migration of migrations)await q(migration);
  await check('fresh chain removes timeline tables, columns, helpers and old upload overload',async()=>{

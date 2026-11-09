@@ -14,6 +14,7 @@ on:
       - 'supabase/functions/package*.json'
       - 'supabase/config.toml'
       - 'scripts/codec_resource*'
+      - 'scripts/install_supabase*'
       - '.github/workflows/codec-resource.yml'
   workflow_dispatch:
 permissions:
@@ -31,8 +32,10 @@ jobs:
           persist-credentials: false
       - name: Test harness boundaries
         run: python3 -m unittest discover -s scripts -p 'codec_resource_test.py'
+      - name: CLI installer boundary tests (offline)
+        run: python3 -m unittest discover -s scripts -p 'install_supabase_test.py'
       - name: Install pinned official CLI
-        run: npm install --no-audit --no-fund --prefix "$RUNNER_TEMP/birds-cli" supabase@2.67.1
+        run: python3 scripts/install_supabase.py
       - name: Create disposable source snapshot
         run: |
           umask 077

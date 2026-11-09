@@ -7,6 +7,12 @@ import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 failures = []
+# Official Gradle 8.14 distribution checksum, verified from
+# https://services.gradle.org/distributions/gradle-8.14-all.zip.sha256
+wrapper = (ROOT / "app/android/gradle/wrapper/gradle-wrapper.properties").read_text()
+if ("distributionUrl=https\\://downloads.gradle.org/distributions/gradle-8.14-all.zip" not in wrapper
+        or "distributionSha256Sum=efe9a3d147d948d7528a9887fa35abcf24ca1a43ad06439996490f77569b02d1" not in wrapper):
+    failures.append("Gradle wrapper: reviewed official distribution and checksum pin required")
 workflows = ROOT / ".github" / "workflows"
 for path in workflows.glob("*.yml"):
     content = path.read_text()

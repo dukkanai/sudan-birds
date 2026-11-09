@@ -49,8 +49,10 @@ jobs:
           persist-credentials: false
       - name: Local API harness boundary tests
         run: python3 -m unittest discover -s scripts -p 'api_smoke_test.py'
+      - name: CLI installer boundary tests (offline)
+        run: python3 -m unittest discover -s scripts -p 'install_supabase_test.py'
       - name: Install pinned Supabase CLI
-        run: npm install --no-audit --no-fund --prefix "$RUNNER_TEMP/birds-cli" supabase@2.67.1
+        run: python3 scripts/install_supabase.py
       - name: Start isolated synthetic Supabase
         run: |
           umask 077
@@ -74,8 +76,10 @@ jobs:
           python3 scripts/api_smoke.py "$RUNNER_TEMP/birds-status.json"
       - name: Stop isolated services
         if: always()
-        run: >-
-          "$RUNNER_TEMP/birds-cli/node_modules/.bin/supabase" stop --no-backup
+        run: |
+          if [ -x "$RUNNER_TEMP/birds-cli/node_modules/.bin/supabase" ]; then
+            "$RUNNER_TEMP/birds-cli/node_modules/.bin/supabase" stop --no-backup
+          fi
 
   edge:
     runs-on: ubuntu-24.04

@@ -1,0 +1,6 @@
+# Verified false positive: this line records the SHA-256 of _shared/auth.ts at
+# source 0d194ece82e91770ea73267a70b96d0fa07ebdf8, not an authentication secret.
+# Actual SHA-256: c26065fee78084dfa7da37888074c1d74d3525c4c8045a9c51a1cb4bc1e81b3d
+# Scope is this exact immutable commit, file, rule and line only. No path or
+# general token-pattern allowlist is enabled; default full-history rules remain.
+4e0cf15b0459ecb10fab902f1883835f18fba0d8:docs/evidence/media-bundle-local-2026-11-09.json:generic-api-key:10

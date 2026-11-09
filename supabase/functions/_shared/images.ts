@@ -1,4 +1,5 @@
-import { decode, encode } from "npm:jpeg-js@0.4.4";
+import { decode } from "npm:jpeg-js@0.4.4";
+import { encodeRgbaJpeg, JpegOutputLimitError } from "./bounded_jpeg_encoder.ts";
 import { ApiError } from "./http.ts";
 export const IMAGE_LIMITS = { maxBytes: 2_097_152, maxPixels: 409_600, maxDimension: 640 } as const;
 export function inspectJpeg(bytes: Uint8Array): { width: number; height: number } {
@@ -64,12 +65,12 @@ export function sanitizeJpeg(bytes: Uint8Array) {
       throw new ApiError(400, "invalid_image");
     }
     // Fresh pixel-only input deliberately omits EXIF and decoded comments.
-    const encoded = encode({ width: pixels.width, height: pixels.height, data: pixels.data }, 80);
-    if (encoded.data.length > IMAGE_LIMITS.maxBytes) throw new ApiError(400, "image_too_large");
-    inspectJpeg(encoded.data);
-    return { bytes: new Uint8Array(encoded.data), width: pixels.width, height: pixels.height };
+    const encoded = encodeRgbaJpeg(pixels.data, pixels.width, pixels.height, IMAGE_LIMITS.maxBytes);
+    inspectJpeg(encoded);
+    return { bytes: encoded, width: pixels.width, height: pixels.height };
   } catch (error) {
     if (error instanceof ApiError) throw error;
+    if (error instanceof JpegOutputLimitError) throw new ApiError(400, "image_too_large");
     throw new ApiError(400, "invalid_image");
   }
 }

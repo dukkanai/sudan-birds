@@ -2,6 +2,28 @@
 
 This is development evidence, not release approval. Tests use synthetic data and the owner's designated staging services. A check for an older commit does not validate later changes.
 
+## Local bounded encoder and exact scan exception, 2026-11-09
+
+The [bounded encoder mitigation](codec-allocation-mitigation.md) preserves the
+original decoder, limits, capacity gates and disabled-upload default. All 105
+Edge tests passed locally, including eight new encoder tests; independent review
+also passed 13 focused encoder/sanitizer tests and matched all 13 measured source
+hashes. Three local paced sequences completed 20/20 each. Immediate sequences
+still encountered safe capacity rejections, and actual hosted Auth/R2/resource
+validation remains open. See the linked record for complete measurements and
+limits. No hosted runtime was changed.
+
+At commit `4e0cf15b0459ecb10fab902f1883835f18fba0d8`, Flutter, database, Edge,
+Android debug, unsigned iOS simulator and the local codec workflow passed. The
+repository-security job failed on Gitleaks's generic-key match of the SHA-256
+source digest for `_shared/auth.ts` in the baseline evidence file, not an access
+credential. Recomputing that file at the recorded `0d194ec` source matched the
+digest exactly. The new `.gitleaksignore` entry identifies only that immutable
+commit/file/rule/line fingerprint. It does not allowlist a directory or token
+pattern; all default rules and the full-history scan remain enabled. Gitleaks
+8.21.2 passed the local 25-commit history with this exact exception. The baseline
+evidence file was not modified. Later commits need their own full CI results.
+
 ## Hosted synthetic codec probe and cleanup, 2026-11-09
 
 After specific approval, a temporary `codec-diagnostic` wrapper imported the

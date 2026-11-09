@@ -4,7 +4,7 @@ This is development evidence, not release approval. Tests use synthetic data and
 
 ## Current two-tab revision, 2026-11-09
 
-The requested scope is now requests and offers only. Application, backend, fixtures, active documentation and seed data are being updated together. The first two already-applied migrations remain immutable; a third forward migration removes the retired tables and rewrites shared listing security. It must fail if affected user data remains, and must preserve populated listings and their media, moderation and account-deletion safeguards.
+The requested scope is now requests and offers only. Application, backend, fixtures, active documentation and seed data were updated together. The first two already-applied migrations remain immutable; a third forward migration removes the retired tables and rewrites shared listing security. It fails if affected user data remains, and preserves populated listings and their media, moderation and account-deletion safeguards.
 
 Current local checks:
 
@@ -13,7 +13,19 @@ Current local checks:
 - Python: 10 harness tests, syntax compilation and repository policy checks passed.
 - Final removal migration SHA-256: `577f7cbb6e39a6934f4c1f0a027d01fcbc134d858e2254f3433a2ef99b97d487`.
 
-Flutter formatting passed. Local analysis/tests are awaiting a cold dependency restore; independent review and exact-commit CI remain in progress. Hosted removal has not been executed. Do not treat historical results below as a pass for this revision.
+Flutter 3.38.5 formatting, analysis and 44 tests passed locally. Independent source review found no blocking regression or remaining active consultation feature. All seven CI jobs passed for implementation commit `4acb569fa63173e09b1255b0ff2f93498f7570d9`: Flutter, Deno, repository security, database, Android debug, unsigned iOS simulator and the bounded local codec experiment. The disposable full Supabase run passed 58 pgTAP assertions and 14 actual PostgREST checks. The repository job included the full-history secret scan. These results identify the implementation commit; later documentation commits require their own CI status.
+
+[Required checks](https://github.com/dukkanai/sudan-birds/actions/runs/42559659049), [native compilation](https://github.com/dukkanai/sudan-birds/actions/runs/42559658882), [local resource experiment](https://github.com/dukkanai/sudan-birds/actions/runs/42559659098).
+
+## Hosted removal verified, 2026-11-09
+
+The owner explicitly approved permanent removal in project `tkfhcjdxovivsrmoxpjm`, including its Supabase default `main PRODUCTION` branch label. This project is designated for staging; the label does not imply a released application. A fresh preflight again found zero affected user content and exactly six known development topic rows. No function deployment had occurred.
+
+Migration `202611090002_remove_timeline.sql`, SHA-256 `577f7cbb6e39a6934f4c1f0a027d01fcbc134d858e2254f3433a2ef99b97d487`, was executed once as an atomic batch. The batch locked migration history, required the exact two preceding versions, ran the guarded migration, registered its exact 42 source statements and committed together. No history was overwritten. A separate local synthetic test had verified exact registration and rejection of repeat execution before mutation.
+
+All 23 read-only hosted SQL assertions passed: the three retired tables, reply helper, legacy columns, old upload overload and quota settings are absent; media and upload intents require listings; all 11 remaining public tables retain RLS; client/service RPC grants and private registry restrictions are preserved. History contains the three exact versions and the 42 stored statements match the committed source. Auth users, listings and object registry remain empty. Nine bird types and five locations remain unchanged.
+
+All 12 hosted GET-only API checks passed: reference data and empty listing/media reads returned 200, the three retired table endpoints and old upload overload returned 404, and four private table endpoints returned 401. No accounts, fixture rows, secrets, uploads or writes were introduced by these API checks. These checks establish schema/API boundaries, not authenticated application or real R2 behavior.
 
 ## Read-only hosted preflight, 2026-11-09
 
@@ -21,7 +33,7 @@ Direct SQL confirmed:
 
 - Zero Auth users, listings, posts, replies and consultation-target media/upload intents.
 - Zero consultation-target reports, moderation actions and publication events.
-- Six seeded topic reference rows remain until the approved removal migration.
+- Six seeded topic reference rows remained at preflight and were subsequently removed by the approved migration above.
 - Migration history contains exactly `202611080001` and `202611090001`.
 - The Edge function list is empty. No previous function deployment was submitted before the scope change.
 
@@ -50,7 +62,7 @@ Both migrations were applied atomically and registered with their exact source s
 
 ## Local codec limits and temporary diagnostic
 
-The previous resource run passed 20/20 sequential requests for one fixed synthetic 640×640 JPEG. It retained production R2 and Auth helper imports without calling their services. Official Edge Runtime v1.69.28 used 256MiB memory supervision and its local per-worker CPU policy. Codec time was 136–180ms. Maximum sampled post-processing heap-used plus external memory was 51.9MiB; this is not a continuous peak measurement. Warm workers handled up to seven requests before expected retirement.
+The current implementation's resource run passed 20/20 sequential requests for one fixed synthetic 640×640 JPEG. It retained production R2 and Auth helper imports without calling their services. Official Edge Runtime v1.69.28 used 256MiB memory supervision and its local per-worker CPU policy. Codec time was 225–275ms. Maximum sampled post-processing heap-used plus external memory was 51.43MiB; this is not a continuous peak measurement. Warm workers handled up to four requests before expected retirement.
 
 The local CPU policy differs from hosted behavior. These results do not establish hosted capacity, real SDK network allocations, adversarial image safety or R2 integration. Media remains disabled.
 
@@ -58,7 +70,7 @@ The committed hosted diagnostic is expired and fail-closed. It accepts only its 
 
 ## Unverified or undelivered gates
 
-- New revision's complete local and exact-commit CI checks, and guarded hosted schema cleanup.
+- Deployment of the listing-only Edge functions and their hosted authenticated integration tests.
 - Connected authenticated API, Google/Apple sign-in, native callbacks and hosted moderation/deletion flows.
 - Real R2 image delivery, conditional writes, retained deletion fences, cleanup and abuse scenarios.
 - Real-device VoiceOver/TalkBack, weak-network interruption and upload recovery.

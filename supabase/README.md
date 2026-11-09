@@ -2,8 +2,12 @@
 
 The two historical migrations are immutable deployment history. The third forward
 migration removes the discontinued timeline and changes uploads to listing-only.
-This removal has not been applied to hosted staging. Local results below are not
-hosted deployment evidence. No credential is contained here.
+The removal was applied once to the owner's designated staging project on
+2026-11-09, after explicit approval of the exact project and permanent deletion.
+All 23 hosted schema/privilege checks and 12 GET-only API checks passed. See
+`../docs/verification.md` for exact migration evidence and remaining gates.
+Local functional tests do not prove hosted end-to-end behavior. No credential is
+contained here.
 
 ## Timeline removal and compatibility
 
@@ -19,8 +23,8 @@ intents require a listing. The old four-argument `reserve_upload` RPC is removed
 the new arguments are `p_listing`, `p_bytes`, `p_mime`. Old endpoints or payloads
 fail closed. The Edge reserve endpoint rejects legacy and unknown input fields,
 including a `post_id` even when null. Coordinate the database, Edge and client
-release; old clients are incompatible. No hosted cleanup or deployment is implied
-by this source change.
+release; old clients are incompatible. Hosted schema cleanup is complete; no
+Edge function or application deployment is implied by that cleanup.
 
 ## Data/API contract
 

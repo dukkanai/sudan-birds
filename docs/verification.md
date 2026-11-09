@@ -2,13 +2,35 @@
 
 This is development evidence, not release approval. Tests use synthetic data and the owner's designated staging services. A check for an older commit does not validate later changes.
 
+## Verified staging functions and build recovery, 2026-11-09
+
+Implementation commit `22012694672c567422b2c9e846835ef20d3e9bcb` passed all seven CI jobs: Flutter, Edge, repository security, database, Android debug, unsigned iOS simulator and the bounded local codec experiment. The exact commit passed 86 Flutter tests, 84 Edge tests, 58 pgTAP assertions and 173 actual caller-JWT PostgREST checks. The 57 Python harness tests comprise 31 API, 11 codec and 15 installer tests, also independently rerun. No signed mobile build or production release was delivered.
+
+[Required checks](https://github.com/dukkanai/sudan-birds/actions/runs/42568316147), [native compilation](https://github.com/dukkanai/sudan-birds/actions/runs/42568316125), [local codec experiment](https://github.com/dukkanai/sudan-birds/actions/runs/42568316114).
+
+The preceding `2c31981` jobs failed on official build-tool downloads, before database/resource tests or Android compilation could finish. Bounded retries did not resolve them. The repair installs the same official Supabase CLI 2.67.1 through its asset API, verifies its pinned size and SHA-256 before tar parsing, extracts only the regular binary, checks its exact version and installs atomically. HTTP, size, timeout, retry and extraction bounds fail closed. Gradle remains 8.14-all with its official checksum pin and download endpoint. A real local CLI download/install succeeded; focused independent security review passed. No test, credential or permission requirement was weakened.
+
+The new codec run passed 20/20 sequential fixed synthetic 640×640 JPEG requests with all reviewed R2/Auth helper imports retained. Official local Edge Runtime v1.69.28 enforced 256 MiB and its per-worker CPU policy. Codec time was 224–256 ms; maximum sampled post-processing heap-used plus external memory was 52.02 MiB, not a continuous peak. Hosted capacity, resource use with adversarial inputs and real R2 SDK allocations remain unverified.
+
+After the owner's exact-target approval and those seven passing checks, `contact`, `media`, `media-read`, `account-delete` and `lifecycle` were each deployed once to the designated staging project `tkfhcjdxovivsrmoxpjm`, whose Supabase default branch is labelled `main PRODUCTION`. Dashboard wrappers import the immutable `2201269` source, and all five **Verify JWT with legacy secret** switches were verified on. This is not a signed mobile release or approval to launch. Dashboard-resolved transitive dependencies still require release-time auditing as described in `supabase/README.md`.
+
+The custom-secrets list remains empty. `MEDIA_PIPELINE_ENABLED` is absent/default-false, and no R2 credential, diagnostic token, scheduler or new role was configured. The expired `codec-diagnostic` function was not deployed.
+
+Hosted boundary checks confirmed:
+
+- All four sensitive functions returned 401 for each of three cases: no credentials, only the public publishable key, and an invalid synthetic bearer token (12 checks).
+- `media-read` returned 401 without credentials and with an invalid bearer token. With the publishable key, it returned the expected handler errors: 400 `invalid_id` for missing input and 404 `media_not_found` for a nonexistent synthetic image ID (four checks).
+- The first no-credential `media-read` request had a transport error; its one read-only retry returned 401. The initial blanket expectation of 401 for a publishable-key media read was corrected against the endpoint's public-read contract, not treated as a protection failure or hidden.
+
+Gateway JWT verification does not itself require a signed-in user: the public application key may reach the public-read handler. User-scoped operations separately verify the account in application code; public reads use RLS. These boundary checks are not proof of valid-user sign-in, token refresh/revocation, successful protected operations or real media cleanup. No test account, user content, credential or R2 object was created. Modern signing-key compatibility must be verified before claiming authenticated hosted integration.
+
 ## Follow-up endpoint and API hardening, 2026-11-09
 
 Five application entrypoints now register testable handlers. Strict field/action checks, complete storage configuration before reservations, validation before privileged client construction, returned deletion-job ownership checks and bounded JSON stream failures are covered by 84 passing local Deno tests. The 37 new endpoint tests use the actual Supabase SDK and authentication/RPC adapters with a synthetic transport; no network or real credentials are involved. An independent rerun passed all 84 tests. Formatting, lint and all six entrypoint type checks also passed.
 
 The disposable-loopback PostgREST harness now exercises synthetic caller JWTs for CRUD ownership, terms gating, price constraints, bilateral blocks, contact consent, private reports, moderator operations, search/pagination and invalid/expired tokens. Its 31 offline boundary tests passed, including an independent rerun. Commit `d1b80b6332bbe489b25adea57e3bbdd0829bb32f` then passed all 173 live assertions and 58 pgTAP assertions in the [full disposable Supabase CI stack](https://github.com/dukkanai/sudan-birds/actions/runs/42565327769). This is not a GoTrue sign-in, refresh, revocation or hosted integration test. The unchanged schema separately passed 100 PostgreSQL assertions again.
 
-The codec experiment for that commit stopped before image processing: its import preflight still expected five R2 function exports after the configuration helper made six. The harness now retains all six R2 and seven Auth functions, checks the updated marker, and has a reviewed-export regression. All 11 harness tests passed locally and independently. Token, JWT, loopback, resource limits and twenty-request bounds were not relaxed. The resource experiment must pass again on the final commit; the failed preflight is not a codec capacity result.
+The codec experiment for that commit stopped before image processing: its import preflight still expected five R2 function exports after the configuration helper made six. The harness now retains all six R2 and seven Auth functions, checks the updated marker, and has a reviewed-export regression. All 11 harness tests passed locally and independently. Token, JWT, loopback, resource limits and twenty-request bounds were not relaxed. That failed preflight is not a codec capacity result; the later exact-commit resource result is recorded above.
 
 No hosted function, diagnostic credential, storage key or production deployment is implied by these local changes. Media remains disabled. Historical baseline counts below apply only to their named commits.
 
@@ -26,7 +48,7 @@ These are local widget/repository tests. Final-commit [CI results](https://githu
 
 The requested scope is now requests and offers only. Application, backend, fixtures, active documentation and seed data were updated together. The first two already-applied migrations remain immutable; a third forward migration removes the retired tables and rewrites shared listing security. It fails if affected user data remains, and preserves populated listings and their media, moderation and account-deletion safeguards.
 
-Current local checks:
+At that baseline, local checks were:
 
 - PostgreSQL 17.6: 100/100 assertions passed, including a populated-listing upgrade, empty fresh install, rollback guards, listing ownership, blocking, quotas/concurrency, media races, reports and account deletion.
 - Deno 2.5.6: 47 tests passed, plus formatting, lint and all six endpoint type checks. npm audit reported zero known vulnerabilities.
@@ -90,7 +112,7 @@ The committed hosted diagnostic is expired and fail-closed. It accepts only its 
 
 ## Unverified or undelivered gates
 
-- Deployment of the listing-only Edge functions and their hosted authenticated integration tests.
+- Valid-user integration of the deployed listing-only Edge functions, including signing-key compatibility.
 - Connected authenticated API, Google/Apple sign-in, native callbacks and hosted moderation/deletion flows.
 - Real R2 image delivery, conditional writes, retained deletion fences, cleanup and abuse scenarios.
 - Real-device VoiceOver/TalkBack, weak-network interruption and upload recovery.

@@ -86,8 +86,10 @@ unknown commit outcome, orphan cleanup and signed URL expiry during deletion.
 ### Signed-out image browsing
 
 POST `media-read` with `{media_id}` serves verified public images without an account
-through the anon-key/RLS client, not a service client. Its gateway JWT check is off
-because anonymous browsing is intentional. No Authorization header, or the exact
+through the anon-key/RLS client, not a service client. Its repository gateway JWT
+setting is off because anonymous browsing is intentional. The latest hosted
+observation still had the legacy gateway on; the approved five-function correction
+is pending as recorded in `README.md`. No Authorization header, or the exact
 configured public/anon key, uses anon RLS. Any other bearer token must pass Auth.getUser
 for this project and retains the authenticated user's blocks. Invalid/expired/foreign
 user tokens fail; they never silently downgrade to anon. This endpoint has no upload,

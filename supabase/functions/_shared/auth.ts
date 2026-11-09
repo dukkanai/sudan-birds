@@ -1,5 +1,5 @@
 import { createClient } from "npm:@supabase/supabase-js@2.57.4";
-import { ApiError } from "./http.ts";
+import { ApiError, uuid } from "./http.ts";
 export interface AuthRuntime {
   getEnv: (name: string) => string | undefined;
   createClient: typeof createClient;
@@ -22,9 +22,19 @@ export async function authenticated(req: Request, deps: AuthRuntime = runtime) {
       auth: { persistSession: false, autoRefreshToken: false },
     },
   );
-  const { data, error } = await client.auth.getUser(authorization.slice(7));
-  if (error || !data.user) throw new ApiError(401, "invalid_session");
-  return { client, user: data.user, token: authorization.slice(7) };
+  const token = authorization.slice(7);
+  try {
+    const { data, error } = await client.auth.getUser(token);
+    const user = data?.user;
+    // The SDK can normalize malformed HTTP 200 bodies into a truthy "user".
+    // Require an Auth-returned identity, never decode caller claims to replace it.
+    if (error || !user || typeof user !== "object" || Array.isArray(user)) throw new Error();
+    uuid(user.id);
+    return { client, user, token };
+  } catch {
+    // Includes Auth denial, SDK response decoding errors and invalid identities.
+    throw new ApiError(401, "invalid_session");
+  }
 }
 
 // Never reuse caller Authorization headers on this client. Every exposed service

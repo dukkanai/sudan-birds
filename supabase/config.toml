@@ -7,17 +7,22 @@ max_rows = 100
 [db]
 major_version = 17
 [functions.media]
-verify_jwt = true
+# Modern signing keys: Auth.getUser verifies callers in the handler; queries retain RLS.
+verify_jwt = false
 [functions.contact]
-verify_jwt = true
+# Auth.getUser verifies callers before the caller-scoped contact RPC.
+verify_jwt = false
 [db.seed]
 enabled = true
 sql_paths = ["./seed.sql"]
 [functions.account-delete]
-verify_jwt = true
+# Auth.getUser and recent-session checks precede owner-bound service operations.
+verify_jwt = false
 [functions.lifecycle]
-verify_jwt = true
+# Auth.getUser + caller-RLS admin check, or the separately configured scoped job secret.
+verify_jwt = false
 [functions.codec-diagnostic]
+# Separate expired diagnostic: not approved for deployment or gateway changes.
 verify_jwt = true
 [functions.media-read]
 # Public verified images; handler validates any supplied user JWT independently.

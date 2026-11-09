@@ -4,9 +4,29 @@ from pathlib import Path
 import re
 import hashlib
 import sys
+import tomllib
 
 ROOT = Path(__file__).resolve().parents[1]
 failures = []
+# Only these reviewed application handlers replace the legacy-secret gateway
+# with Auth.getUser and caller RLS (media-read also permits anonymous RLS reads).
+# The expired diagnostic keeps its separate gateway boundary and stays undeployed.
+expected_gateway = {
+    "contact": False,
+    "media": False,
+    "media-read": False,
+    "account-delete": False,
+    "lifecycle": False,
+    "codec-diagnostic": True,
+}
+try:
+    functions = tomllib.loads((ROOT / "supabase/config.toml").read_text()).get("functions", {})
+    if (functions.keys() != expected_gateway.keys()
+            or any(functions[name].get("verify_jwt") is not expected
+                   for name, expected in expected_gateway.items())):
+        failures.append("Edge gateway settings differ from the reviewed application/diagnostic boundary")
+except (tomllib.TOMLDecodeError, AttributeError, TypeError):
+    failures.append("Edge gateway configuration cannot be verified")
 # Official Gradle 8.14 distribution checksum, verified from
 # https://services.gradle.org/distributions/gradle-8.14-all.zip.sha256
 wrapper = (ROOT / "app/android/gradle/wrapper/gradle-wrapper.properties").read_text()

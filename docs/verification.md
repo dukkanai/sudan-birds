@@ -2,6 +2,51 @@
 
 This is development evidence, not release approval. Tests use synthetic data and the owner's designated staging services. A check for an older commit does not validate later changes.
 
+## Approved modern JWT gateway compatibility, 2026-11-09
+
+Read-only inspection of the designated staging project's JWT signing keys found
+current ECC P-256 and previous HS256; its public JWKS advertised ES256. Modern
+signing-key tokens conflict with the enabled **Verify JWT with legacy secret**
+gateway. The owner explicitly approved turning that gateway check off for only
+`contact`, `media`, `media-read`, `account-delete` and `lifecycle`, while preserving
+handler authentication, RLS, public image reads and disabled uploads.
+
+`supabase/config.toml` now records the approved five-function target. The latest
+recorded hosted observation remains all five switches on, and applying/verifying
+the hosted change is pending. `codec-diagnostic` remains undeployed with
+`verify_jwt=true`. No credential, account, schedule, storage object or hosted
+setting is created or changed by this repository patch. The historical deployment
+record below remains evidence of what was actually observed at that time.
+
+The shared Auth adapter now validates the SDK-returned user object and UUID before
+any protected work, mapping malformed identity/normalization failures to the same
+safe `401 invalid_session` response as Auth denial. This fixes a defense-in-depth
+gap found during testing: the SDK normalizes HTTP 200 `{user:null}` to a truthy
+response object. No decoded caller claim substitutes for the verified identity.
+All five hosted wrappers must be repinned to the newly checked immutable source
+containing this guard before the approved gateway switch changes.
+
+New direct-handler regressions bypass the gateway and use the actual Supabase SDK
+with synthetic Auth/PostgREST transport. They cover forged, expired, wrong-issuer
+and malformed ES256-shaped claims; public/secret API credentials; Auth rejection
+before all protected effects; exact caller-token RLS forwarding; Auth-derived
+privileged ownership; recent-session subject matching; lifecycle admin checks;
+anonymous media visibility; and no fallback after failed user Auth or RLS reads.
+They also exercise malformed HTTP 200 Auth responses (`{user:null}`, empty objects,
+non-object bodies and invalid UUIDs) and valid flat/wrapped Auth user responses
+through the SDK, rather than assuming its normalization behavior.
+Media mutation enablement remains off. The repository policy parses TOML to allow
+exactly the five approved disabled gateway checks and the unchanged diagnostic.
+
+These tokens have no valid signatures. An allowlisted synthetic Auth response is
+not evidence of hosted signature verification or real modern-token acceptance.
+Working-tree checks for this patch over `6a0135c3cc53db6fb3b35f1cf482ed6e0049b563`
+passed all 97 Deno tests (13 new gateway/Auth tests), formatting, lint, six entrypoint
+type checks, all 57 Python harness tests, Python compilation and repository policy
+checks. These are local results, not final-commit CI evidence or hosted acceptance.
+Actual sign-in, refresh/revocation, cross-user RLS and protected-operation checks
+remain required after the approved hosted settings change.
+
 ## Verified staging functions and build recovery, 2026-11-09
 
 Implementation commit `22012694672c567422b2c9e846835ef20d3e9bcb` passed all seven CI jobs: Flutter, Edge, repository security, database, Android debug, unsigned iOS simulator and the bounded local codec experiment. The exact commit passed 86 Flutter tests, 84 Edge tests, 58 pgTAP assertions and 173 actual caller-JWT PostgREST checks. The 57 Python harness tests comprise 31 API, 11 codec and 15 installer tests, also independently rerun. No signed mobile build or production release was delivered.

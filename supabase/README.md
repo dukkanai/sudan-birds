@@ -63,12 +63,46 @@ Edge function or application deployment is implied by that cleanup.
 
 ## Edge boundaries
 
-`contact`, `media`, `media-read`, `account-delete` and `lifecycle` accept POST JSON only. They validate the user using Auth,
-retain the caller's RLS context, bound JSON bodies to 8 KiB, return safe error codes
-and never log request headers, JWTs, contact details, signed URLs or arbitrary errors.
+`contact`, `media`, `media-read`, `account-delete` and `lifecycle` accept POST JSON only.
+Protected callers must pass Supabase `Auth.getUser` verification before any database,
+service-client or storage operation. Caller-scoped queries retain that exact bearer
+token and public API key for RLS; privileged operations derive ownership from the
+verified Auth user, never unverified JWT claims or request JSON. A malformed Auth
+response, missing identity or invalid UUID fails as `401 invalid_session`, including
+malformed HTTP 200 bodies that the SDK can normalize into a truthy user. `lifecycle` also
+requires its caller-RLS admin check, unless a separately configured, scoped job
+credential authorizes the scheduled path. No such credential or schedule is enabled.
+`media-read` allows anonymous RLS reads with no bearer or a configured public key;
+any supplied user token must pass Auth verification, with no anonymous fallback.
+All five bound JSON bodies to 8 KiB, return safe error codes and never log request
+headers, JWTs, contact details, signed URLs or arbitrary errors.
 The outer try/catch is an API boundary, not a replacement for validation or tests.
 Database constraint errors intentionally abort their transaction; swallowing SQL
 exceptions would weaken the security controls.
+
+### Modern signing keys and gateway deployment settings
+
+The approved configuration in `config.toml` sets `verify_jwt=false` for exactly
+those five application functions. Supabase's **Verify JWT with legacy secret**
+gateway rejects modern asymmetric signing-key tokens; disabling that legacy check
+does not disable the handler's `Auth.getUser` verification or database RLS.
+The expired, undeployed `codec-diagnostic` retains `verify_jwt=true` and is outside
+this approval. Keep `MEDIA_PIPELINE_ENABLED` absent or `false`.
+
+At the latest recorded hosted observation, all five dashboard switches were still
+on. Read-only signing-key inspection found current ECC P-256, previous HS256 and an
+ES256 public JWKS. The owner approved turning the five legacy switches off after
+local checks; applying and verifying that hosted change is pending. Repository
+configuration is the approved target, not evidence of hosted settings. Redeploy
+all five wrappers pinned to the newly verified SHA containing the Auth identity
+guard before disabling the switches; never use a moving source branch. Do not deploy the diagnostic, generate
+credentials, configure a scheduler or enable uploads as part of this adjustment.
+
+After the authorized change, record the exact hosted settings and rerun anonymous,
+public-key, forged/expired-token and actual signed-in user boundaries. Local SDK
+transport tests use unsigned synthetic ES256-shaped strings and configured Auth
+responses, so they prove handler ordering and identity propagation, not real
+signature validation, modern GoTrue issuance/refresh/revocation or hosted RLS.
 
 ## Verified media and self-account deletion
 

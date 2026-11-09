@@ -15,6 +15,28 @@ No workflow in this foundation publishes to an app store or deploys production. 
 
 The placeholder `beta.yml` and `release.yml` intentionally fail with these instructions. They cannot be used to imply a delivered signed build.
 
+### Application Edge gateway compatibility
+
+Use `supabase/config.toml` as the reviewed deployment target: `verify_jwt=false`
+for `contact`, `media`, `media-read`, `account-delete` and `lifecycle`, while
+`codec-diagnostic` remains `true` and undeployed. The owner approved disabling only
+these five legacy-secret gateway checks for modern signing-key compatibility.
+The latest recorded dashboard observation still had all five on; hosted application
+of the approved change and its verification are pending, not implied by this file.
+First redeploy all five wrappers pinned to the same newly checked immutable SHA
+containing the Auth response identity guard, then change the five approved switches.
+
+Protected requests must still pass `Auth.getUser`, caller-RLS authorization and any
+endpoint-specific consent, role or recent-session checks before protected effects.
+Malformed Auth success bodies must fail without a valid Auth-returned UUID identity.
+Public image reads remain anonymous-RLS reads unless a user token is supplied; an
+invalid user token must fail, never downgrade to anonymous. Keep upload enablement
+off and do not create diagnostic/scheduler credentials or change RLS in this step.
+After changing the approved staging settings, verify each switch and exercise real
+modern-token sign-in, expiry/revocation and wrong-user/RLS cases on the exact source.
+Synthetic SDK transport regressions are not hosted cryptographic proof. Neither
+this approval nor passing local tests authorizes a production release.
+
 ### Staging mobile OAuth callback (client implementation only)
 
 The only supported mobile callback in this source is `dev.sudanbirds.staging://auth/callback`, configured with `AUTH_REDIRECT_URL`. Android registers that exact scheme, host and path; iOS registers the staging scheme. Dart rejects unrelated routes, fragments/implicit tokens, duplicate codes and arbitrary redirect configuration. Supabase Auth uses explicit PKCE. Flutter's competing default deep-link router is disabled so the `app_links`-based Supabase handler receives callbacks.

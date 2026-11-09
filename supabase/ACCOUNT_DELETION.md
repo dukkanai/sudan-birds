@@ -68,10 +68,13 @@ approval step, not covered by source implementation. The reviewed setup outline 
 
 After approval, place the same high-entropy base64url secret (minimum43characters)
 in the Edge environment and Supabase Vault, and store the exact staging lifecycle
-URL in Vault. Install/enable pg_cron and pg_net only if approved and absent. Deploy
-ONLY lifecycle with gateway JWT verification disabled for this opaque job credential;
-its handler independently requires either Auth-verified admin identity or the scoped
-constant-time job header. Normal user endpoints retain gateway JWT verification.
+URL in Vault. Install/enable pg_cron and pg_net only if approved and absent. The
+approved application gateway configuration in `README.md` disables the legacy
+JWT check for all five application functions, including lifecycle; the hosted change
+is still pending. Lifecycle independently requires either Auth-verified identity
+plus its caller-RLS admin check, or the scoped constant-time job header. Turning
+off the legacy gateway does not configure or authorize a scheduler. The separate
+undeployed diagnostic retains its gateway check.
 
 A once-per-minute job sends only `{action:"scheduled"}`. It claims one due deletion
 with a two-minute retry lease, processing at most3objects, or handles one small orphan

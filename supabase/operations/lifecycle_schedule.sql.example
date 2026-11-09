@@ -8,10 +8,12 @@
 --    LIFECYCLE_JOB_SECRET and as a Vault secret named birds_lifecycle_job_secret.
 -- 2. Vault secret birds_lifecycle_url contains the exact HTTPS staging function
 --    URL https://<PROJECT_REF>.supabase.co/functions/v1/lifecycle.
--- 3. The lifecycle function alone is deployed with verify_jwt=false because an
---    opaque job header is NOT a user JWT. Its handler STILL verifies admin callers
---    with Auth.getUser or the dedicated constant-time scoped job credential.
---    Every other function keeps verify_jwt=true. No public unauthenticated work.
+-- 3. Verify lifecycle's approved verify_jwt=false deployment setting, as documented
+--    in ../README.md for all five application functions (hosted change pending).
+--    Its handler STILL requires Auth.getUser + caller-RLS admin authorization, or
+--    the dedicated constant-time scoped job credential. The opaque job header is
+--    not a user JWT. Diagnostic gateway settings stay unchanged. Disabling the
+--    legacy gateway alone never configures or authorizes scheduled work.
 -- 4. Confirm pg_cron and pg_net already exist; extension installation is separate.
 -- 5. Run a signed synthetic job and prove retry/cleanup behavior before scheduling.
 --

@@ -8,7 +8,7 @@ const {default: EmbeddedPostgres} = await import(process.env.EMBEDDED_POSTGRES_M
 const dir = await mkdtemp(join(tmpdir(), 'birds-helper-'));
 const pg = new EmbeddedPostgres({databaseDir:join(dir,'data'), user:'postgres', password:'synthetic-test-only', port:15440, persistent:false, createPostgresUser:false, initdbFlags:['--encoding=UTF8'], postgresFlags:['-c','unix_socket_directories='], onLog:()=>{}, onError:console.error});
 let client; let passed=0;
-const migration = await readFile(new URL('../migrations/202611090003_harden_rls_auto_enable.sql', import.meta.url),'utf8');
+const migration = await readFile(new URL('../migrations/20261109142454_harden_rls_auto_enable.sql', import.meta.url),'utf8');
 const q = (sql, params) => client.query(sql, params);
 async function check(label, fn) { await fn(); console.log(`ok ${++passed} - ${label}`); }
 async function rejectedMigration() { await assert.rejects(q(migration), e=>e.code==='55000'); await q('rollback'); }

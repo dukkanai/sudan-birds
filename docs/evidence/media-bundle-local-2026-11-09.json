@@ -1,0 +1,5364 @@
+{
+  "date": "2026-11-09",
+  "base_commit": "0d194ece82e91770ea73267a70b96d0fa07ebdf8",
+  "scope": "Ordinary local Deno, synthetic in-memory transport/storage. Not Supabase isolate, S3 construction/signing, or hosted R2 evidence.",
+  "source_sha256": {
+    "scripts/media_bundle_resource.ts": "6804cc2f76697f2302425d8b2ca9f190f0cbdc70dd69845df8ecef25beefda47",
+    "scripts/media_bundle_resource.sh": "731c55d4228e3f40b07c2d5d30639cc02c757464a3a0528d9f43689327aa1337",
+    "scripts/media_bundle_resource_test.ts": "2f0bfc04228b640a36175ed57923302c1e8d344e8b0aaf71d07abb7db7f71218",
+    "supabase/functions/media/handler.ts": "f38333831e050374fb41cfc37cefd6d15556801e7ea089611a3aeaf8684f99e0",
+    "supabase/functions/_shared/auth.ts": "c26065fee78084dfa7da37888074c1d74d3525c4c8045a9c51a1cb4bc1e81b3d",
+    "supabase/functions/_shared/r2.ts": "d79ce77751001bcc440bc68b37446a0f351e6a374da4595ef60c2b97ba5ee46d",
+    "supabase/functions/_shared/codec_capacity.ts": "949968cb02c2d544c0e58cff6b5d366cade1424536fe69bdee88166acf44f155",
+    "supabase/functions/_shared/images.ts": "90277e840caa1952f94b08ae47428f8d2fa211ab69120dc3a9561dc9ca2d6d85",
+    "supabase/functions/package-lock.json": "e6993502583a43b07e98912a6bb15c13a2b76db547b5aaf5aa2102560de292e8"
+  },
+  "runs": [
+    {
+      "run_id": "media-bundle-sequential-final-1",
+      "scenario": "sequential",
+      "experiment": "local_full_media_handler_bundle",
+      "runtime": {
+        "deno": "2.5.6",
+        "v8": "14.0.365.5-rusty",
+        "typescript": "5.9.2"
+      },
+      "proof_scope": "ordinary Deno process, NOT Supabase Edge isolate or hosted R2 proof",
+      "limits": {
+        "max_requests": 64,
+        "max_samples": 768,
+        "deadline_ms": 90000
+      },
+      "dependency_pins": {
+        "supabase": "2.57.4",
+        "s3": "3.1164.0",
+        "presigner": "3.1164.0",
+        "jpeg": "0.4.4"
+      },
+      "fixture": {
+        "width": 640,
+        "height": 640,
+        "bytes": 571931,
+        "output_bytes": 571691,
+        "sha256": "013be178fb8a412c89c511c9154327fbabf278bfb97a2fb594bc70ce2e148a95"
+      },
+      "synthetic_transport": true,
+      "network_calls": 0,
+      "forced_gc": false,
+      "capacity_metrics": "actual Deno.memoryUsage",
+      "inter_request_pause_ms": 0,
+      "transport_delay_ms": 0,
+      "idle_recovery": {
+        "idle_ms": 2000,
+        "status": 503,
+        "code": "image_verifier_busy"
+      },
+      "duration_ms": 2947,
+      "requests": 21,
+      "sequential": {
+        "completed": 4,
+        "capacity_rejected": 16
+      },
+      "capacity_boundary_cases": [
+        {
+          "name": "heap_exact",
+          "allowed": true
+        },
+        {
+          "name": "heap_over",
+          "allowed": false
+        },
+        {
+          "name": "external_exact",
+          "allowed": true
+        },
+        {
+          "name": "external_over",
+          "allowed": false
+        },
+        {
+          "name": "combined_exact",
+          "allowed": true
+        },
+        {
+          "name": "combined_over",
+          "allowed": false
+        },
+        {
+          "name": "nan_heap",
+          "allowed": false
+        },
+        {
+          "name": "infinite_external",
+          "allowed": false
+        }
+      ],
+      "max_sample_heap_external_bytes": 144934758,
+      "max_sample_rss_bytes": 264462336,
+      "counters": {
+        "auth": 21,
+        "prepare": 4,
+        "download": 4,
+        "write": 4,
+        "commit": 4,
+        "remove": 0
+      },
+      "results": [
+        {
+          "name": "sequential_1",
+          "status": 200,
+          "elapsed_ms": 244.67,
+          "effects": {
+            "auth": 1,
+            "prepare": 1,
+            "download": 1,
+            "write": 1,
+            "commit": 1,
+            "remove": 0
+          }
+        },
+        {
+          "name": "sequential_2",
+          "status": 200,
+          "elapsed_ms": 225.34,
+          "effects": {
+            "auth": 1,
+            "prepare": 1,
+            "download": 1,
+            "write": 1,
+            "commit": 1,
+            "remove": 0
+          }
+        },
+        {
+          "name": "sequential_3",
+          "status": 200,
+          "elapsed_ms": 178.14,
+          "effects": {
+            "auth": 1,
+            "prepare": 1,
+            "download": 1,
+            "write": 1,
+            "commit": 1,
+            "remove": 0
+          }
+        },
+        {
+          "name": "sequential_4",
+          "status": 200,
+          "elapsed_ms": 162.21,
+          "effects": {
+            "auth": 1,
+            "prepare": 1,
+            "download": 1,
+            "write": 1,
+            "commit": 1,
+            "remove": 0
+          }
+        },
+        {
+          "name": "sequential_5",
+          "status": 503,
+          "code": "image_verifier_busy",
+          "elapsed_ms": 1.54,
+          "effects": {
+            "auth": 1,
+            "prepare": 0,
+            "download": 0,
+            "write": 0,
+            "commit": 0,
+            "remove": 0
+          }
+        },
+        {
+          "name": "sequential_6",
+          "status": 503,
+          "code": "image_verifier_busy",
+          "elapsed_ms": 0.73,
+          "effects": {
+            "auth": 1,
+            "prepare": 0,
+            "download": 0,
+            "write": 0,
+            "commit": 0,
+            "remove": 0
+          }
+        },
+        {
+          "name": "sequential_7",
+          "status": 503,
+          "code": "image_verifier_busy",
+          "elapsed_ms": 1.04,
+          "effects": {
+            "auth": 1,
+            "prepare": 0,
+            "download": 0,
+            "write": 0,
+            "commit": 0,
+            "remove": 0
+          }
+        },
+        {
+          "name": "sequential_8",
+          "status": 503,
+          "code": "image_verifier_busy",
+          "elapsed_ms": 0.73,
+          "effects": {
+            "auth": 1,
+            "prepare": 0,
+            "download": 0,
+            "write": 0,
+            "commit": 0,
+            "remove": 0
+          }
+        },
+        {
+          "name": "sequential_9",
+          "status": 503,
+          "code": "image_verifier_busy",
+          "elapsed_ms": 0.58,
+          "effects": {
+            "auth": 1,
+            "prepare": 0,
+            "download": 0,
+            "write": 0,
+            "commit": 0,
+            "remove": 0
+          }
+        },
+        {
+          "name": "sequential_10",
+          "status": 503,
+          "code": "image_verifier_busy",
+          "elapsed_ms": 0.65,
+          "effects": {
+            "auth": 1,
+            "prepare": 0,
+            "download": 0,
+            "write": 0,
+            "commit": 0,
+            "remove": 0
+          }
+        },
+        {
+          "name": "sequential_11",
+          "status": 503,
+          "code": "image_verifier_busy",
+          "elapsed_ms": 0.59,
+          "effects": {
+            "auth": 1,
+            "prepare": 0,
+            "download": 0,
+            "write": 0,
+            "commit": 0,
+            "remove": 0
+          }
+        },
+        {
+          "name": "sequential_12",
+          "status": 503,
+          "code": "image_verifier_busy",
+          "elapsed_ms": 0.32,
+          "effects": {
+            "auth": 1,
+            "prepare": 0,
+            "download": 0,
+            "write": 0,
+            "commit": 0,
+            "remove": 0
+          }
+        },
+        {
+          "name": "sequential_13",
+          "status": 503,
+          "code": "image_verifier_busy",
+          "elapsed_ms": 0.35,
+          "effects": {
+            "auth": 1,
+            "prepare": 0,
+            "download": 0,
+            "write": 0,
+            "commit": 0,
+            "remove": 0
+          }
+        },
+        {
+          "name": "sequential_14",
+          "status": 503,
+          "code": "image_verifier_busy",
+          "elapsed_ms": 0.45,
+          "effects": {
+            "auth": 1,
+            "prepare": 0,
+            "download": 0,
+            "write": 0,
+            "commit": 0,
+            "remove": 0
+          }
+        },
+        {
+          "name": "sequential_15",
+          "status": 503,
+          "code": "image_verifier_busy",
+          "elapsed_ms": 0.35,
+          "effects": {
+            "auth": 1,
+            "prepare": 0,
+            "download": 0,
+            "write": 0,
+            "commit": 0,
+            "remove": 0
+          }
+        },
+        {
+          "name": "sequential_16",
+          "status": 503,
+          "code": "image_verifier_busy",
+          "elapsed_ms": 0.3,
+          "effects": {
+            "auth": 1,
+            "prepare": 0,
+            "download": 0,
+            "write": 0,
+            "commit": 0,
+            "remove": 0
+          }
+        },
+        {
+          "name": "sequential_17",
+          "status": 503,
+          "code": "image_verifier_busy",
+          "elapsed_ms": 0.3,
+          "effects": {
+            "auth": 1,
+            "prepare": 0,
+            "download": 0,
+            "write": 0,
+            "commit": 0,
+            "remove": 0
+          }
+        },
+        {
+          "name": "sequential_18",
+          "status": 503,
+          "code": "image_verifier_busy",
+          "elapsed_ms": 0.25,
+          "effects": {
+            "auth": 1,
+            "prepare": 0,
+            "download": 0,
+            "write": 0,
+            "commit": 0,
+            "remove": 0
+          }
+        },
+        {
+          "name": "sequential_19",
+          "status": 503,
+          "code": "image_verifier_busy",
+          "elapsed_ms": 0.3,
+          "effects": {
+            "auth": 1,
+            "prepare": 0,
+            "download": 0,
+            "write": 0,
+            "commit": 0,
+            "remove": 0
+          }
+        },
+        {
+          "name": "sequential_20",
+          "status": 503,
+          "code": "image_verifier_busy",
+          "elapsed_ms": 0.27,
+          "effects": {
+            "auth": 1,
+            "prepare": 0,
+            "download": 0,
+            "write": 0,
+            "commit": 0,
+            "remove": 0
+          }
+        },
+        {
+          "name": "after_two_second_idle",
+          "status": 503,
+          "code": "image_verifier_busy",
+          "elapsed_ms": 0.85,
+          "effects": {
+            "auth": 1,
+            "prepare": 0,
+            "download": 0,
+            "write": 0,
+            "commit": 0,
+            "remove": 0
+          }
+        }
+      ],
+      "samples": [
+        {
+          "phase": "before_imports",
+          "rss": 60981248,
+          "heapUsed": 6454504,
+          "external": 3189261
+        },
+        {
+          "phase": "after_full_imports",
+          "rss": 82817024,
+          "heapUsed": 16107568,
+          "external": 3209564
+        },
+        {
+          "phase": "after_fixture",
+          "rss": 121155584,
+          "heapUsed": 34113624,
+          "external": 4353458
+        },
+        {
+          "phase": "capacity_1",
+          "rss": 121819136,
+          "heapUsed": 34432016,
+          "external": 4353602
+        },
+        {
+          "phase": "prepare",
+          "rss": 121856000,
+          "heapUsed": 34569192,
+          "external": 4353602
+        },
+        {
+          "phase": "capacity_2",
+          "rss": 121864192,
+          "heapUsed": 34582520,
+          "external": 4925533
+        },
+        {
+          "phase": "after_codec_before_write",
+          "rss": 162279424,
+          "heapUsed": 60036056,
+          "external": 7135240
+        },
+        {
+          "phase": "response_sequential_1",
+          "rss": 162283520,
+          "heapUsed": 60138288,
+          "external": 7135240
+        },
+        {
+          "phase": "capacity_1",
+          "rss": 162299904,
+          "heapUsed": 60253080,
+          "external": 7135384
+        },
+        {
+          "phase": "prepare",
+          "rss": 162304000,
+          "heapUsed": 60354184,
+          "external": 7135384
+        },
+        {
+          "phase": "capacity_2",
+          "rss": 162373632,
+          "heapUsed": 60807384,
+          "external": 7707315
+        },
+        {
+          "phase": "after_codec_before_write",
+          "rss": 205901824,
+          "heapUsed": 72519776,
+          "external": 9917502
+        },
+        {
+          "phase": "response_sequential_2",
+          "rss": 205967360,
+          "heapUsed": 72586576,
+          "external": 9917502
+        },
+        {
+          "phase": "capacity_1",
+          "rss": 206053376,
+          "heapUsed": 72683816,
+          "external": 9917646
+        },
+        {
+          "phase": "prepare",
+          "rss": 206147584,
+          "heapUsed": 72786960,
+          "external": 9917646
+        },
+        {
+          "phase": "capacity_2",
+          "rss": 206155776,
+          "heapUsed": 72799336,
+          "external": 10489577
+        },
+        {
+          "phase": "after_codec_before_write",
+          "rss": 239734784,
+          "heapUsed": 82653952,
+          "external": 9917502
+        },
+        {
+          "phase": "response_sequential_3",
+          "rss": 239742976,
+          "heapUsed": 82727224,
+          "external": 9917502
+        },
+        {
+          "phase": "capacity_1",
+          "rss": 239742976,
+          "heapUsed": 82799752,
+          "external": 9917646
+        },
+        {
+          "phase": "prepare",
+          "rss": 239742976,
+          "heapUsed": 82889048,
+          "external": 9917646
+        },
+        {
+          "phase": "capacity_2",
+          "rss": 239742976,
+          "heapUsed": 82895888,
+          "external": 10489577
+        },
+        {
+          "phase": "after_codec_before_write",
+          "rss": 263925760,
+          "heapUsed": 122072008,
+          "external": 21217974
+        },
+        {
+          "phase": "response_sequential_4",
+          "rss": 263925760,
+          "heapUsed": 122139416,
+          "external": 21217974
+        },
+        {
+          "phase": "capacity_1",
+          "rss": 264003584,
+          "heapUsed": 122288864,
+          "external": 21218118
+        },
+        {
+          "phase": "response_sequential_5",
+          "rss": 264007680,
+          "heapUsed": 122556832,
+          "external": 21218118
+        },
+        {
+          "phase": "capacity_1",
+          "rss": 264019968,
+          "heapUsed": 122386048,
+          "external": 21218262
+        },
+        {
+          "phase": "response_sequential_6",
+          "rss": 264019968,
+          "heapUsed": 122393544,
+          "external": 21218262
+        },
+        {
+          "phase": "capacity_1",
+          "rss": 264044544,
+          "heapUsed": 122485992,
+          "external": 21218406
+        },
+        {
+          "phase": "response_sequential_7",
+          "rss": 264044544,
+          "heapUsed": 122496632,
+          "external": 21218406
+        },
+        {
+          "phase": "capacity_1",
+          "rss": 264048640,
+          "heapUsed": 122570240,
+          "external": 21218550
+        },
+        {
+          "phase": "response_sequential_8",
+          "rss": 264048640,
+          "heapUsed": 122577768,
+          "external": 21218550
+        },
+        {
+          "phase": "capacity_1",
+          "rss": 264073216,
+          "heapUsed": 122753728,
+          "external": 21218694
+        },
+        {
+          "phase": "response_sequential_9",
+          "rss": 264097792,
+          "heapUsed": 122894872,
+          "external": 21218694
+        },
+        {
+          "phase": "capacity_1",
+          "rss": 264130560,
+          "heapUsed": 122812680,
+          "external": 21218838
+        },
+        {
+          "phase": "response_sequential_10",
+          "rss": 264130560,
+          "heapUsed": 122820360,
+          "external": 21218838
+        },
+        {
+          "phase": "capacity_1",
+          "rss": 264134656,
+          "heapUsed": 123053120,
+          "external": 21218982
+        },
+        {
+          "phase": "response_sequential_11",
+          "rss": 264142848,
+          "heapUsed": 122909072,
+          "external": 21218982
+        },
+        {
+          "phase": "capacity_1",
+          "rss": 264142848,
+          "heapUsed": 122980840,
+          "external": 21219126
+        },
+        {
+          "phase": "response_sequential_12",
+          "rss": 264142848,
+          "heapUsed": 122988440,
+          "external": 21219126
+        },
+        {
+          "phase": "capacity_1",
+          "rss": 264142848,
+          "heapUsed": 123060296,
+          "external": 21219270
+        },
+        {
+          "phase": "response_sequential_13",
+          "rss": 264142848,
+          "heapUsed": 123069320,
+          "external": 21219270
+        },
+        {
+          "phase": "capacity_1",
+          "rss": 264142848,
+          "heapUsed": 123140696,
+          "external": 21219414
+        },
+        {
+          "phase": "response_sequential_14",
+          "rss": 264142848,
+          "heapUsed": 123148144,
+          "external": 21219414
+        },
+        {
+          "phase": "capacity_1",
+          "rss": 264142848,
+          "heapUsed": 123220920,
+          "external": 21219558
+        },
+        {
+          "phase": "response_sequential_15",
+          "rss": 264142848,
+          "heapUsed": 123228976,
+          "external": 21219558
+        },
+        {
+          "phase": "capacity_1",
+          "rss": 264151040,
+          "heapUsed": 123307416,
+          "external": 21219702
+        },
+        {
+          "phase": "response_sequential_16",
+          "rss": 264151040,
+          "heapUsed": 123314800,
+          "external": 21219702
+        },
+        {
+          "phase": "capacity_1",
+          "rss": 264151040,
+          "heapUsed": 123385960,
+          "external": 21219846
+        },
+        {
+          "phase": "response_sequential_17",
+          "rss": 264151040,
+          "heapUsed": 123393344,
+          "external": 21219846
+        },
+        {
+          "phase": "capacity_1",
+          "rss": 264155136,
+          "heapUsed": 123464672,
+          "external": 21219990
+        },
+        {
+          "phase": "response_sequential_18",
+          "rss": 264155136,
+          "heapUsed": 123472056,
+          "external": 21219990
+        },
+        {
+          "phase": "capacity_1",
+          "rss": 264155136,
+          "heapUsed": 123543704,
+          "external": 21220134
+        },
+        {
+          "phase": "response_sequential_19",
+          "rss": 264155136,
+          "heapUsed": 123551088,
+          "external": 21220134
+        },
+        {
+          "phase": "capacity_1",
+          "rss": 264155136,
+          "heapUsed": 123622248,
+          "external": 21220278
+        },
+        {
+          "phase": "response_sequential_20",
+          "rss": 264155136,
+          "heapUsed": 123629632,
+          "external": 21220278
+        },
+        {
+          "phase": "before_idle",
+          "rss": 264155136,
+          "heapUsed": 123632064,
+          "external": 21220278
+        },
+        {
+          "phase": "after_idle",
+          "rss": 264462336,
+          "heapUsed": 123636408,
+          "external": 21220278
+        },
+        {
+          "phase": "capacity_1",
+          "rss": 264462336,
+          "heapUsed": 123706952,
+          "external": 21220422
+        },
+        {
+          "phase": "response_after_two_second_idle",
+          "rss": 264462336,
+          "heapUsed": 123714336,
+          "external": 21220422
+        }
+      ]
+    },
+    {
+      "run_id": "media-bundle-sequential-final-2",
+      "scenario": "sequential",
+      "experiment": "local_full_media_handler_bundle",
+      "runtime": {
+        "deno": "2.5.6",
+        "v8": "14.0.365.5-rusty",
+        "typescript": "5.9.2"
+      },
+      "proof_scope": "ordinary Deno process, NOT Supabase Edge isolate or hosted R2 proof",
+      "limits": {
+        "max_requests": 64,
+        "max_samples": 768,
+        "deadline_ms": 90000
+      },
+      "dependency_pins": {
+        "supabase": "2.57.4",
+        "s3": "3.1164.0",
+        "presigner": "3.1164.0",
+        "jpeg": "0.4.4"
+      },
+      "fixture": {
+        "width": 640,
+        "height": 640,
+        "bytes": 571931,
+        "output_bytes": 571691,
+        "sha256": "013be178fb8a412c89c511c9154327fbabf278bfb97a2fb594bc70ce2e148a95"
+      },
+      "synthetic_transport": true,
+      "network_calls": 0,
+      "forced_gc": false,
+      "capacity_metrics": "actual Deno.memoryUsage",
+      "inter_request_pause_ms": 0,
+      "transport_delay_ms": 0,
+      "idle_recovery": {
+        "idle_ms": 2000,
+        "status": 200
+      },
+      "duration_ms": 3013,
+      "requests": 21,
+      "sequential": {
+        "completed": 3,
+        "capacity_rejected": 17
+      },
+      "capacity_boundary_cases": [
+        {
+          "name": "heap_exact",
+          "allowed": true
+        },
+        {
+          "name": "heap_over",
+          "allowed": false
+        },
+        {
+          "name": "external_exact",
+          "allowed": true
+        },
+        {
+          "name": "external_over",
+          "allowed": false
+        },
+        {
+          "name": "combined_exact",
+          "allowed": true
+        },
+        {
+          "name": "combined_over",
+          "allowed": false
+        },
+        {
+          "name": "nan_heap",
+          "allowed": false
+        },
+        {
+          "name": "infinite_external",
+          "allowed": false
+        }
+      ],
+      "max_sample_heap_external_bytes": 135806445,
+      "max_sample_rss_bytes": 248778752,
+      "counters": {
+        "auth": 21,
+        "prepare": 4,
+        "download": 4,
+        "write": 4,
+        "commit": 4,
+        "remove": 0
+      },
+      "results": [
+        {
+          "name": "sequential_1",
+          "status": 200,
+          "elapsed_ms": 216.62,
+          "effects": {
+            "auth": 1,
+            "prepare": 1,
+            "download": 1,
+            "write": 1,
+            "commit": 1,
+            "remove": 0
+          }
+        },
+        {
+          "name": "sequential_2",
+          "status": 200,
+          "elapsed_ms": 269.08,
+          "effects": {
+            "auth": 1,
+            "prepare": 1,
+            "download": 1,
+            "write": 1,
+            "commit": 1,
+            "remove": 0
+          }
+        },
+        {
+          "name": "sequential_3",
+          "status": 200,
+          "elapsed_ms": 183.46,
+          "effects": {
+            "auth": 1,
+            "prepare": 1,
+            "download": 1,
+            "write": 1,
+            "commit": 1,
+            "remove": 0
+          }
+        },
+        {
+          "name": "sequential_4",
+          "status": 503,
+          "code": "image_verifier_busy",
+          "elapsed_ms": 1.19,
+          "effects": {
+            "auth": 1,
+            "prepare": 0,
+            "download": 0,
+            "write": 0,
+            "commit": 0,
+            "remove": 0
+          }
+        },
+        {
+          "name": "sequential_5",
+          "status": 503,
+          "code": "image_verifier_busy",
+          "elapsed_ms": 0.81,
+          "effects": {
+            "auth": 1,
+            "prepare": 0,
+            "download": 0,
+            "write": 0,
+            "commit": 0,
+            "remove": 0
+          }
+        },
+        {
+          "name": "sequential_6",
+          "status": 503,
+          "code": "image_verifier_busy",
+          "elapsed_ms": 0.64,
+          "effects": {
+            "auth": 1,
+            "prepare": 0,
+            "download": 0,
+            "write": 0,
+            "commit": 0,
+            "remove": 0
+          }
+        },
+        {
+          "name": "sequential_7",
+          "status": 503,
+          "code": "image_verifier_busy",
+          "elapsed_ms": 0.88,
+          "effects": {
+            "auth": 1,
+            "prepare": 0,
+            "download": 0,
+            "write": 0,
+            "commit": 0,
+            "remove": 0
+          }
+        },
+        {
+          "name": "sequential_8",
+          "status": 503,
+          "code": "image_verifier_busy",
+          "elapsed_ms": 0.48,
+          "effects": {
+            "auth": 1,
+            "prepare": 0,
+            "download": 0,
+            "write": 0,
+            "commit": 0,
+            "remove": 0
+          }
+        },
+        {
+          "name": "sequential_9",
+          "status": 503,
+          "code": "image_verifier_busy",
+          "elapsed_ms": 0.48,
+          "effects": {
+            "auth": 1,
+            "prepare": 0,
+            "download": 0,
+            "write": 0,
+            "commit": 0,
+            "remove": 0
+          }
+        },
+        {
+          "name": "sequential_10",
+          "status": 503,
+          "code": "image_verifier_busy",
+          "elapsed_ms": 0.68,
+          "effects": {
+            "auth": 1,
+            "prepare": 0,
+            "download": 0,
+            "write": 0,
+            "commit": 0,
+            "remove": 0
+          }
+        },
+        {
+          "name": "sequential_11",
+          "status": 503,
+          "code": "image_verifier_busy",
+          "elapsed_ms": 0.46,
+          "effects": {
+            "auth": 1,
+            "prepare": 0,
+            "download": 0,
+            "write": 0,
+            "commit": 0,
+            "remove": 0
+          }
+        },
+        {
+          "name": "sequential_12",
+          "status": 503,
+          "code": "image_verifier_busy",
+          "elapsed_ms": 0.36,
+          "effects": {
+            "auth": 1,
+            "prepare": 0,
+            "download": 0,
+            "write": 0,
+            "commit": 0,
+            "remove": 0
+          }
+        },
+        {
+          "name": "sequential_13",
+          "status": 503,
+          "code": "image_verifier_busy",
+          "elapsed_ms": 0.63,
+          "effects": {
+            "auth": 1,
+            "prepare": 0,
+            "download": 0,
+            "write": 0,
+            "commit": 0,
+            "remove": 0
+          }
+        },
+        {
+          "name": "sequential_14",
+          "status": 503,
+          "code": "image_verifier_busy",
+          "elapsed_ms": 0.6,
+          "effects": {
+            "auth": 1,
+            "prepare": 0,
+            "download": 0,
+            "write": 0,
+            "commit": 0,
+            "remove": 0
+          }
+        },
+        {
+          "name": "sequential_15",
+          "status": 503,
+          "code": "image_verifier_busy",
+          "elapsed_ms": 0.47,
+          "effects": {
+            "auth": 1,
+            "prepare": 0,
+            "download": 0,
+            "write": 0,
+            "commit": 0,
+            "remove": 0
+          }
+        },
+        {
+          "name": "sequential_16",
+          "status": 503,
+          "code": "image_verifier_busy",
+          "elapsed_ms": 0.43,
+          "effects": {
+            "auth": 1,
+            "prepare": 0,
+            "download": 0,
+            "write": 0,
+            "commit": 0,
+            "remove": 0
+          }
+        },
+        {
+          "name": "sequential_17",
+          "status": 503,
+          "code": "image_verifier_busy",
+          "elapsed_ms": 0.42,
+          "effects": {
+            "auth": 1,
+            "prepare": 0,
+            "download": 0,
+            "write": 0,
+            "commit": 0,
+            "remove": 0
+          }
+        },
+        {
+          "name": "sequential_18",
+          "status": 503,
+          "code": "image_verifier_busy",
+          "elapsed_ms": 0.33,
+          "effects": {
+            "auth": 1,
+            "prepare": 0,
+            "download": 0,
+            "write": 0,
+            "commit": 0,
+            "remove": 0
+          }
+        },
+        {
+          "name": "sequential_19",
+          "status": 503,
+          "code": "image_verifier_busy",
+          "elapsed_ms": 0.37,
+          "effects": {
+            "auth": 1,
+            "prepare": 0,
+            "download": 0,
+            "write": 0,
+            "commit": 0,
+            "remove": 0
+          }
+        },
+        {
+          "name": "sequential_20",
+          "status": 503,
+          "code": "image_verifier_busy",
+          "elapsed_ms": 0.38,
+          "effects": {
+            "auth": 1,
+            "prepare": 0,
+            "download": 0,
+            "write": 0,
+            "commit": 0,
+            "remove": 0
+          }
+        },
+        {
+          "name": "after_two_second_idle",
+          "status": 200,
+          "elapsed_ms": 216.4,
+          "effects": {
+            "auth": 1,
+            "prepare": 1,
+            "download": 1,
+            "write": 1,
+            "commit": 1,
+            "remove": 0
+          }
+        }
+      ],
+      "samples": [
+        {
+          "phase": "before_imports",
+          "rss": 58818560,
+          "heapUsed": 6454608,
+          "external": 3189261
+        },
+        {
+          "phase": "after_full_imports",
+          "rss": 80510976,
+          "heapUsed": 16013672,
+          "external": 3209564
+        },
+        {
+          "phase": "after_fixture",
+          "rss": 119230464,
+          "heapUsed": 34113728,
+          "external": 4353458
+        },
+        {
+          "phase": "capacity_1",
+          "rss": 119894016,
+          "heapUsed": 34432144,
+          "external": 4353602
+        },
+        {
+          "phase": "prepare",
+          "rss": 119930880,
+          "heapUsed": 34569320,
+          "external": 4353602
+        },
+        {
+          "phase": "capacity_2",
+          "rss": 119934976,
+          "heapUsed": 34582648,
+          "external": 4925533
+        },
+        {
+          "phase": "after_codec_before_write",
+          "rss": 163258368,
+          "heapUsed": 56448328,
+          "external": 7135240
+        },
+        {
+          "phase": "response_sequential_1",
+          "rss": 163270656,
+          "heapUsed": 56554376,
+          "external": 7135240
+        },
+        {
+          "phase": "capacity_1",
+          "rss": 163287040,
+          "heapUsed": 56669136,
+          "external": 7135384
+        },
+        {
+          "phase": "prepare",
+          "rss": 163295232,
+          "heapUsed": 56770240,
+          "external": 7135384
+        },
+        {
+          "phase": "capacity_2",
+          "rss": 163360768,
+          "heapUsed": 56777296,
+          "external": 7707315
+        },
+        {
+          "phase": "after_codec_before_write",
+          "rss": 186052608,
+          "heapUsed": 63306936,
+          "external": 9917502
+        },
+        {
+          "phase": "response_sequential_2",
+          "rss": 186118144,
+          "heapUsed": 63373672,
+          "external": 9917502
+        },
+        {
+          "phase": "capacity_1",
+          "rss": 186200064,
+          "heapUsed": 63470912,
+          "external": 9917646
+        },
+        {
+          "phase": "prepare",
+          "rss": 186302464,
+          "heapUsed": 63574056,
+          "external": 9917646
+        },
+        {
+          "phase": "capacity_2",
+          "rss": 186310656,
+          "heapUsed": 63586432,
+          "external": 10489577
+        },
+        {
+          "phase": "after_codec_before_write",
+          "rss": 230010880,
+          "heapUsed": 102863736,
+          "external": 21217974
+        },
+        {
+          "phase": "response_sequential_3",
+          "rss": 230100992,
+          "heapUsed": 102937064,
+          "external": 21217974
+        },
+        {
+          "phase": "capacity_1",
+          "rss": 230170624,
+          "heapUsed": 103009592,
+          "external": 21218118
+        },
+        {
+          "phase": "response_sequential_4",
+          "rss": 230252544,
+          "heapUsed": 103018488,
+          "external": 21218118
+        },
+        {
+          "phase": "capacity_1",
+          "rss": 230334464,
+          "heapUsed": 103099744,
+          "external": 21218262
+        },
+        {
+          "phase": "response_sequential_5",
+          "rss": 230338560,
+          "heapUsed": 103107200,
+          "external": 21218262
+        },
+        {
+          "phase": "capacity_1",
+          "rss": 230481920,
+          "heapUsed": 103244016,
+          "external": 21218406
+        },
+        {
+          "phase": "response_sequential_6",
+          "rss": 230486016,
+          "heapUsed": 103252208,
+          "external": 21218406
+        },
+        {
+          "phase": "capacity_1",
+          "rss": 230588416,
+          "heapUsed": 103354472,
+          "external": 21218550
+        },
+        {
+          "phase": "response_sequential_7",
+          "rss": 230596608,
+          "heapUsed": 103362224,
+          "external": 21218550
+        },
+        {
+          "phase": "capacity_1",
+          "rss": 230670336,
+          "heapUsed": 103436912,
+          "external": 21218694
+        },
+        {
+          "phase": "response_sequential_8",
+          "rss": 230678528,
+          "heapUsed": 103444304,
+          "external": 21218694
+        },
+        {
+          "phase": "capacity_1",
+          "rss": 230801408,
+          "heapUsed": 103881912,
+          "external": 21218838
+        },
+        {
+          "phase": "response_sequential_9",
+          "rss": 230838272,
+          "heapUsed": 103891056,
+          "external": 21218838
+        },
+        {
+          "phase": "capacity_1",
+          "rss": 230944768,
+          "heapUsed": 103689320,
+          "external": 21218982
+        },
+        {
+          "phase": "response_sequential_10",
+          "rss": 230948864,
+          "heapUsed": 103697256,
+          "external": 21218982
+        },
+        {
+          "phase": "capacity_1",
+          "rss": 231038976,
+          "heapUsed": 103779728,
+          "external": 21219126
+        },
+        {
+          "phase": "response_sequential_11",
+          "rss": 231047168,
+          "heapUsed": 103787272,
+          "external": 21219126
+        },
+        {
+          "phase": "capacity_1",
+          "rss": 231116800,
+          "heapUsed": 103858976,
+          "external": 21219270
+        },
+        {
+          "phase": "response_sequential_12",
+          "rss": 231124992,
+          "heapUsed": 103866680,
+          "external": 21219270
+        },
+        {
+          "phase": "capacity_1",
+          "rss": 231194624,
+          "heapUsed": 103938552,
+          "external": 21219414
+        },
+        {
+          "phase": "response_sequential_13",
+          "rss": 231202816,
+          "heapUsed": 103945936,
+          "external": 21219414
+        },
+        {
+          "phase": "capacity_1",
+          "rss": 231280640,
+          "heapUsed": 104458296,
+          "external": 21219558
+        },
+        {
+          "phase": "response_sequential_14",
+          "rss": 231288832,
+          "heapUsed": 104032472,
+          "external": 21219558
+        },
+        {
+          "phase": "capacity_1",
+          "rss": 231358464,
+          "heapUsed": 104103600,
+          "external": 21219702
+        },
+        {
+          "phase": "response_sequential_15",
+          "rss": 231366656,
+          "heapUsed": 104110984,
+          "external": 21219702
+        },
+        {
+          "phase": "capacity_1",
+          "rss": 231436288,
+          "heapUsed": 104182208,
+          "external": 21219846
+        },
+        {
+          "phase": "response_sequential_16",
+          "rss": 231444480,
+          "heapUsed": 104189632,
+          "external": 21219846
+        },
+        {
+          "phase": "capacity_1",
+          "rss": 231514112,
+          "heapUsed": 104261752,
+          "external": 21219990
+        },
+        {
+          "phase": "response_sequential_17",
+          "rss": 231526400,
+          "heapUsed": 104270784,
+          "external": 21219990
+        },
+        {
+          "phase": "capacity_1",
+          "rss": 231600128,
+          "heapUsed": 104342120,
+          "external": 21220134
+        },
+        {
+          "phase": "response_sequential_18",
+          "rss": 231608320,
+          "heapUsed": 104349504,
+          "external": 21220134
+        },
+        {
+          "phase": "capacity_1",
+          "rss": 231686144,
+          "heapUsed": 104426592,
+          "external": 21220278
+        },
+        {
+          "phase": "response_sequential_19",
+          "rss": 231690240,
+          "heapUsed": 104433976,
+          "external": 21220278
+        },
+        {
+          "phase": "capacity_1",
+          "rss": 231763968,
+          "heapUsed": 104505160,
+          "external": 21220422
+        },
+        {
+          "phase": "response_sequential_20",
+          "rss": 231772160,
+          "heapUsed": 104512544,
+          "external": 21220422
+        },
+        {
+          "phase": "before_idle",
+          "rss": 231772160,
+          "heapUsed": 104514976,
+          "external": 21220422
+        },
+        {
+          "phase": "after_idle",
+          "rss": 224763904,
+          "heapUsed": 78540064,
+          "external": 21220422
+        },
+        {
+          "phase": "capacity_1",
+          "rss": 224763904,
+          "heapUsed": 78610504,
+          "external": 6563933
+        },
+        {
+          "phase": "prepare",
+          "rss": 224768000,
+          "heapUsed": 78700280,
+          "external": 6563933
+        },
+        {
+          "phase": "capacity_2",
+          "rss": 224768000,
+          "heapUsed": 78706216,
+          "external": 7135864
+        },
+        {
+          "phase": "after_codec_before_write",
+          "rss": 248713216,
+          "heapUsed": 117876000,
+          "external": 17864261
+        },
+        {
+          "phase": "response_after_two_second_idle",
+          "rss": 248778752,
+          "heapUsed": 117942184,
+          "external": 17864261
+        }
+      ]
+    },
+    {
+      "run_id": "media-bundle-sequential-final-3",
+      "scenario": "sequential",
+      "experiment": "local_full_media_handler_bundle",
+      "runtime": {
+        "deno": "2.5.6",
+        "v8": "14.0.365.5-rusty",
+        "typescript": "5.9.2"
+      },
+      "proof_scope": "ordinary Deno process, NOT Supabase Edge isolate or hosted R2 proof",
+      "limits": {
+        "max_requests": 64,
+        "max_samples": 768,
+        "deadline_ms": 90000
+      },
+      "dependency_pins": {
+        "supabase": "2.57.4",
+        "s3": "3.1164.0",
+        "presigner": "3.1164.0",
+        "jpeg": "0.4.4"
+      },
+      "fixture": {
+        "width": 640,
+        "height": 640,
+        "bytes": 571931,
+        "output_bytes": 571691,
+        "sha256": "013be178fb8a412c89c511c9154327fbabf278bfb97a2fb594bc70ce2e148a95"
+      },
+      "synthetic_transport": true,
+      "network_calls": 0,
+      "forced_gc": false,
+      "capacity_metrics": "actual Deno.memoryUsage",
+      "inter_request_pause_ms": 0,
+      "transport_delay_ms": 0,
+      "idle_recovery": {
+        "idle_ms": 2000,
+        "status": 200
+      },
+      "duration_ms": 3113,
+      "requests": 21,
+      "sequential": {
+        "completed": 3,
+        "capacity_rejected": 17
+      },
+      "capacity_boundary_cases": [
+        {
+          "name": "heap_exact",
+          "allowed": true
+        },
+        {
+          "name": "heap_over",
+          "allowed": false
+        },
+        {
+          "name": "external_exact",
+          "allowed": true
+        },
+        {
+          "name": "external_over",
+          "allowed": false
+        },
+        {
+          "name": "combined_exact",
+          "allowed": true
+        },
+        {
+          "name": "combined_over",
+          "allowed": false
+        },
+        {
+          "name": "nan_heap",
+          "allowed": false
+        },
+        {
+          "name": "infinite_external",
+          "allowed": false
+        }
+      ],
+      "max_sample_heap_external_bytes": 135675653,
+      "max_sample_rss_bytes": 251576320,
+      "counters": {
+        "auth": 21,
+        "prepare": 4,
+        "download": 4,
+        "write": 4,
+        "commit": 4,
+        "remove": 0
+      },
+      "results": [
+        {
+          "name": "sequential_1",
+          "status": 200,
+          "elapsed_ms": 347.32,
+          "effects": {
+            "auth": 1,
+            "prepare": 1,
+            "download": 1,
+            "write": 1,
+            "commit": 1,
+            "remove": 0
+          }
+        },
+        {
+          "name": "sequential_2",
+          "status": 200,
+          "elapsed_ms": 201,
+          "effects": {
+            "auth": 1,
+            "prepare": 1,
+            "download": 1,
+            "write": 1,
+            "commit": 1,
+            "remove": 0
+          }
+        },
+        {
+          "name": "sequential_3",
+          "status": 200,
+          "elapsed_ms": 208.11,
+          "effects": {
+            "auth": 1,
+            "prepare": 1,
+            "download": 1,
+            "write": 1,
+            "commit": 1,
+            "remove": 0
+          }
+        },
+        {
+          "name": "sequential_4",
+          "status": 503,
+          "code": "image_verifier_busy",
+          "elapsed_ms": 2.03,
+          "effects": {
+            "auth": 1,
+            "prepare": 0,
+            "download": 0,
+            "write": 0,
+            "commit": 0,
+            "remove": 0
+          }
+        },
+        {
+          "name": "sequential_5",
+          "status": 503,
+          "code": "image_verifier_busy",
+          "elapsed_ms": 1.7,
+          "effects": {
+            "auth": 1,
+            "prepare": 0,
+            "download": 0,
+            "write": 0,
+            "commit": 0,
+            "remove": 0
+          }
+        },
+        {
+          "name": "sequential_6",
+          "status": 503,
+          "code": "image_verifier_busy",
+          "elapsed_ms": 2.22,
+          "effects": {
+            "auth": 1,
+            "prepare": 0,
+            "download": 0,
+            "write": 0,
+            "commit": 0,
+            "remove": 0
+          }
+        },
+        {
+          "name": "sequential_7",
+          "status": 503,
+          "code": "image_verifier_busy",
+          "elapsed_ms": 1.7,
+          "effects": {
+            "auth": 1,
+            "prepare": 0,
+            "download": 0,
+            "write": 0,
+            "commit": 0,
+            "remove": 0
+          }
+        },
+        {
+          "name": "sequential_8",
+          "status": 503,
+          "code": "image_verifier_busy",
+          "elapsed_ms": 1.15,
+          "effects": {
+            "auth": 1,
+            "prepare": 0,
+            "download": 0,
+            "write": 0,
+            "commit": 0,
+            "remove": 0
+          }
+        },
+        {
+          "name": "sequential_9",
+          "status": 503,
+          "code": "image_verifier_busy",
+          "elapsed_ms": 1.2,
+          "effects": {
+            "auth": 1,
+            "prepare": 0,
+            "download": 0,
+            "write": 0,
+            "commit": 0,
+            "remove": 0
+          }
+        },
+        {
+          "name": "sequential_10",
+          "status": 503,
+          "code": "image_verifier_busy",
+          "elapsed_ms": 1.17,
+          "effects": {
+            "auth": 1,
+            "prepare": 0,
+            "download": 0,
+            "write": 0,
+            "commit": 0,
+            "remove": 0
+          }
+        },
+        {
+          "name": "sequential_11",
+          "status": 503,
+          "code": "image_verifier_busy",
+          "elapsed_ms": 0.85,
+          "effects": {
+            "auth": 1,
+            "prepare": 0,
+            "download": 0,
+            "write": 0,
+            "commit": 0,
+            "remove": 0
+          }
+        },
+        {
+          "name": "sequential_12",
+          "status": 503,
+          "code": "image_verifier_busy",
+          "elapsed_ms": 1.06,
+          "effects": {
+            "auth": 1,
+            "prepare": 0,
+            "download": 0,
+            "write": 0,
+            "commit": 0,
+            "remove": 0
+          }
+        },
+        {
+          "name": "sequential_13",
+          "status": 503,
+          "code": "image_verifier_busy",
+          "elapsed_ms": 1.1,
+          "effects": {
+            "auth": 1,
+            "prepare": 0,
+            "download": 0,
+            "write": 0,
+            "commit": 0,
+            "remove": 0
+          }
+        },
+        {
+          "name": "sequential_14",
+          "status": 503,
+          "code": "image_verifier_busy",
+          "elapsed_ms": 1.04,
+          "effects": {
+            "auth": 1,
+            "prepare": 0,
+            "download": 0,
+            "write": 0,
+            "commit": 0,
+            "remove": 0
+          }
+        },
+        {
+          "name": "sequential_15",
+          "status": 503,
+          "code": "image_verifier_busy",
+          "elapsed_ms": 0.99,
+          "effects": {
+            "auth": 1,
+            "prepare": 0,
+            "download": 0,
+            "write": 0,
+            "commit": 0,
+            "remove": 0
+          }
+        },
+        {
+          "name": "sequential_16",
+          "status": 503,
+          "code": "image_verifier_busy",
+          "elapsed_ms": 0.79,
+          "effects": {
+            "auth": 1,
+            "prepare": 0,
+            "download": 0,
+            "write": 0,
+            "commit": 0,
+            "remove": 0
+          }
+        },
+        {
+          "name": "sequential_17",
+          "status": 503,
+          "code": "image_verifier_busy",
+          "elapsed_ms": 0.91,
+          "effects": {
+            "auth": 1,
+            "prepare": 0,
+            "download": 0,
+            "write": 0,
+            "commit": 0,
+            "remove": 0
+          }
+        },
+        {
+          "name": "sequential_18",
+          "status": 503,
+          "code": "image_verifier_busy",
+          "elapsed_ms": 0.73,
+          "effects": {
+            "auth": 1,
+            "prepare": 0,
+            "download": 0,
+            "write": 0,
+            "commit": 0,
+            "remove": 0
+          }
+        },
+        {
+          "name": "sequential_19",
+          "status": 503,
+          "code": "image_verifier_busy",
+          "elapsed_ms": 0.75,
+          "effects": {
+            "auth": 1,
+            "prepare": 0,
+            "download": 0,
+            "write": 0,
+            "commit": 0,
+            "remove": 0
+          }
+        },
+        {
+          "name": "sequential_20",
+          "status": 503,
+          "code": "image_verifier_busy",
+          "elapsed_ms": 0.6,
+          "effects": {
+            "auth": 1,
+            "prepare": 0,
+            "download": 0,
+            "write": 0,
+            "commit": 0,
+            "remove": 0
+          }
+        },
+        {
+          "name": "after_two_second_idle",
+          "status": 200,
+          "elapsed_ms": 192.29,
+          "effects": {
+            "auth": 1,
+            "prepare": 1,
+            "download": 1,
+            "write": 1,
+            "commit": 1,
+            "remove": 0
+          }
+        }
+      ],
+      "samples": [
+        {
+          "phase": "before_imports",
+          "rss": 58601472,
+          "heapUsed": 6454608,
+          "external": 3189261
+        },
+        {
+          "phase": "after_full_imports",
+          "rss": 80347136,
+          "heapUsed": 16177440,
+          "external": 3209564
+        },
+        {
+          "phase": "after_fixture",
+          "rss": 118763520,
+          "heapUsed": 34113728,
+          "external": 4353458
+        },
+        {
+          "phase": "capacity_1",
+          "rss": 119476224,
+          "heapUsed": 34432144,
+          "external": 4353602
+        },
+        {
+          "phase": "prepare",
+          "rss": 119517184,
+          "heapUsed": 34569320,
+          "external": 4353602
+        },
+        {
+          "phase": "capacity_2",
+          "rss": 119521280,
+          "heapUsed": 34582648,
+          "external": 4925533
+        },
+        {
+          "phase": "after_codec_before_write",
+          "rss": 161263616,
+          "heapUsed": 56902832,
+          "external": 7135240
+        },
+        {
+          "phase": "response_sequential_1",
+          "rss": 161288192,
+          "heapUsed": 57005064,
+          "external": 7135240
+        },
+        {
+          "phase": "capacity_1",
+          "rss": 161312768,
+          "heapUsed": 57119864,
+          "external": 7135384
+        },
+        {
+          "phase": "prepare",
+          "rss": 161320960,
+          "heapUsed": 57220968,
+          "external": 7135384
+        },
+        {
+          "phase": "capacity_2",
+          "rss": 161398784,
+          "heapUsed": 57548992,
+          "external": 7707315
+        },
+        {
+          "phase": "after_codec_before_write",
+          "rss": 190341120,
+          "heapUsed": 63162952,
+          "external": 9917502
+        },
+        {
+          "phase": "response_sequential_2",
+          "rss": 190406656,
+          "heapUsed": 63229680,
+          "external": 9917502
+        },
+        {
+          "phase": "capacity_1",
+          "rss": 190484480,
+          "heapUsed": 63326904,
+          "external": 9917646
+        },
+        {
+          "phase": "prepare",
+          "rss": 190574592,
+          "heapUsed": 63430128,
+          "external": 9917646
+        },
+        {
+          "phase": "capacity_2",
+          "rss": 190586880,
+          "heapUsed": 63442504,
+          "external": 10489577
+        },
+        {
+          "phase": "after_codec_before_write",
+          "rss": 233959424,
+          "heapUsed": 102709256,
+          "external": 21217974
+        },
+        {
+          "phase": "response_sequential_3",
+          "rss": 234041344,
+          "heapUsed": 102782632,
+          "external": 21217974
+        },
+        {
+          "phase": "capacity_1",
+          "rss": 234110976,
+          "heapUsed": 102855160,
+          "external": 21218118
+        },
+        {
+          "phase": "response_sequential_4",
+          "rss": 234196992,
+          "heapUsed": 102864056,
+          "external": 21218118
+        },
+        {
+          "phase": "capacity_1",
+          "rss": 234278912,
+          "heapUsed": 102945312,
+          "external": 21218262
+        },
+        {
+          "phase": "response_sequential_5",
+          "rss": 234283008,
+          "heapUsed": 102952768,
+          "external": 21218262
+        },
+        {
+          "phase": "capacity_1",
+          "rss": 234405888,
+          "heapUsed": 103089664,
+          "external": 21218406
+        },
+        {
+          "phase": "response_sequential_6",
+          "rss": 234414080,
+          "heapUsed": 103104864,
+          "external": 21218406
+        },
+        {
+          "phase": "capacity_1",
+          "rss": 234516480,
+          "heapUsed": 103200120,
+          "external": 21218550
+        },
+        {
+          "phase": "response_sequential_7",
+          "rss": 234524672,
+          "heapUsed": 103207872,
+          "external": 21218550
+        },
+        {
+          "phase": "capacity_1",
+          "rss": 234598400,
+          "heapUsed": 103282560,
+          "external": 21218694
+        },
+        {
+          "phase": "response_sequential_8",
+          "rss": 234606592,
+          "heapUsed": 103289952,
+          "external": 21218694
+        },
+        {
+          "phase": "capacity_1",
+          "rss": 234754048,
+          "heapUsed": 103430488,
+          "external": 21218838
+        },
+        {
+          "phase": "response_sequential_9",
+          "rss": 234766336,
+          "heapUsed": 103588256,
+          "external": 21218838
+        },
+        {
+          "phase": "capacity_1",
+          "rss": 234856448,
+          "heapUsed": 103534848,
+          "external": 21218982
+        },
+        {
+          "phase": "response_sequential_10",
+          "rss": 234864640,
+          "heapUsed": 103542784,
+          "external": 21218982
+        },
+        {
+          "phase": "capacity_1",
+          "rss": 234946560,
+          "heapUsed": 103625256,
+          "external": 21219126
+        },
+        {
+          "phase": "response_sequential_11",
+          "rss": 234954752,
+          "heapUsed": 103632800,
+          "external": 21219126
+        },
+        {
+          "phase": "capacity_1",
+          "rss": 235024384,
+          "heapUsed": 103704504,
+          "external": 21219270
+        },
+        {
+          "phase": "response_sequential_12",
+          "rss": 235032576,
+          "heapUsed": 103712208,
+          "external": 21219270
+        },
+        {
+          "phase": "capacity_1",
+          "rss": 235102208,
+          "heapUsed": 103784096,
+          "external": 21219414
+        },
+        {
+          "phase": "response_sequential_13",
+          "rss": 235110400,
+          "heapUsed": 103791480,
+          "external": 21219414
+        },
+        {
+          "phase": "capacity_1",
+          "rss": 235192320,
+          "heapUsed": 103870632,
+          "external": 21219558
+        },
+        {
+          "phase": "response_sequential_14",
+          "rss": 235200512,
+          "heapUsed": 103878016,
+          "external": 21219558
+        },
+        {
+          "phase": "capacity_1",
+          "rss": 235270144,
+          "heapUsed": 103949144,
+          "external": 21219702
+        },
+        {
+          "phase": "response_sequential_15",
+          "rss": 235278336,
+          "heapUsed": 103956528,
+          "external": 21219702
+        },
+        {
+          "phase": "capacity_1",
+          "rss": 235347968,
+          "heapUsed": 104027760,
+          "external": 21219846
+        },
+        {
+          "phase": "response_sequential_16",
+          "rss": 235356160,
+          "heapUsed": 104035144,
+          "external": 21219846
+        },
+        {
+          "phase": "capacity_1",
+          "rss": 235429888,
+          "heapUsed": 104107264,
+          "external": 21219990
+        },
+        {
+          "phase": "response_sequential_17",
+          "rss": 235438080,
+          "heapUsed": 104116296,
+          "external": 21219990
+        },
+        {
+          "phase": "capacity_1",
+          "rss": 235507712,
+          "heapUsed": 104187632,
+          "external": 21220134
+        },
+        {
+          "phase": "response_sequential_18",
+          "rss": 235515904,
+          "heapUsed": 104195016,
+          "external": 21220134
+        },
+        {
+          "phase": "capacity_1",
+          "rss": 235597824,
+          "heapUsed": 104272256,
+          "external": 21220278
+        },
+        {
+          "phase": "response_sequential_19",
+          "rss": 235601920,
+          "heapUsed": 104279640,
+          "external": 21220278
+        },
+        {
+          "phase": "capacity_1",
+          "rss": 235675648,
+          "heapUsed": 104350800,
+          "external": 21220422
+        },
+        {
+          "phase": "response_sequential_20",
+          "rss": 235683840,
+          "heapUsed": 104358184,
+          "external": 21220422
+        },
+        {
+          "phase": "before_idle",
+          "rss": 235687936,
+          "heapUsed": 104360616,
+          "external": 21220422
+        },
+        {
+          "phase": "after_idle",
+          "rss": 228470784,
+          "heapUsed": 78381048,
+          "external": 21220422
+        },
+        {
+          "phase": "capacity_1",
+          "rss": 228470784,
+          "heapUsed": 78451472,
+          "external": 6563933
+        },
+        {
+          "phase": "prepare",
+          "rss": 228470784,
+          "heapUsed": 78541248,
+          "external": 6563933
+        },
+        {
+          "phase": "capacity_2",
+          "rss": 228474880,
+          "heapUsed": 78547184,
+          "external": 7135864
+        },
+        {
+          "phase": "after_codec_before_write",
+          "rss": 251576320,
+          "heapUsed": 117745208,
+          "external": 17864261
+        },
+        {
+          "phase": "response_after_two_second_idle",
+          "rss": 251576320,
+          "heapUsed": 117811392,
+          "external": 17864261
+        }
+      ]
+    },
+    {
+      "run_id": "media-bundle-sequential-paced-final-1",
+      "scenario": "sequential-paced",
+      "experiment": "local_full_media_handler_bundle",
+      "runtime": {
+        "deno": "2.5.6",
+        "v8": "14.0.365.5-rusty",
+        "typescript": "5.9.2"
+      },
+      "proof_scope": "ordinary Deno process, NOT Supabase Edge isolate or hosted R2 proof",
+      "limits": {
+        "max_requests": 64,
+        "max_samples": 768,
+        "deadline_ms": 90000
+      },
+      "dependency_pins": {
+        "supabase": "2.57.4",
+        "s3": "3.1164.0",
+        "presigner": "3.1164.0",
+        "jpeg": "0.4.4"
+      },
+      "fixture": {
+        "width": 640,
+        "height": 640,
+        "bytes": 571931,
+        "output_bytes": 571691,
+        "sha256": "013be178fb8a412c89c511c9154327fbabf278bfb97a2fb594bc70ce2e148a95"
+      },
+      "synthetic_transport": true,
+      "network_calls": 0,
+      "forced_gc": false,
+      "capacity_metrics": "actual Deno.memoryUsage",
+      "inter_request_pause_ms": 100,
+      "transport_delay_ms": 5,
+      "idle_recovery": {
+        "idle_ms": 2000,
+        "status": 503,
+        "code": "image_verifier_busy"
+      },
+      "duration_ms": 5706,
+      "requests": 21,
+      "sequential": {
+        "completed": 5,
+        "capacity_rejected": 15
+      },
+      "capacity_boundary_cases": [
+        {
+          "name": "heap_exact",
+          "allowed": true
+        },
+        {
+          "name": "heap_over",
+          "allowed": false
+        },
+        {
+          "name": "external_exact",
+          "allowed": true
+        },
+        {
+          "name": "external_over",
+          "allowed": false
+        },
+        {
+          "name": "combined_exact",
+          "allowed": true
+        },
+        {
+          "name": "combined_over",
+          "allowed": false
+        },
+        {
+          "name": "nan_heap",
+          "allowed": false
+        },
+        {
+          "name": "infinite_external",
+          "allowed": false
+        }
+      ],
+      "max_sample_heap_external_bytes": 131194133,
+      "max_sample_rss_bytes": 256847872,
+      "counters": {
+        "auth": 21,
+        "prepare": 5,
+        "download": 5,
+        "write": 5,
+        "commit": 5,
+        "remove": 0
+      },
+      "results": [
+        {
+          "name": "sequential_1",
+          "status": 200,
+          "elapsed_ms": 371.63,
+          "effects": {
+            "auth": 1,
+            "prepare": 1,
+            "download": 1,
+            "write": 1,
+            "commit": 1,
+            "remove": 0
+          }
+        },
+        {
+          "name": "sequential_2",
+          "status": 200,
+          "elapsed_ms": 317.07,
+          "effects": {
+            "auth": 1,
+            "prepare": 1,
+            "download": 1,
+            "write": 1,
+            "commit": 1,
+            "remove": 0
+          }
+        },
+        {
+          "name": "sequential_3",
+          "status": 200,
+          "elapsed_ms": 253.52,
+          "effects": {
+            "auth": 1,
+            "prepare": 1,
+            "download": 1,
+            "write": 1,
+            "commit": 1,
+            "remove": 0
+          }
+        },
+        {
+          "name": "sequential_4",
+          "status": 200,
+          "elapsed_ms": 315.15,
+          "effects": {
+            "auth": 1,
+            "prepare": 1,
+            "download": 1,
+            "write": 1,
+            "commit": 1,
+            "remove": 0
+          }
+        },
+        {
+          "name": "sequential_5",
+          "status": 200,
+          "elapsed_ms": 210.7,
+          "effects": {
+            "auth": 1,
+            "prepare": 1,
+            "download": 1,
+            "write": 1,
+            "commit": 1,
+            "remove": 0
+          }
+        },
+        {
+          "name": "sequential_6",
+          "status": 503,
+          "code": "image_verifier_busy",
+          "elapsed_ms": 20.67,
+          "effects": {
+            "auth": 1,
+            "prepare": 0,
+            "download": 0,
+            "write": 0,
+            "commit": 0,
+            "remove": 0
+          }
+        },
+        {
+          "name": "sequential_7",
+          "status": 503,
+          "code": "image_verifier_busy",
+          "elapsed_ms": 7.25,
+          "effects": {
+            "auth": 1,
+            "prepare": 0,
+            "download": 0,
+            "write": 0,
+            "commit": 0,
+            "remove": 0
+          }
+        },
+        {
+          "name": "sequential_8",
+          "status": 503,
+          "code": "image_verifier_busy",
+          "elapsed_ms": 7.3,
+          "effects": {
+            "auth": 1,
+            "prepare": 0,
+            "download": 0,
+            "write": 0,
+            "commit": 0,
+            "remove": 0
+          }
+        },
+        {
+          "name": "sequential_9",
+          "status": 503,
+          "code": "image_verifier_busy",
+          "elapsed_ms": 7.2,
+          "effects": {
+            "auth": 1,
+            "prepare": 0,
+            "download": 0,
+            "write": 0,
+            "commit": 0,
+            "remove": 0
+          }
+        },
+        {
+          "name": "sequential_10",
+          "status": 503,
+          "code": "image_verifier_busy",
+          "elapsed_ms": 7.35,
+          "effects": {
+            "auth": 1,
+            "prepare": 0,
+            "download": 0,
+            "write": 0,
+            "commit": 0,
+            "remove": 0
+          }
+        },
+        {
+          "name": "sequential_11",
+          "status": 503,
+          "code": "image_verifier_busy",
+          "elapsed_ms": 7.08,
+          "effects": {
+            "auth": 1,
+            "prepare": 0,
+            "download": 0,
+            "write": 0,
+            "commit": 0,
+            "remove": 0
+          }
+        },
+        {
+          "name": "sequential_12",
+          "status": 503,
+          "code": "image_verifier_busy",
+          "elapsed_ms": 6.05,
+          "effects": {
+            "auth": 1,
+            "prepare": 0,
+            "download": 0,
+            "write": 0,
+            "commit": 0,
+            "remove": 0
+          }
+        },
+        {
+          "name": "sequential_13",
+          "status": 503,
+          "code": "image_verifier_busy",
+          "elapsed_ms": 7.13,
+          "effects": {
+            "auth": 1,
+            "prepare": 0,
+            "download": 0,
+            "write": 0,
+            "commit": 0,
+            "remove": 0
+          }
+        },
+        {
+          "name": "sequential_14",
+          "status": 503,
+          "code": "image_verifier_busy",
+          "elapsed_ms": 6.82,
+          "effects": {
+            "auth": 1,
+            "prepare": 0,
+            "download": 0,
+            "write": 0,
+            "commit": 0,
+            "remove": 0
+          }
+        },
+        {
+          "name": "sequential_15",
+          "status": 503,
+          "code": "image_verifier_busy",
+          "elapsed_ms": 6.88,
+          "effects": {
+            "auth": 1,
+            "prepare": 0,
+            "download": 0,
+            "write": 0,
+            "commit": 0,
+            "remove": 0
+          }
+        },
+        {
+          "name": "sequential_16",
+          "status": 503,
+          "code": "image_verifier_busy",
+          "elapsed_ms": 6.86,
+          "effects": {
+            "auth": 1,
+            "prepare": 0,
+            "download": 0,
+            "write": 0,
+            "commit": 0,
+            "remove": 0
+          }
+        },
+        {
+          "name": "sequential_17",
+          "status": 503,
+          "code": "image_verifier_busy",
+          "elapsed_ms": 6.84,
+          "effects": {
+            "auth": 1,
+            "prepare": 0,
+            "download": 0,
+            "write": 0,
+            "commit": 0,
+            "remove": 0
+          }
+        },
+        {
+          "name": "sequential_18",
+          "status": 503,
+          "code": "image_verifier_busy",
+          "elapsed_ms": 7.33,
+          "effects": {
+            "auth": 1,
+            "prepare": 0,
+            "download": 0,
+            "write": 0,
+            "commit": 0,
+            "remove": 0
+          }
+        },
+        {
+          "name": "sequential_19",
+          "status": 503,
+          "code": "image_verifier_busy",
+          "elapsed_ms": 6.93,
+          "effects": {
+            "auth": 1,
+            "prepare": 0,
+            "download": 0,
+            "write": 0,
+            "commit": 0,
+            "remove": 0
+          }
+        },
+        {
+          "name": "sequential_20",
+          "status": 503,
+          "code": "image_verifier_busy",
+          "elapsed_ms": 7.15,
+          "effects": {
+            "auth": 1,
+            "prepare": 0,
+            "download": 0,
+            "write": 0,
+            "commit": 0,
+            "remove": 0
+          }
+        },
+        {
+          "name": "after_two_second_idle",
+          "status": 503,
+          "code": "image_verifier_busy",
+          "elapsed_ms": 7.43,
+          "effects": {
+            "auth": 1,
+            "prepare": 0,
+            "download": 0,
+            "write": 0,
+            "commit": 0,
+            "remove": 0
+          }
+        }
+      ],
+      "samples": [
+        {
+          "phase": "before_imports",
+          "rss": 58949632,
+          "heapUsed": 6454608,
+          "external": 3189261
+        },
+        {
+          "phase": "after_full_imports",
+          "rss": 80654336,
+          "heapUsed": 16209672,
+          "external": 3209564
+        },
+        {
+          "phase": "after_fixture",
+          "rss": 119132160,
+          "heapUsed": 34113728,
+          "external": 4353458
+        },
+        {
+          "phase": "capacity_1",
+          "rss": 119865344,
+          "heapUsed": 34438648,
+          "external": 4353602
+        },
+        {
+          "phase": "prepare",
+          "rss": 119898112,
+          "heapUsed": 34573920,
+          "external": 4353602
+        },
+        {
+          "phase": "capacity_2",
+          "rss": 119906304,
+          "heapUsed": 34588136,
+          "external": 4925533
+        },
+        {
+          "phase": "after_codec_before_write",
+          "rss": 158683136,
+          "heapUsed": 53970616,
+          "external": 7135208
+        },
+        {
+          "phase": "response_sequential_1",
+          "rss": 158683136,
+          "heapUsed": 54078976,
+          "external": 7135208
+        },
+        {
+          "phase": "capacity_1",
+          "rss": 158683136,
+          "heapUsed": 54202208,
+          "external": 7135352
+        },
+        {
+          "phase": "prepare",
+          "rss": 158683136,
+          "heapUsed": 54302536,
+          "external": 7135352
+        },
+        {
+          "phase": "capacity_2",
+          "rss": 158748672,
+          "heapUsed": 54324504,
+          "external": 7707283
+        },
+        {
+          "phase": "after_codec_before_write",
+          "rss": 185667584,
+          "heapUsed": 63051136,
+          "external": 9917470
+        },
+        {
+          "phase": "response_sequential_2",
+          "rss": 185737216,
+          "heapUsed": 63119048,
+          "external": 9917470
+        },
+        {
+          "phase": "capacity_1",
+          "rss": 185843712,
+          "heapUsed": 63229312,
+          "external": 9917614
+        },
+        {
+          "phase": "prepare",
+          "rss": 185942016,
+          "heapUsed": 63326640,
+          "external": 9917614
+        },
+        {
+          "phase": "capacity_2",
+          "rss": 185950208,
+          "heapUsed": 63334088,
+          "external": 10489545
+        },
+        {
+          "phase": "after_codec_before_write",
+          "rss": 201625600,
+          "heapUsed": 15484848,
+          "external": 7707379
+        },
+        {
+          "phase": "response_sequential_3",
+          "rss": 201625600,
+          "heapUsed": 15576480,
+          "external": 7707379
+        },
+        {
+          "phase": "capacity_1",
+          "rss": 201625600,
+          "heapUsed": 15674896,
+          "external": 4925261
+        },
+        {
+          "phase": "prepare",
+          "rss": 201625600,
+          "heapUsed": 15765320,
+          "external": 4925261
+        },
+        {
+          "phase": "capacity_2",
+          "rss": 201625600,
+          "heapUsed": 15773064,
+          "external": 5497192
+        },
+        {
+          "phase": "after_codec_before_write",
+          "rss": 224210944,
+          "heapUsed": 62585112,
+          "external": 16225589
+        },
+        {
+          "phase": "response_sequential_4",
+          "rss": 224210944,
+          "heapUsed": 62664288,
+          "external": 16225589
+        },
+        {
+          "phase": "capacity_1",
+          "rss": 224247808,
+          "heapUsed": 63048536,
+          "external": 16225733
+        },
+        {
+          "phase": "prepare",
+          "rss": 224268288,
+          "heapUsed": 62940016,
+          "external": 16225733
+        },
+        {
+          "phase": "capacity_2",
+          "rss": 224276480,
+          "heapUsed": 62955112,
+          "external": 16797664
+        },
+        {
+          "phase": "after_codec_before_write",
+          "rss": 256671744,
+          "heapUsed": 102167368,
+          "external": 27526061
+        },
+        {
+          "phase": "response_sequential_5",
+          "rss": 256696320,
+          "heapUsed": 102239536,
+          "external": 27526061
+        },
+        {
+          "phase": "capacity_1",
+          "rss": 256700416,
+          "heapUsed": 102318400,
+          "external": 27526205
+        },
+        {
+          "phase": "response_sequential_6",
+          "rss": 256757760,
+          "heapUsed": 102326032,
+          "external": 27526205
+        },
+        {
+          "phase": "capacity_1",
+          "rss": 256761856,
+          "heapUsed": 102651144,
+          "external": 27526349
+        },
+        {
+          "phase": "response_sequential_7",
+          "rss": 256761856,
+          "heapUsed": 102657416,
+          "external": 27526349
+        },
+        {
+          "phase": "capacity_1",
+          "rss": 256770048,
+          "heapUsed": 102504752,
+          "external": 27526493
+        },
+        {
+          "phase": "response_sequential_8",
+          "rss": 256770048,
+          "heapUsed": 102510816,
+          "external": 27526493
+        },
+        {
+          "phase": "capacity_1",
+          "rss": 256794624,
+          "heapUsed": 103077128,
+          "external": 27526637
+        },
+        {
+          "phase": "response_sequential_9",
+          "rss": 256819200,
+          "heapUsed": 103085064,
+          "external": 27526637
+        },
+        {
+          "phase": "capacity_1",
+          "rss": 256835584,
+          "heapUsed": 102750832,
+          "external": 27526781
+        },
+        {
+          "phase": "response_sequential_10",
+          "rss": 256835584,
+          "heapUsed": 102756968,
+          "external": 27526781
+        },
+        {
+          "phase": "capacity_1",
+          "rss": 256835584,
+          "heapUsed": 102833464,
+          "external": 27526925
+        },
+        {
+          "phase": "response_sequential_11",
+          "rss": 256835584,
+          "heapUsed": 102839944,
+          "external": 27526925
+        },
+        {
+          "phase": "capacity_1",
+          "rss": 256839680,
+          "heapUsed": 102922952,
+          "external": 27527069
+        },
+        {
+          "phase": "response_sequential_12",
+          "rss": 256839680,
+          "heapUsed": 102929088,
+          "external": 27527069
+        },
+        {
+          "phase": "capacity_1",
+          "rss": 256839680,
+          "heapUsed": 103005240,
+          "external": 27527213
+        },
+        {
+          "phase": "response_sequential_13",
+          "rss": 256839680,
+          "heapUsed": 103011440,
+          "external": 27527213
+        },
+        {
+          "phase": "capacity_1",
+          "rss": 256839680,
+          "heapUsed": 103086632,
+          "external": 27527357
+        },
+        {
+          "phase": "response_sequential_14",
+          "rss": 256839680,
+          "heapUsed": 103092744,
+          "external": 27527357
+        },
+        {
+          "phase": "capacity_1",
+          "rss": 256839680,
+          "heapUsed": 103167336,
+          "external": 27527501
+        },
+        {
+          "phase": "response_sequential_15",
+          "rss": 256839680,
+          "heapUsed": 103173448,
+          "external": 27527501
+        },
+        {
+          "phase": "capacity_1",
+          "rss": 256839680,
+          "heapUsed": 103247848,
+          "external": 27527645
+        },
+        {
+          "phase": "response_sequential_16",
+          "rss": 256839680,
+          "heapUsed": 103253960,
+          "external": 27527645
+        },
+        {
+          "phase": "capacity_1",
+          "rss": 256839680,
+          "heapUsed": 103328232,
+          "external": 27527789
+        },
+        {
+          "phase": "response_sequential_17",
+          "rss": 256839680,
+          "heapUsed": 103334344,
+          "external": 27527789
+        },
+        {
+          "phase": "capacity_1",
+          "rss": 256847872,
+          "heapUsed": 103528808,
+          "external": 27527933
+        },
+        {
+          "phase": "response_sequential_18",
+          "rss": 256847872,
+          "heapUsed": 103420904,
+          "external": 27527933
+        },
+        {
+          "phase": "capacity_1",
+          "rss": 256847872,
+          "heapUsed": 103495736,
+          "external": 27528077
+        },
+        {
+          "phase": "response_sequential_19",
+          "rss": 256847872,
+          "heapUsed": 103501848,
+          "external": 27528077
+        },
+        {
+          "phase": "capacity_1",
+          "rss": 256847872,
+          "heapUsed": 103576152,
+          "external": 27528221
+        },
+        {
+          "phase": "response_sequential_20",
+          "rss": 256847872,
+          "heapUsed": 103582264,
+          "external": 27528221
+        },
+        {
+          "phase": "before_idle",
+          "rss": 256847872,
+          "heapUsed": 103584696,
+          "external": 27528221
+        },
+        {
+          "phase": "after_idle",
+          "rss": 256847872,
+          "heapUsed": 103586216,
+          "external": 27528221
+        },
+        {
+          "phase": "capacity_1",
+          "rss": 256847872,
+          "heapUsed": 103659656,
+          "external": 27528365
+        },
+        {
+          "phase": "response_after_two_second_idle",
+          "rss": 256847872,
+          "heapUsed": 103665768,
+          "external": 27528365
+        }
+      ]
+    },
+    {
+      "run_id": "media-bundle-sequential-paced-final-2",
+      "scenario": "sequential-paced",
+      "experiment": "local_full_media_handler_bundle",
+      "runtime": {
+        "deno": "2.5.6",
+        "v8": "14.0.365.5-rusty",
+        "typescript": "5.9.2"
+      },
+      "proof_scope": "ordinary Deno process, NOT Supabase Edge isolate or hosted R2 proof",
+      "limits": {
+        "max_requests": 64,
+        "max_samples": 768,
+        "deadline_ms": 90000
+      },
+      "dependency_pins": {
+        "supabase": "2.57.4",
+        "s3": "3.1164.0",
+        "presigner": "3.1164.0",
+        "jpeg": "0.4.4"
+      },
+      "fixture": {
+        "width": 640,
+        "height": 640,
+        "bytes": 571931,
+        "output_bytes": 571691,
+        "sha256": "013be178fb8a412c89c511c9154327fbabf278bfb97a2fb594bc70ce2e148a95"
+      },
+      "synthetic_transport": true,
+      "network_calls": 0,
+      "forced_gc": false,
+      "capacity_metrics": "actual Deno.memoryUsage",
+      "inter_request_pause_ms": 100,
+      "transport_delay_ms": 5,
+      "idle_recovery": {
+        "idle_ms": 2000,
+        "status": 503,
+        "code": "image_verifier_busy"
+      },
+      "duration_ms": 5394,
+      "requests": 21,
+      "sequential": {
+        "completed": 4,
+        "capacity_rejected": 16
+      },
+      "capacity_boundary_cases": [
+        {
+          "name": "heap_exact",
+          "allowed": true
+        },
+        {
+          "name": "heap_over",
+          "allowed": false
+        },
+        {
+          "name": "external_exact",
+          "allowed": true
+        },
+        {
+          "name": "external_over",
+          "allowed": false
+        },
+        {
+          "name": "combined_exact",
+          "allowed": true
+        },
+        {
+          "name": "combined_over",
+          "allowed": false
+        },
+        {
+          "name": "nan_heap",
+          "allowed": false
+        },
+        {
+          "name": "infinite_external",
+          "allowed": false
+        }
+      ],
+      "max_sample_heap_external_bytes": 138695363,
+      "max_sample_rss_bytes": 250626048,
+      "counters": {
+        "auth": 21,
+        "prepare": 4,
+        "download": 4,
+        "write": 4,
+        "commit": 4,
+        "remove": 0
+      },
+      "results": [
+        {
+          "name": "sequential_1",
+          "status": 200,
+          "elapsed_ms": 367.64,
+          "effects": {
+            "auth": 1,
+            "prepare": 1,
+            "download": 1,
+            "write": 1,
+            "commit": 1,
+            "remove": 0
+          }
+        },
+        {
+          "name": "sequential_2",
+          "status": 200,
+          "elapsed_ms": 319.81,
+          "effects": {
+            "auth": 1,
+            "prepare": 1,
+            "download": 1,
+            "write": 1,
+            "commit": 1,
+            "remove": 0
+          }
+        },
+        {
+          "name": "sequential_3",
+          "status": 200,
+          "elapsed_ms": 220.32,
+          "effects": {
+            "auth": 1,
+            "prepare": 1,
+            "download": 1,
+            "write": 1,
+            "commit": 1,
+            "remove": 0
+          }
+        },
+        {
+          "name": "sequential_4",
+          "status": 200,
+          "elapsed_ms": 247.04,
+          "effects": {
+            "auth": 1,
+            "prepare": 1,
+            "download": 1,
+            "write": 1,
+            "commit": 1,
+            "remove": 0
+          }
+        },
+        {
+          "name": "sequential_5",
+          "status": 503,
+          "code": "image_verifier_busy",
+          "elapsed_ms": 8.75,
+          "effects": {
+            "auth": 1,
+            "prepare": 0,
+            "download": 0,
+            "write": 0,
+            "commit": 0,
+            "remove": 0
+          }
+        },
+        {
+          "name": "sequential_6",
+          "status": 503,
+          "code": "image_verifier_busy",
+          "elapsed_ms": 7.95,
+          "effects": {
+            "auth": 1,
+            "prepare": 0,
+            "download": 0,
+            "write": 0,
+            "commit": 0,
+            "remove": 0
+          }
+        },
+        {
+          "name": "sequential_7",
+          "status": 503,
+          "code": "image_verifier_busy",
+          "elapsed_ms": 7.45,
+          "effects": {
+            "auth": 1,
+            "prepare": 0,
+            "download": 0,
+            "write": 0,
+            "commit": 0,
+            "remove": 0
+          }
+        },
+        {
+          "name": "sequential_8",
+          "status": 503,
+          "code": "image_verifier_busy",
+          "elapsed_ms": 6.86,
+          "effects": {
+            "auth": 1,
+            "prepare": 0,
+            "download": 0,
+            "write": 0,
+            "commit": 0,
+            "remove": 0
+          }
+        },
+        {
+          "name": "sequential_9",
+          "status": 503,
+          "code": "image_verifier_busy",
+          "elapsed_ms": 7.55,
+          "effects": {
+            "auth": 1,
+            "prepare": 0,
+            "download": 0,
+            "write": 0,
+            "commit": 0,
+            "remove": 0
+          }
+        },
+        {
+          "name": "sequential_10",
+          "status": 503,
+          "code": "image_verifier_busy",
+          "elapsed_ms": 7.58,
+          "effects": {
+            "auth": 1,
+            "prepare": 0,
+            "download": 0,
+            "write": 0,
+            "commit": 0,
+            "remove": 0
+          }
+        },
+        {
+          "name": "sequential_11",
+          "status": 503,
+          "code": "image_verifier_busy",
+          "elapsed_ms": 7.39,
+          "effects": {
+            "auth": 1,
+            "prepare": 0,
+            "download": 0,
+            "write": 0,
+            "commit": 0,
+            "remove": 0
+          }
+        },
+        {
+          "name": "sequential_12",
+          "status": 503,
+          "code": "image_verifier_busy",
+          "elapsed_ms": 7.19,
+          "effects": {
+            "auth": 1,
+            "prepare": 0,
+            "download": 0,
+            "write": 0,
+            "commit": 0,
+            "remove": 0
+          }
+        },
+        {
+          "name": "sequential_13",
+          "status": 503,
+          "code": "image_verifier_busy",
+          "elapsed_ms": 7.67,
+          "effects": {
+            "auth": 1,
+            "prepare": 0,
+            "download": 0,
+            "write": 0,
+            "commit": 0,
+            "remove": 0
+          }
+        },
+        {
+          "name": "sequential_14",
+          "status": 503,
+          "code": "image_verifier_busy",
+          "elapsed_ms": 7.37,
+          "effects": {
+            "auth": 1,
+            "prepare": 0,
+            "download": 0,
+            "write": 0,
+            "commit": 0,
+            "remove": 0
+          }
+        },
+        {
+          "name": "sequential_15",
+          "status": 503,
+          "code": "image_verifier_busy",
+          "elapsed_ms": 7.38,
+          "effects": {
+            "auth": 1,
+            "prepare": 0,
+            "download": 0,
+            "write": 0,
+            "commit": 0,
+            "remove": 0
+          }
+        },
+        {
+          "name": "sequential_16",
+          "status": 503,
+          "code": "image_verifier_busy",
+          "elapsed_ms": 6.53,
+          "effects": {
+            "auth": 1,
+            "prepare": 0,
+            "download": 0,
+            "write": 0,
+            "commit": 0,
+            "remove": 0
+          }
+        },
+        {
+          "name": "sequential_17",
+          "status": 503,
+          "code": "image_verifier_busy",
+          "elapsed_ms": 6.93,
+          "effects": {
+            "auth": 1,
+            "prepare": 0,
+            "download": 0,
+            "write": 0,
+            "commit": 0,
+            "remove": 0
+          }
+        },
+        {
+          "name": "sequential_18",
+          "status": 503,
+          "code": "image_verifier_busy",
+          "elapsed_ms": 7.06,
+          "effects": {
+            "auth": 1,
+            "prepare": 0,
+            "download": 0,
+            "write": 0,
+            "commit": 0,
+            "remove": 0
+          }
+        },
+        {
+          "name": "sequential_19",
+          "status": 503,
+          "code": "image_verifier_busy",
+          "elapsed_ms": 6.97,
+          "effects": {
+            "auth": 1,
+            "prepare": 0,
+            "download": 0,
+            "write": 0,
+            "commit": 0,
+            "remove": 0
+          }
+        },
+        {
+          "name": "sequential_20",
+          "status": 503,
+          "code": "image_verifier_busy",
+          "elapsed_ms": 7.06,
+          "effects": {
+            "auth": 1,
+            "prepare": 0,
+            "download": 0,
+            "write": 0,
+            "commit": 0,
+            "remove": 0
+          }
+        },
+        {
+          "name": "after_two_second_idle",
+          "status": 503,
+          "code": "image_verifier_busy",
+          "elapsed_ms": 8.43,
+          "effects": {
+            "auth": 1,
+            "prepare": 0,
+            "download": 0,
+            "write": 0,
+            "commit": 0,
+            "remove": 0
+          }
+        }
+      ],
+      "samples": [
+        {
+          "phase": "before_imports",
+          "rss": 59338752,
+          "heapUsed": 6454608,
+          "external": 3189261
+        },
+        {
+          "phase": "after_full_imports",
+          "rss": 80699392,
+          "heapUsed": 15996480,
+          "external": 3209564
+        },
+        {
+          "phase": "after_fixture",
+          "rss": 119365632,
+          "heapUsed": 34113728,
+          "external": 4353458
+        },
+        {
+          "phase": "capacity_1",
+          "rss": 119967744,
+          "heapUsed": 34438648,
+          "external": 4353602
+        },
+        {
+          "phase": "prepare",
+          "rss": 120004608,
+          "heapUsed": 34573920,
+          "external": 4353602
+        },
+        {
+          "phase": "capacity_2",
+          "rss": 120008704,
+          "heapUsed": 34588136,
+          "external": 4925533
+        },
+        {
+          "phase": "after_codec_before_write",
+          "rss": 161980416,
+          "heapUsed": 54166920,
+          "external": 7135208
+        },
+        {
+          "phase": "response_sequential_1",
+          "rss": 161980416,
+          "heapUsed": 54275280,
+          "external": 7135208
+        },
+        {
+          "phase": "capacity_1",
+          "rss": 161988608,
+          "heapUsed": 54398512,
+          "external": 7135352
+        },
+        {
+          "phase": "prepare",
+          "rss": 161988608,
+          "heapUsed": 54498848,
+          "external": 7135352
+        },
+        {
+          "phase": "capacity_2",
+          "rss": 162062336,
+          "heapUsed": 54520816,
+          "external": 7707283
+        },
+        {
+          "phase": "after_codec_before_write",
+          "rss": 185581568,
+          "heapUsed": 63193544,
+          "external": 9917470
+        },
+        {
+          "phase": "response_sequential_2",
+          "rss": 185647104,
+          "heapUsed": 63261456,
+          "external": 9917470
+        },
+        {
+          "phase": "capacity_1",
+          "rss": 185749504,
+          "heapUsed": 63371704,
+          "external": 9917614
+        },
+        {
+          "phase": "prepare",
+          "rss": 185843712,
+          "heapUsed": 63469400,
+          "external": 9917614
+        },
+        {
+          "phase": "capacity_2",
+          "rss": 185847808,
+          "heapUsed": 63476848,
+          "external": 10489545
+        },
+        {
+          "phase": "after_codec_before_write",
+          "rss": 223453184,
+          "heapUsed": 78141328,
+          "external": 21217942
+        },
+        {
+          "phase": "response_sequential_3",
+          "rss": 223469568,
+          "heapUsed": 78218040,
+          "external": 21217942
+        },
+        {
+          "phase": "capacity_1",
+          "rss": 223469568,
+          "heapUsed": 78293856,
+          "external": 7707523
+        },
+        {
+          "phase": "prepare",
+          "rss": 223469568,
+          "heapUsed": 78382784,
+          "external": 7707523
+        },
+        {
+          "phase": "capacity_2",
+          "rss": 223469568,
+          "heapUsed": 78390528,
+          "external": 8279454
+        },
+        {
+          "phase": "after_codec_before_write",
+          "rss": 248946688,
+          "heapUsed": 117561648,
+          "external": 19007851
+        },
+        {
+          "phase": "response_sequential_4",
+          "rss": 249020416,
+          "heapUsed": 117682264,
+          "external": 19007851
+        },
+        {
+          "phase": "capacity_1",
+          "rss": 249180160,
+          "heapUsed": 117796200,
+          "external": 19007995
+        },
+        {
+          "phase": "response_sequential_5",
+          "rss": 249192448,
+          "heapUsed": 117803808,
+          "external": 19007995
+        },
+        {
+          "phase": "capacity_1",
+          "rss": 249270272,
+          "heapUsed": 117882560,
+          "external": 19008139
+        },
+        {
+          "phase": "response_sequential_6",
+          "rss": 249274368,
+          "heapUsed": 117888704,
+          "external": 19008139
+        },
+        {
+          "phase": "capacity_1",
+          "rss": 249372672,
+          "heapUsed": 117987984,
+          "external": 19008283
+        },
+        {
+          "phase": "response_sequential_7",
+          "rss": 249376768,
+          "heapUsed": 117994176,
+          "external": 19008283
+        },
+        {
+          "phase": "capacity_1",
+          "rss": 249450496,
+          "heapUsed": 118071016,
+          "external": 19008427
+        },
+        {
+          "phase": "response_sequential_8",
+          "rss": 249458688,
+          "heapUsed": 118077288,
+          "external": 19008427
+        },
+        {
+          "phase": "capacity_1",
+          "rss": 249573376,
+          "heapUsed": 118224576,
+          "external": 19008571
+        },
+        {
+          "phase": "response_sequential_9",
+          "rss": 249602048,
+          "heapUsed": 118246536,
+          "external": 19008571
+        },
+        {
+          "phase": "capacity_1",
+          "rss": 249696256,
+          "heapUsed": 118317440,
+          "external": 19008715
+        },
+        {
+          "phase": "response_sequential_10",
+          "rss": 249704448,
+          "heapUsed": 118323504,
+          "external": 19008715
+        },
+        {
+          "phase": "capacity_1",
+          "rss": 249782272,
+          "heapUsed": 118400144,
+          "external": 19008859
+        },
+        {
+          "phase": "response_sequential_11",
+          "rss": 249794560,
+          "heapUsed": 119124528,
+          "external": 19008859
+        },
+        {
+          "phase": "capacity_1",
+          "rss": 249868288,
+          "heapUsed": 118488480,
+          "external": 19009003
+        },
+        {
+          "phase": "response_sequential_12",
+          "rss": 249872384,
+          "heapUsed": 118494576,
+          "external": 19009003
+        },
+        {
+          "phase": "capacity_1",
+          "rss": 249950208,
+          "heapUsed": 118571272,
+          "external": 19009147
+        },
+        {
+          "phase": "response_sequential_13",
+          "rss": 249954304,
+          "heapUsed": 118577472,
+          "external": 19009147
+        },
+        {
+          "phase": "capacity_1",
+          "rss": 250028032,
+          "heapUsed": 118652136,
+          "external": 19009291
+        },
+        {
+          "phase": "response_sequential_14",
+          "rss": 250036224,
+          "heapUsed": 118658248,
+          "external": 19009291
+        },
+        {
+          "phase": "capacity_1",
+          "rss": 250118144,
+          "heapUsed": 118734424,
+          "external": 19009435
+        },
+        {
+          "phase": "response_sequential_15",
+          "rss": 250122240,
+          "heapUsed": 118741208,
+          "external": 19009435
+        },
+        {
+          "phase": "capacity_1",
+          "rss": 250204160,
+          "heapUsed": 118816040,
+          "external": 19009579
+        },
+        {
+          "phase": "response_sequential_16",
+          "rss": 250208256,
+          "heapUsed": 118822152,
+          "external": 19009579
+        },
+        {
+          "phase": "capacity_1",
+          "rss": 250281984,
+          "heapUsed": 118896600,
+          "external": 19009723
+        },
+        {
+          "phase": "response_sequential_17",
+          "rss": 250290176,
+          "heapUsed": 118902712,
+          "external": 19009723
+        },
+        {
+          "phase": "capacity_1",
+          "rss": 250363904,
+          "heapUsed": 119685496,
+          "external": 19009867
+        },
+        {
+          "phase": "response_sequential_18",
+          "rss": 250372096,
+          "heapUsed": 118989456,
+          "external": 19009867
+        },
+        {
+          "phase": "capacity_1",
+          "rss": 250445824,
+          "heapUsed": 119064392,
+          "external": 19010011
+        },
+        {
+          "phase": "response_sequential_19",
+          "rss": 250454016,
+          "heapUsed": 119070504,
+          "external": 19010011
+        },
+        {
+          "phase": "capacity_1",
+          "rss": 250527744,
+          "heapUsed": 119144952,
+          "external": 19010155
+        },
+        {
+          "phase": "response_sequential_20",
+          "rss": 250531840,
+          "heapUsed": 119151064,
+          "external": 19010155
+        },
+        {
+          "phase": "before_idle",
+          "rss": 250535936,
+          "heapUsed": 119153496,
+          "external": 19010155
+        },
+        {
+          "phase": "after_idle",
+          "rss": 250535936,
+          "heapUsed": 119155016,
+          "external": 19010155
+        },
+        {
+          "phase": "capacity_1",
+          "rss": 250617856,
+          "heapUsed": 119235576,
+          "external": 19010299
+        },
+        {
+          "phase": "response_after_two_second_idle",
+          "rss": 250626048,
+          "heapUsed": 119241688,
+          "external": 19010299
+        }
+      ]
+    },
+    {
+      "run_id": "media-bundle-sequential-paced-final-3",
+      "scenario": "sequential-paced",
+      "experiment": "local_full_media_handler_bundle",
+      "runtime": {
+        "deno": "2.5.6",
+        "v8": "14.0.365.5-rusty",
+        "typescript": "5.9.2"
+      },
+      "proof_scope": "ordinary Deno process, NOT Supabase Edge isolate or hosted R2 proof",
+      "limits": {
+        "max_requests": 64,
+        "max_samples": 768,
+        "deadline_ms": 90000
+      },
+      "dependency_pins": {
+        "supabase": "2.57.4",
+        "s3": "3.1164.0",
+        "presigner": "3.1164.0",
+        "jpeg": "0.4.4"
+      },
+      "fixture": {
+        "width": 640,
+        "height": 640,
+        "bytes": 571931,
+        "output_bytes": 571691,
+        "sha256": "013be178fb8a412c89c511c9154327fbabf278bfb97a2fb594bc70ce2e148a95"
+      },
+      "synthetic_transport": true,
+      "network_calls": 0,
+      "forced_gc": false,
+      "capacity_metrics": "actual Deno.memoryUsage",
+      "inter_request_pause_ms": 100,
+      "transport_delay_ms": 5,
+      "idle_recovery": {
+        "idle_ms": 2000,
+        "status": 503,
+        "code": "image_verifier_busy"
+      },
+      "duration_ms": 5169,
+      "requests": 21,
+      "sequential": {
+        "completed": 4,
+        "capacity_rejected": 16
+      },
+      "capacity_boundary_cases": [
+        {
+          "name": "heap_exact",
+          "allowed": true
+        },
+        {
+          "name": "heap_over",
+          "allowed": false
+        },
+        {
+          "name": "external_exact",
+          "allowed": true
+        },
+        {
+          "name": "external_over",
+          "allowed": false
+        },
+        {
+          "name": "combined_exact",
+          "allowed": true
+        },
+        {
+          "name": "combined_over",
+          "allowed": false
+        },
+        {
+          "name": "nan_heap",
+          "allowed": false
+        },
+        {
+          "name": "infinite_external",
+          "allowed": false
+        }
+      ],
+      "max_sample_heap_external_bytes": 138371827,
+      "max_sample_rss_bytes": 248512512,
+      "counters": {
+        "auth": 21,
+        "prepare": 4,
+        "download": 4,
+        "write": 4,
+        "commit": 4,
+        "remove": 0
+      },
+      "results": [
+        {
+          "name": "sequential_1",
+          "status": 200,
+          "elapsed_ms": 260.35,
+          "effects": {
+            "auth": 1,
+            "prepare": 1,
+            "download": 1,
+            "write": 1,
+            "commit": 1,
+            "remove": 0
+          }
+        },
+        {
+          "name": "sequential_2",
+          "status": 200,
+          "elapsed_ms": 238.7,
+          "effects": {
+            "auth": 1,
+            "prepare": 1,
+            "download": 1,
+            "write": 1,
+            "commit": 1,
+            "remove": 0
+          }
+        },
+        {
+          "name": "sequential_3",
+          "status": 200,
+          "elapsed_ms": 228.45,
+          "effects": {
+            "auth": 1,
+            "prepare": 1,
+            "download": 1,
+            "write": 1,
+            "commit": 1,
+            "remove": 0
+          }
+        },
+        {
+          "name": "sequential_4",
+          "status": 200,
+          "elapsed_ms": 265.31,
+          "effects": {
+            "auth": 1,
+            "prepare": 1,
+            "download": 1,
+            "write": 1,
+            "commit": 1,
+            "remove": 0
+          }
+        },
+        {
+          "name": "sequential_5",
+          "status": 503,
+          "code": "image_verifier_busy",
+          "elapsed_ms": 8.37,
+          "effects": {
+            "auth": 1,
+            "prepare": 0,
+            "download": 0,
+            "write": 0,
+            "commit": 0,
+            "remove": 0
+          }
+        },
+        {
+          "name": "sequential_6",
+          "status": 503,
+          "code": "image_verifier_busy",
+          "elapsed_ms": 7.21,
+          "effects": {
+            "auth": 1,
+            "prepare": 0,
+            "download": 0,
+            "write": 0,
+            "commit": 0,
+            "remove": 0
+          }
+        },
+        {
+          "name": "sequential_7",
+          "status": 503,
+          "code": "image_verifier_busy",
+          "elapsed_ms": 6.99,
+          "effects": {
+            "auth": 1,
+            "prepare": 0,
+            "download": 0,
+            "write": 0,
+            "commit": 0,
+            "remove": 0
+          }
+        },
+        {
+          "name": "sequential_8",
+          "status": 503,
+          "code": "image_verifier_busy",
+          "elapsed_ms": 6.97,
+          "effects": {
+            "auth": 1,
+            "prepare": 0,
+            "download": 0,
+            "write": 0,
+            "commit": 0,
+            "remove": 0
+          }
+        },
+        {
+          "name": "sequential_9",
+          "status": 503,
+          "code": "image_verifier_busy",
+          "elapsed_ms": 6.32,
+          "effects": {
+            "auth": 1,
+            "prepare": 0,
+            "download": 0,
+            "write": 0,
+            "commit": 0,
+            "remove": 0
+          }
+        },
+        {
+          "name": "sequential_10",
+          "status": 503,
+          "code": "image_verifier_busy",
+          "elapsed_ms": 7.11,
+          "effects": {
+            "auth": 1,
+            "prepare": 0,
+            "download": 0,
+            "write": 0,
+            "commit": 0,
+            "remove": 0
+          }
+        },
+        {
+          "name": "sequential_11",
+          "status": 503,
+          "code": "image_verifier_busy",
+          "elapsed_ms": 6.98,
+          "effects": {
+            "auth": 1,
+            "prepare": 0,
+            "download": 0,
+            "write": 0,
+            "commit": 0,
+            "remove": 0
+          }
+        },
+        {
+          "name": "sequential_12",
+          "status": 503,
+          "code": "image_verifier_busy",
+          "elapsed_ms": 6.83,
+          "effects": {
+            "auth": 1,
+            "prepare": 0,
+            "download": 0,
+            "write": 0,
+            "commit": 0,
+            "remove": 0
+          }
+        },
+        {
+          "name": "sequential_13",
+          "status": 503,
+          "code": "image_verifier_busy",
+          "elapsed_ms": 7.33,
+          "effects": {
+            "auth": 1,
+            "prepare": 0,
+            "download": 0,
+            "write": 0,
+            "commit": 0,
+            "remove": 0
+          }
+        },
+        {
+          "name": "sequential_14",
+          "status": 503,
+          "code": "image_verifier_busy",
+          "elapsed_ms": 6.92,
+          "effects": {
+            "auth": 1,
+            "prepare": 0,
+            "download": 0,
+            "write": 0,
+            "commit": 0,
+            "remove": 0
+          }
+        },
+        {
+          "name": "sequential_15",
+          "status": 503,
+          "code": "image_verifier_busy",
+          "elapsed_ms": 7.03,
+          "effects": {
+            "auth": 1,
+            "prepare": 0,
+            "download": 0,
+            "write": 0,
+            "commit": 0,
+            "remove": 0
+          }
+        },
+        {
+          "name": "sequential_16",
+          "status": 503,
+          "code": "image_verifier_busy",
+          "elapsed_ms": 6.8,
+          "effects": {
+            "auth": 1,
+            "prepare": 0,
+            "download": 0,
+            "write": 0,
+            "commit": 0,
+            "remove": 0
+          }
+        },
+        {
+          "name": "sequential_17",
+          "status": 503,
+          "code": "image_verifier_busy",
+          "elapsed_ms": 6.85,
+          "effects": {
+            "auth": 1,
+            "prepare": 0,
+            "download": 0,
+            "write": 0,
+            "commit": 0,
+            "remove": 0
+          }
+        },
+        {
+          "name": "sequential_18",
+          "status": 503,
+          "code": "image_verifier_busy",
+          "elapsed_ms": 6.84,
+          "effects": {
+            "auth": 1,
+            "prepare": 0,
+            "download": 0,
+            "write": 0,
+            "commit": 0,
+            "remove": 0
+          }
+        },
+        {
+          "name": "sequential_19",
+          "status": 503,
+          "code": "image_verifier_busy",
+          "elapsed_ms": 6.66,
+          "effects": {
+            "auth": 1,
+            "prepare": 0,
+            "download": 0,
+            "write": 0,
+            "commit": 0,
+            "remove": 0
+          }
+        },
+        {
+          "name": "sequential_20",
+          "status": 503,
+          "code": "image_verifier_busy",
+          "elapsed_ms": 6.82,
+          "effects": {
+            "auth": 1,
+            "prepare": 0,
+            "download": 0,
+            "write": 0,
+            "commit": 0,
+            "remove": 0
+          }
+        },
+        {
+          "name": "after_two_second_idle",
+          "status": 503,
+          "code": "image_verifier_busy",
+          "elapsed_ms": 12.04,
+          "effects": {
+            "auth": 1,
+            "prepare": 0,
+            "download": 0,
+            "write": 0,
+            "commit": 0,
+            "remove": 0
+          }
+        }
+      ],
+      "samples": [
+        {
+          "phase": "before_imports",
+          "rss": 58204160,
+          "heapUsed": 6454608,
+          "external": 3189261
+        },
+        {
+          "phase": "after_full_imports",
+          "rss": 79822848,
+          "heapUsed": 16123496,
+          "external": 3209564
+        },
+        {
+          "phase": "after_fixture",
+          "rss": 118272000,
+          "heapUsed": 34113728,
+          "external": 4353458
+        },
+        {
+          "phase": "capacity_1",
+          "rss": 118865920,
+          "heapUsed": 34438648,
+          "external": 4353602
+        },
+        {
+          "phase": "prepare",
+          "rss": 118906880,
+          "heapUsed": 34573920,
+          "external": 4353602
+        },
+        {
+          "phase": "capacity_2",
+          "rss": 118910976,
+          "heapUsed": 34588136,
+          "external": 4925533
+        },
+        {
+          "phase": "after_codec_before_write",
+          "rss": 158855168,
+          "heapUsed": 56489184,
+          "external": 7135208
+        },
+        {
+          "phase": "response_sequential_1",
+          "rss": 158859264,
+          "heapUsed": 56597544,
+          "external": 7135208
+        },
+        {
+          "phase": "capacity_1",
+          "rss": 158863360,
+          "heapUsed": 56720776,
+          "external": 7135352
+        },
+        {
+          "phase": "prepare",
+          "rss": 158863360,
+          "heapUsed": 56821232,
+          "external": 7135352
+        },
+        {
+          "phase": "capacity_2",
+          "rss": 158994432,
+          "heapUsed": 56843200,
+          "external": 7707283
+        },
+        {
+          "phase": "after_codec_before_write",
+          "rss": 187359232,
+          "heapUsed": 63151736,
+          "external": 9917470
+        },
+        {
+          "phase": "response_sequential_2",
+          "rss": 187420672,
+          "heapUsed": 63219648,
+          "external": 9917470
+        },
+        {
+          "phase": "capacity_1",
+          "rss": 187518976,
+          "heapUsed": 63329944,
+          "external": 9917614
+        },
+        {
+          "phase": "prepare",
+          "rss": 187617280,
+          "heapUsed": 63427272,
+          "external": 9917614
+        },
+        {
+          "phase": "capacity_2",
+          "rss": 187621376,
+          "heapUsed": 63434720,
+          "external": 10489545
+        },
+        {
+          "phase": "after_codec_before_write",
+          "rss": 225202176,
+          "heapUsed": 78092920,
+          "external": 21217942
+        },
+        {
+          "phase": "response_sequential_3",
+          "rss": 225214464,
+          "heapUsed": 78169688,
+          "external": 21217942
+        },
+        {
+          "phase": "capacity_1",
+          "rss": 225214464,
+          "heapUsed": 78245504,
+          "external": 7707523
+        },
+        {
+          "phase": "prepare",
+          "rss": 225243136,
+          "heapUsed": 78334432,
+          "external": 7707523
+        },
+        {
+          "phase": "capacity_2",
+          "rss": 225243136,
+          "heapUsed": 78342176,
+          "external": 8279454
+        },
+        {
+          "phase": "after_codec_before_write",
+          "rss": 248303616,
+          "heapUsed": 117503552,
+          "external": 19007851
+        },
+        {
+          "phase": "response_sequential_4",
+          "rss": 248311808,
+          "heapUsed": 117588904,
+          "external": 19007851
+        },
+        {
+          "phase": "capacity_1",
+          "rss": 248389632,
+          "heapUsed": 117738104,
+          "external": 19007995
+        },
+        {
+          "phase": "response_sequential_5",
+          "rss": 248389632,
+          "heapUsed": 117745712,
+          "external": 19007995
+        },
+        {
+          "phase": "capacity_1",
+          "rss": 248393728,
+          "heapUsed": 117824464,
+          "external": 19008139
+        },
+        {
+          "phase": "response_sequential_6",
+          "rss": 248393728,
+          "heapUsed": 117830608,
+          "external": 19008139
+        },
+        {
+          "phase": "capacity_1",
+          "rss": 248418304,
+          "heapUsed": 117929888,
+          "external": 19008283
+        },
+        {
+          "phase": "response_sequential_7",
+          "rss": 248418304,
+          "heapUsed": 117936080,
+          "external": 19008283
+        },
+        {
+          "phase": "capacity_1",
+          "rss": 248418304,
+          "heapUsed": 118012920,
+          "external": 19008427
+        },
+        {
+          "phase": "response_sequential_8",
+          "rss": 248418304,
+          "heapUsed": 118019192,
+          "external": 19008427
+        },
+        {
+          "phase": "capacity_1",
+          "rss": 248463360,
+          "heapUsed": 118171768,
+          "external": 19008571
+        },
+        {
+          "phase": "response_sequential_9",
+          "rss": 248471552,
+          "heapUsed": 118179840,
+          "external": 19008571
+        },
+        {
+          "phase": "capacity_1",
+          "rss": 248483840,
+          "heapUsed": 118259344,
+          "external": 19008715
+        },
+        {
+          "phase": "response_sequential_10",
+          "rss": 248483840,
+          "heapUsed": 118265408,
+          "external": 19008715
+        },
+        {
+          "phase": "capacity_1",
+          "rss": 248483840,
+          "heapUsed": 118342048,
+          "external": 19008859
+        },
+        {
+          "phase": "response_sequential_11",
+          "rss": 248487936,
+          "heapUsed": 118348592,
+          "external": 19008859
+        },
+        {
+          "phase": "capacity_1",
+          "rss": 248492032,
+          "heapUsed": 118430384,
+          "external": 19009003
+        },
+        {
+          "phase": "response_sequential_12",
+          "rss": 248492032,
+          "heapUsed": 118436480,
+          "external": 19009003
+        },
+        {
+          "phase": "capacity_1",
+          "rss": 248496128,
+          "heapUsed": 118512920,
+          "external": 19009147
+        },
+        {
+          "phase": "response_sequential_13",
+          "rss": 248496128,
+          "heapUsed": 118519120,
+          "external": 19009147
+        },
+        {
+          "phase": "capacity_1",
+          "rss": 248496128,
+          "heapUsed": 118593784,
+          "external": 19009291
+        },
+        {
+          "phase": "response_sequential_14",
+          "rss": 248496128,
+          "heapUsed": 118599896,
+          "external": 19009291
+        },
+        {
+          "phase": "capacity_1",
+          "rss": 248496128,
+          "heapUsed": 118676064,
+          "external": 19009435
+        },
+        {
+          "phase": "response_sequential_15",
+          "rss": 248496128,
+          "heapUsed": 118682848,
+          "external": 19009435
+        },
+        {
+          "phase": "capacity_1",
+          "rss": 248496128,
+          "heapUsed": 118757680,
+          "external": 19009579
+        },
+        {
+          "phase": "response_sequential_16",
+          "rss": 248496128,
+          "heapUsed": 118763792,
+          "external": 19009579
+        },
+        {
+          "phase": "capacity_1",
+          "rss": 248496128,
+          "heapUsed": 118838240,
+          "external": 19009723
+        },
+        {
+          "phase": "response_sequential_17",
+          "rss": 248496128,
+          "heapUsed": 118844352,
+          "external": 19009723
+        },
+        {
+          "phase": "capacity_1",
+          "rss": 248504320,
+          "heapUsed": 119361960,
+          "external": 19009867
+        },
+        {
+          "phase": "response_sequential_18",
+          "rss": 248504320,
+          "heapUsed": 118931064,
+          "external": 19009867
+        },
+        {
+          "phase": "capacity_1",
+          "rss": 248504320,
+          "heapUsed": 119006000,
+          "external": 19010011
+        },
+        {
+          "phase": "response_sequential_19",
+          "rss": 248504320,
+          "heapUsed": 119012112,
+          "external": 19010011
+        },
+        {
+          "phase": "capacity_1",
+          "rss": 248504320,
+          "heapUsed": 119086560,
+          "external": 19010155
+        },
+        {
+          "phase": "response_sequential_20",
+          "rss": 248504320,
+          "heapUsed": 119092672,
+          "external": 19010155
+        },
+        {
+          "phase": "before_idle",
+          "rss": 248504320,
+          "heapUsed": 119095104,
+          "external": 19010155
+        },
+        {
+          "phase": "after_idle",
+          "rss": 248508416,
+          "heapUsed": 119096624,
+          "external": 19010155
+        },
+        {
+          "phase": "capacity_1",
+          "rss": 248512512,
+          "heapUsed": 119176040,
+          "external": 19010299
+        },
+        {
+          "phase": "response_after_two_second_idle",
+          "rss": 248512512,
+          "heapUsed": 119182152,
+          "external": 19010299
+        }
+      ]
+    },
+    {
+      "run_id": "media-bundle-burst-final",
+      "scenario": "burst",
+      "experiment": "local_full_media_handler_bundle",
+      "runtime": {
+        "deno": "2.5.6",
+        "v8": "14.0.365.5-rusty",
+        "typescript": "5.9.2"
+      },
+      "proof_scope": "ordinary Deno process, NOT Supabase Edge isolate or hosted R2 proof",
+      "limits": {
+        "max_requests": 64,
+        "max_samples": 768,
+        "deadline_ms": 90000
+      },
+      "dependency_pins": {
+        "supabase": "2.57.4",
+        "s3": "3.1164.0",
+        "presigner": "3.1164.0",
+        "jpeg": "0.4.4"
+      },
+      "fixture": {
+        "width": 640,
+        "height": 640,
+        "bytes": 571931,
+        "output_bytes": 571691,
+        "sha256": "013be178fb8a412c89c511c9154327fbabf278bfb97a2fb594bc70ce2e148a95"
+      },
+      "synthetic_transport": true,
+      "network_calls": 0,
+      "forced_gc": false,
+      "capacity_metrics": "actual Deno.memoryUsage",
+      "inter_request_pause_ms": 0,
+      "transport_delay_ms": 0,
+      "duration_ms": 604,
+      "requests": 9,
+      "sequential": {
+        "completed": 0,
+        "capacity_rejected": 0
+      },
+      "capacity_boundary_cases": [
+        {
+          "name": "heap_exact",
+          "allowed": true
+        },
+        {
+          "name": "heap_over",
+          "allowed": false
+        },
+        {
+          "name": "external_exact",
+          "allowed": true
+        },
+        {
+          "name": "external_over",
+          "allowed": false
+        },
+        {
+          "name": "combined_exact",
+          "allowed": true
+        },
+        {
+          "name": "combined_over",
+          "allowed": false
+        },
+        {
+          "name": "nan_heap",
+          "allowed": false
+        },
+        {
+          "name": "infinite_external",
+          "allowed": false
+        }
+      ],
+      "max_sample_heap_external_bytes": 73371150,
+      "max_sample_rss_bytes": 190730240,
+      "counters": {
+        "auth": 9,
+        "prepare": 2,
+        "download": 2,
+        "write": 2,
+        "commit": 2,
+        "remove": 0
+      },
+      "results": [
+        {
+          "name": "burst_rejected_1",
+          "status": 429,
+          "code": "verification_busy",
+          "elapsed_ms": 3.63,
+          "effects": {
+            "auth": 7,
+            "prepare": 0,
+            "download": 0,
+            "write": 0,
+            "commit": 0,
+            "remove": 0
+          }
+        },
+        {
+          "name": "burst_rejected_2",
+          "status": 429,
+          "code": "verification_busy",
+          "elapsed_ms": 3.25,
+          "effects": {
+            "auth": 7,
+            "prepare": 0,
+            "download": 0,
+            "write": 0,
+            "commit": 0,
+            "remove": 0
+          }
+        },
+        {
+          "name": "burst_rejected_3",
+          "status": 429,
+          "code": "verification_busy",
+          "elapsed_ms": 3.03,
+          "effects": {
+            "auth": 7,
+            "prepare": 0,
+            "download": 0,
+            "write": 0,
+            "commit": 0,
+            "remove": 0
+          }
+        },
+        {
+          "name": "burst_rejected_4",
+          "status": 429,
+          "code": "verification_busy",
+          "elapsed_ms": 2.73,
+          "effects": {
+            "auth": 7,
+            "prepare": 0,
+            "download": 0,
+            "write": 0,
+            "commit": 0,
+            "remove": 0
+          }
+        },
+        {
+          "name": "burst_rejected_5",
+          "status": 429,
+          "code": "verification_busy",
+          "elapsed_ms": 2.53,
+          "effects": {
+            "auth": 7,
+            "prepare": 0,
+            "download": 0,
+            "write": 0,
+            "commit": 0,
+            "remove": 0
+          }
+        },
+        {
+          "name": "burst_rejected_6",
+          "status": 429,
+          "code": "verification_busy",
+          "elapsed_ms": 2.38,
+          "effects": {
+            "auth": 7,
+            "prepare": 0,
+            "download": 0,
+            "write": 0,
+            "commit": 0,
+            "remove": 0
+          }
+        },
+        {
+          "name": "burst_rejected_7",
+          "status": 429,
+          "code": "verification_busy",
+          "elapsed_ms": 2,
+          "effects": {
+            "auth": 7,
+            "prepare": 0,
+            "download": 0,
+            "write": 0,
+            "commit": 0,
+            "remove": 0
+          }
+        },
+        {
+          "name": "burst_admitted",
+          "status": 200,
+          "elapsed_ms": 230.1,
+          "effects": {
+            "auth": 8,
+            "prepare": 1,
+            "download": 1,
+            "write": 1,
+            "commit": 1,
+            "remove": 0
+          }
+        },
+        {
+          "name": "after_burst_recovery",
+          "status": 200,
+          "elapsed_ms": 236.25,
+          "effects": {
+            "auth": 1,
+            "prepare": 1,
+            "download": 1,
+            "write": 1,
+            "commit": 1,
+            "remove": 0
+          }
+        }
+      ],
+      "samples": [
+        {
+          "phase": "before_imports",
+          "rss": 59482112,
+          "heapUsed": 6454600,
+          "external": 3189261
+        },
+        {
+          "phase": "after_full_imports",
+          "rss": 81137664,
+          "heapUsed": 16107664,
+          "external": 3209564
+        },
+        {
+          "phase": "after_fixture",
+          "rss": 119517184,
+          "heapUsed": 34113720,
+          "external": 4353458
+        },
+        {
+          "phase": "capacity_1",
+          "rss": 120127488,
+          "heapUsed": 34434616,
+          "external": 4353602
+        },
+        {
+          "phase": "prepare",
+          "rss": 120164352,
+          "heapUsed": 34571792,
+          "external": 4353602
+        },
+        {
+          "phase": "response_burst_rejected_1",
+          "rss": 120479744,
+          "heapUsed": 35793320,
+          "external": 4354610
+        },
+        {
+          "phase": "response_burst_rejected_2",
+          "rss": 120479744,
+          "heapUsed": 35315024,
+          "external": 4354610
+        },
+        {
+          "phase": "response_burst_rejected_3",
+          "rss": 120479744,
+          "heapUsed": 35316664,
+          "external": 4354610
+        },
+        {
+          "phase": "response_burst_rejected_4",
+          "rss": 120479744,
+          "heapUsed": 35318304,
+          "external": 4354610
+        },
+        {
+          "phase": "response_burst_rejected_5",
+          "rss": 120479744,
+          "heapUsed": 35320576,
+          "external": 4354610
+        },
+        {
+          "phase": "response_burst_rejected_6",
+          "rss": 120545280,
+          "heapUsed": 35322184,
+          "external": 4354610
+        },
+        {
+          "phase": "response_burst_rejected_7",
+          "rss": 120545280,
+          "heapUsed": 35325448,
+          "external": 4354610
+        },
+        {
+          "phase": "capacity_2",
+          "rss": 120557568,
+          "heapUsed": 35339856,
+          "external": 4926541
+        },
+        {
+          "phase": "after_codec_before_write",
+          "rss": 161447936,
+          "heapUsed": 59440360,
+          "external": 7135240
+        },
+        {
+          "phase": "response_burst_admitted",
+          "rss": 161464320,
+          "heapUsed": 59529016,
+          "external": 7135240
+        },
+        {
+          "phase": "capacity_1",
+          "rss": 161509376,
+          "heapUsed": 60253528,
+          "external": 7135384
+        },
+        {
+          "phase": "prepare",
+          "rss": 161529856,
+          "heapUsed": 59782784,
+          "external": 7135384
+        },
+        {
+          "phase": "capacity_2",
+          "rss": 161538048,
+          "heapUsed": 59797144,
+          "external": 7707315
+        },
+        {
+          "phase": "after_codec_before_write",
+          "rss": 190672896,
+          "heapUsed": 63385920,
+          "external": 9917502
+        },
+        {
+          "phase": "response_after_burst_recovery",
+          "rss": 190730240,
+          "heapUsed": 63453648,
+          "external": 9917502
+        }
+      ]
+    },
+    {
+      "run_id": "media-bundle-boundaries-final",
+      "scenario": "boundaries",
+      "experiment": "local_full_media_handler_bundle",
+      "runtime": {
+        "deno": "2.5.6",
+        "v8": "14.0.365.5-rusty",
+        "typescript": "5.9.2"
+      },
+      "proof_scope": "ordinary Deno process, NOT Supabase Edge isolate or hosted R2 proof",
+      "limits": {
+        "max_requests": 64,
+        "max_samples": 768,
+        "deadline_ms": 90000
+      },
+      "dependency_pins": {
+        "supabase": "2.57.4",
+        "s3": "3.1164.0",
+        "presigner": "3.1164.0",
+        "jpeg": "0.4.4"
+      },
+      "fixture": {
+        "width": 640,
+        "height": 640,
+        "bytes": 571931,
+        "output_bytes": 571691,
+        "sha256": "013be178fb8a412c89c511c9154327fbabf278bfb97a2fb594bc70ce2e148a95"
+      },
+      "synthetic_transport": true,
+      "network_calls": 0,
+      "forced_gc": false,
+      "capacity_metrics": "injected to isolate failure boundaries",
+      "inter_request_pause_ms": 0,
+      "transport_delay_ms": 0,
+      "duration_ms": 879,
+      "requests": 14,
+      "sequential": {
+        "completed": 0,
+        "capacity_rejected": 0
+      },
+      "capacity_boundary_cases": [
+        {
+          "name": "heap_exact",
+          "allowed": true
+        },
+        {
+          "name": "heap_over",
+          "allowed": false
+        },
+        {
+          "name": "external_exact",
+          "allowed": true
+        },
+        {
+          "name": "external_over",
+          "allowed": false
+        },
+        {
+          "name": "combined_exact",
+          "allowed": true
+        },
+        {
+          "name": "combined_over",
+          "allowed": false
+        },
+        {
+          "name": "nan_heap",
+          "allowed": false
+        },
+        {
+          "name": "infinite_external",
+          "allowed": false
+        }
+      ],
+      "max_sample_heap_external_bytes": 125217425,
+      "max_sample_rss_bytes": 266887168,
+      "counters": {
+        "auth": 13,
+        "prepare": 10,
+        "download": 8,
+        "write": 4,
+        "commit": 3,
+        "remove": 1
+      },
+      "results": [
+        {
+          "name": "pre_capacity",
+          "status": 503,
+          "code": "image_verifier_busy",
+          "elapsed_ms": 7.83,
+          "effects": {
+            "auth": 1,
+            "prepare": 0,
+            "download": 0,
+            "write": 0,
+            "commit": 0,
+            "remove": 0
+          }
+        },
+        {
+          "name": "post_capacity",
+          "status": 503,
+          "code": "image_verifier_busy",
+          "elapsed_ms": 3.17,
+          "effects": {
+            "auth": 1,
+            "prepare": 1,
+            "download": 1,
+            "write": 0,
+            "commit": 0,
+            "remove": 0
+          }
+        },
+        {
+          "name": "prepare_failure",
+          "status": 409,
+          "code": "verification_denied",
+          "elapsed_ms": 1.2,
+          "effects": {
+            "auth": 1,
+            "prepare": 1,
+            "download": 0,
+            "write": 0,
+            "commit": 0,
+            "remove": 0
+          }
+        },
+        {
+          "name": "existing",
+          "status": 200,
+          "elapsed_ms": 1.37,
+          "effects": {
+            "auth": 1,
+            "prepare": 1,
+            "download": 0,
+            "write": 0,
+            "commit": 0,
+            "remove": 0
+          }
+        },
+        {
+          "name": "short_image",
+          "status": 400,
+          "code": "invalid_image",
+          "elapsed_ms": 1.24,
+          "effects": {
+            "auth": 1,
+            "prepare": 1,
+            "download": 1,
+            "write": 0,
+            "commit": 0,
+            "remove": 0
+          }
+        },
+        {
+          "name": "invalid_image",
+          "status": 400,
+          "code": "invalid_image",
+          "elapsed_ms": 1.71,
+          "effects": {
+            "auth": 1,
+            "prepare": 1,
+            "download": 1,
+            "write": 0,
+            "commit": 0,
+            "remove": 0
+          }
+        },
+        {
+          "name": "download_failure",
+          "status": 500,
+          "code": "internal_error",
+          "elapsed_ms": 0.88,
+          "effects": {
+            "auth": 1,
+            "prepare": 1,
+            "download": 1,
+            "write": 0,
+            "commit": 0,
+            "remove": 0
+          }
+        },
+        {
+          "name": "write_failure",
+          "status": 500,
+          "code": "internal_error",
+          "elapsed_ms": 199.06,
+          "effects": {
+            "auth": 1,
+            "prepare": 1,
+            "download": 1,
+            "write": 1,
+            "commit": 0,
+            "remove": 0
+          }
+        },
+        {
+          "name": "commit_failure",
+          "status": 409,
+          "code": "verification_pending_retry",
+          "elapsed_ms": 193.83,
+          "effects": {
+            "auth": 1,
+            "prepare": 1,
+            "download": 1,
+            "write": 1,
+            "commit": 1,
+            "remove": 0
+          }
+        },
+        {
+          "name": "loser_cleanup_failure",
+          "status": 200,
+          "elapsed_ms": 171.45,
+          "effects": {
+            "auth": 1,
+            "prepare": 1,
+            "download": 1,
+            "write": 1,
+            "commit": 1,
+            "remove": 1
+          }
+        },
+        {
+          "name": "disabled_pipeline",
+          "status": 503,
+          "code": "media_pipeline_unavailable",
+          "elapsed_ms": 0.8,
+          "effects": {
+            "auth": 1,
+            "prepare": 0,
+            "download": 0,
+            "write": 0,
+            "commit": 0,
+            "remove": 0
+          }
+        },
+        {
+          "name": "no_auth",
+          "status": 401,
+          "code": "authentication_required",
+          "elapsed_ms": 0.45,
+          "effects": {
+            "auth": 0,
+            "prepare": 0,
+            "download": 0,
+            "write": 0,
+            "commit": 0,
+            "remove": 0
+          }
+        },
+        {
+          "name": "denied_auth",
+          "status": 401,
+          "code": "invalid_session",
+          "elapsed_ms": 1.31,
+          "effects": {
+            "auth": 1,
+            "prepare": 0,
+            "download": 0,
+            "write": 0,
+            "commit": 0,
+            "remove": 0
+          }
+        },
+        {
+          "name": "after_failures_recovery",
+          "status": 200,
+          "elapsed_ms": 175.99,
+          "effects": {
+            "auth": 1,
+            "prepare": 1,
+            "download": 1,
+            "write": 1,
+            "commit": 1,
+            "remove": 0
+          }
+        }
+      ],
+      "samples": [
+        {
+          "phase": "before_imports",
+          "rss": 58236928,
+          "heapUsed": 6454608,
+          "external": 3189261
+        },
+        {
+          "phase": "after_full_imports",
+          "rss": 79912960,
+          "heapUsed": 16123496,
+          "external": 3209564
+        },
+        {
+          "phase": "after_fixture",
+          "rss": 118386688,
+          "heapUsed": 34113728,
+          "external": 4353458
+        },
+        {
+          "phase": "capacity_1",
+          "rss": 119050240,
+          "heapUsed": 34433392,
+          "external": 4353602
+        },
+        {
+          "phase": "response_pre_capacity",
+          "rss": 119054336,
+          "heapUsed": 34445664,
+          "external": 4353602
+        },
+        {
+          "phase": "capacity_1",
+          "rss": 119111680,
+          "heapUsed": 34549224,
+          "external": 4353746
+        },
+        {
+          "phase": "prepare",
+          "rss": 119136256,
+          "heapUsed": 34678696,
+          "external": 4353746
+        },
+        {
+          "phase": "capacity_2",
+          "rss": 119144448,
+          "heapUsed": 34690592,
+          "external": 4925677
+        },
+        {
+          "phase": "response_post_capacity",
+          "rss": 119144448,
+          "heapUsed": 34697768,
+          "external": 4925677
+        },
+        {
+          "phase": "capacity_1",
+          "rss": 119160832,
+          "heapUsed": 34791552,
+          "external": 4925821
+        },
+        {
+          "phase": "prepare",
+          "rss": 119300096,
+          "heapUsed": 34889304,
+          "external": 4925821
+        },
+        {
+          "phase": "response_prepare_failure",
+          "rss": 119304192,
+          "heapUsed": 34907848,
+          "external": 4925821
+        },
+        {
+          "phase": "capacity_1",
+          "rss": 119341056,
+          "heapUsed": 35000248,
+          "external": 4925965
+        },
+        {
+          "phase": "prepare",
+          "rss": 119357440,
+          "heapUsed": 35498648,
+          "external": 4925965
+        },
+        {
+          "phase": "response_existing",
+          "rss": 119357440,
+          "heapUsed": 35113088,
+          "external": 4925965
+        },
+        {
+          "phase": "capacity_1",
+          "rss": 119365632,
+          "heapUsed": 35194440,
+          "external": 4926109
+        },
+        {
+          "phase": "prepare",
+          "rss": 119431168,
+          "heapUsed": 35577416,
+          "external": 4926109
+        },
+        {
+          "phase": "response_short_image",
+          "rss": 119664640,
+          "heapUsed": 35372168,
+          "external": 5498039
+        },
+        {
+          "phase": "capacity_1",
+          "rss": 119676928,
+          "heapUsed": 35454536,
+          "external": 5498183
+        },
+        {
+          "phase": "prepare",
+          "rss": 119685120,
+          "heapUsed": 35555032,
+          "external": 5498183
+        },
+        {
+          "phase": "capacity_2",
+          "rss": 119824384,
+          "heapUsed": 35560848,
+          "external": 6070114
+        },
+        {
+          "phase": "response_invalid_image",
+          "rss": 119840768,
+          "heapUsed": 35572048,
+          "external": 6070114
+        },
+        {
+          "phase": "capacity_1",
+          "rss": 119853056,
+          "heapUsed": 35660816,
+          "external": 6070258
+        },
+        {
+          "phase": "prepare",
+          "rss": 119853056,
+          "heapUsed": 35750688,
+          "external": 6070258
+        },
+        {
+          "phase": "response_download_failure",
+          "rss": 119853056,
+          "heapUsed": 35761744,
+          "external": 6070258
+        },
+        {
+          "phase": "capacity_1",
+          "rss": 119853056,
+          "heapUsed": 35834792,
+          "external": 6070402
+        },
+        {
+          "phase": "prepare",
+          "rss": 119861248,
+          "heapUsed": 35924592,
+          "external": 6070402
+        },
+        {
+          "phase": "capacity_2",
+          "rss": 120524800,
+          "heapUsed": 35934856,
+          "external": 6642333
+        },
+        {
+          "phase": "after_codec_before_write",
+          "rss": 160874496,
+          "heapUsed": 57810352,
+          "external": 7135240
+        },
+        {
+          "phase": "response_write_failure",
+          "rss": 160874496,
+          "heapUsed": 57820280,
+          "external": 7135240
+        },
+        {
+          "phase": "capacity_1",
+          "rss": 160923648,
+          "heapUsed": 58532944,
+          "external": 7135384
+        },
+        {
+          "phase": "prepare",
+          "rss": 160948224,
+          "heapUsed": 58073112,
+          "external": 7135384
+        },
+        {
+          "phase": "capacity_2",
+          "rss": 160948224,
+          "heapUsed": 58079888,
+          "external": 7707315
+        },
+        {
+          "phase": "after_codec_before_write",
+          "rss": 186077184,
+          "heapUsed": 63409080,
+          "external": 9917502
+        },
+        {
+          "phase": "response_commit_failure",
+          "rss": 186163200,
+          "heapUsed": 63685112,
+          "external": 9917502
+        },
+        {
+          "phase": "capacity_1",
+          "rss": 186241024,
+          "heapUsed": 63608760,
+          "external": 9917646
+        },
+        {
+          "phase": "prepare",
+          "rss": 186339328,
+          "heapUsed": 63705848,
+          "external": 9917646
+        },
+        {
+          "phase": "capacity_2",
+          "rss": 186343424,
+          "heapUsed": 63712304,
+          "external": 10489577
+        },
+        {
+          "phase": "after_codec_before_write",
+          "rss": 230891520,
+          "heapUsed": 103007288,
+          "external": 21217974
+        },
+        {
+          "phase": "response_loser_cleanup_failure",
+          "rss": 231018496,
+          "heapUsed": 103078208,
+          "external": 21217974
+        },
+        {
+          "phase": "response_disabled_pipeline",
+          "rss": 231104512,
+          "heapUsed": 103169096,
+          "external": 21218118
+        },
+        {
+          "phase": "response_no_auth",
+          "rss": 231141376,
+          "heapUsed": 103186648,
+          "external": 21218118
+        },
+        {
+          "phase": "response_denied_auth",
+          "rss": 231206912,
+          "heapUsed": 103260088,
+          "external": 21218118
+        },
+        {
+          "phase": "capacity_1",
+          "rss": 231280640,
+          "heapUsed": 103331472,
+          "external": 21218262
+        },
+        {
+          "phase": "prepare",
+          "rss": 231370752,
+          "heapUsed": 103421320,
+          "external": 21218262
+        },
+        {
+          "phase": "capacity_2",
+          "rss": 231890944,
+          "heapUsed": 103427232,
+          "external": 21790193
+        },
+        {
+          "phase": "after_codec_before_write",
+          "rss": 266887168,
+          "heapUsed": 112938976,
+          "external": 9917502
+        },
+        {
+          "phase": "response_after_failures_recovery",
+          "rss": 266887168,
+          "heapUsed": 113005144,
+          "external": 9917502
+        }
+      ]
+    }
+  ]
+}

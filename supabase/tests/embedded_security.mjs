@@ -7,6 +7,7 @@ import { join } from 'node:path';
 import assert from 'node:assert/strict';
 import {migrationCases} from './migration_security_cases.mjs';
 import {verifiedCases} from './verified_security_cases.mjs';
+import {marketplaceIndexCases,assertMarketplaceIndexes} from './marketplace_index_cases.mjs';
 const { default: EmbeddedPostgres } = await import(process.env.EMBEDDED_POSTGRES_MODULE || 'embedded-postgres');
 const dir = await mkdtemp(join(tmpdir(), 'birds-db-'));
 const pg = new EmbeddedPostgres({ databaseDir: join(dir,'data'), user:'postgres', password:'synthetic-test-only', port:15439, persistent:false, createPostgresUser:false, initdbFlags:['--encoding=UTF8'], postgresFlags:['-c','unix_socket_directories='], onLog:()=>{}, onError:console.error });
@@ -26,9 +27,11 @@ try {
  await q(bootstrap);
  const names=(await readdir(new URL('../migrations/',import.meta.url))).filter(n=>n.endsWith('.sql')).sort();
  const migrations=await Promise.all(names.map(n=>readFile(new URL('../migrations/'+n,import.meta.url),'utf8')));
- assert.equal(migrations.length,4,'Expected immutable history plus removal and helper-hardening migrations');
+ assert.equal(migrations.length,5,'Expected immutable history plus removal, helper-hardening and index migrations');
  await migrationCases({q,check,migrations,bootstrap});
+ await marketplaceIndexCases({q,check,migrations,bootstrap});
  for(const migration of migrations)await q(migration);
+ await check('fresh chain has all six relationship indexes and no uncovered public FKs',()=>assertMarketplaceIndexes(q));
  await check('fresh chain removes timeline tables, columns, helpers and old upload overload',async()=>{
   for(const table of ['posts','replies','topics'])assert.equal((await q('select to_regclass($1) as obj',['public.'+table])).rows[0].obj,null);
   assert.equal((await q("select count(*)::int as n from information_schema.columns where table_schema='public' and table_name in ('media','upload_intents','reports') and column_name in ('post_id','reply_id')")).rows[0].n,0);

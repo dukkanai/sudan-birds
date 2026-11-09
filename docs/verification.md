@@ -356,3 +356,29 @@ is considered satisfied.
 
 Flutter source reference:
 https://github.com/flutter/flutter/blob/3.38.5/packages/flutter_tools/lib/src/android/gradle_utils.dart
+
+## Resumed staging hardening and full-bundle warning (2026-11-09)
+
+All seven CI jobs passed for `0d194ece82e91770ea73267a70b96d0fa07ebdf8`:
+[required](https://github.com/dukkanai/sudan-birds/actions/runs/42631801301),
+[native](https://github.com/dukkanai/sudan-birds/actions/runs/42631801151), and
+[local codec](https://github.com/dukkanai/sudan-birds/actions/runs/42631801229).
+This added 9 helper-specific checks and the existing 100 embedded PostgreSQL
+checks to CI. After specific owner approval, the exact helper-hardening SQL was
+applied once; Supabase recorded `20261109142454`. Its source filename is aligned
+with that version without changing SQL bytes. Read-only metadata/privilege
+comparisons passed. See [helper evidence](rls-auto-enable-security.md).
+
+A separate ordinary-Deno full-handler resource baseline found reproducible warm
+admission stalls: only 4–5 of 20 paced completions succeeded in each of three
+fresh-process trials, while rejected calls had no protected effects. Actual S3
+construction/signing and hosted behavior were not measured. See the detailed
+[scope, measurements and retained gates](media-bundle-resource-experiment.md).
+This is a liveness warning, not a proven leak or hosted failure. The earlier
+hosted codec-only success does not close this broader gate. Uploads remain off.
+
+Six missing FK indexes are prepared in a later forward migration with 111
+embedded checks and 9 helper checks passing locally after filename alignment.
+They are not applied to hosted Supabase. No throughput improvement is claimed.
+No R2 credential, synthetic Auth user, signed mobile build or public release was
+created by these changes. Runtime functions still pin `3c0cecf`.

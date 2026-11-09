@@ -23,7 +23,7 @@ and [Supabase anonymous definer-function advisory](https://supabase.com/docs/gui
 
 ## Narrow forward change
 
-`202611090003_harden_rls_auto_enable.sql` revokes only EXECUTE on the exact
+`20261109142454_harden_rls_auto_enable.sql` revokes only EXECUTE on the exact
 zero-argument helper from PUBLIC, anon, and authenticated. It does not recreate,
 move, disable, or drop the helper/event trigger; alter its owner/body; change default
 privileges; or revoke any application RPC grants. Existing direct service-role grants,
@@ -73,11 +73,35 @@ After authorized application, recheck effective anon/authenticated execution=fal
 helper definition/owner/return type/search path and trigger identity/tags/enabled state,
 all application grants, and the security advisor. A missing helper/trigger or changed
 signature requires investigation rather than accepting the local no-op path.
-Hosted DDL smoke tests need their own authorization. This investigation applied no
-hosted migration, created no hosted objects, deployed nothing, and read no user rows
-or secrets. Production, real sessions, media/R2, and other release gates remain open.
+Hosted DDL smoke tests need their own authorization. The initial investigation
+applied no hosted migration, created no hosted objects, deployed nothing, and read
+no user rows or secrets. The later approved application is recorded below. Production, real sessions, media/R2, and other release gates remain open.
 
 Local verification on 2026-11-09: all 9 focused helper checks and all 100 existing
 PostgreSQL security checks passed on PostgreSQL 17.6. Node syntax, repository policy,
 and whitespace checks also passed. These are working-tree checks, not exact-commit
 CI or hosted application evidence.
+
+## Hosted application (2026-11-09)
+
+After specific owner approval, all seven checks passed for source
+`0d194ece82e91770ea73267a70b96d0fa07ebdf8`. The exact reviewed migration bytes
+(SHA-256 `0c63bc268c411c825299766a774e6023a2bf91420b9f543ccc650d52925729a8`)
+were applied once to the scoped staging project. Supabase assigned migration
+version `20261109142454`; the repository filename was aligned with that recorded
+version without changing SQL content. The tested source used the provisional
+filename `202611090003_harden_rls_auto_enable.sql`.
+
+Read-only postchecks confirmed anon/authenticated effective EXECUTE=false, the
+same helper/trigger OIDs, function body, owner, return type, search path and enabled
+trigger tags. Catalog hashes of all other public/private function definitions and
+ACLs, table RLS/ACL settings, and policy expressions were unchanged. Both advisor
+findings for this helper disappeared. Seven intentional authenticated application
+RPC findings remain; this is not a claim of a clean security report or end-to-end
+Auth/media validation. No hosted DDL smoke fixture was created.
+
+The generic table-list tool also warned about private tables without RLS. A
+separate privilege check confirmed neither anon nor authenticated has SELECT,
+INSERT, UPDATE or DELETE on any of those five tables. Private schema USAGE is
+intentional for permitted helper resolution; it does not grant table data access.
+The warning was not used as authority to alter private-table permissions.

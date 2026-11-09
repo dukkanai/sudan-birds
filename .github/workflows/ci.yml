@@ -105,6 +105,11 @@ jobs:
       - run: cd supabase/functions && deno lint
       - run: cd supabase/functions && deno check --node-modules-dir=manual */index.ts
       - run: bash supabase/functions/test.sh
+      - name: Local media experiment guard tests (no hosted calls)
+        run: |
+          deno fmt --check --config supabase/functions/deno.json scripts/media_bundle_resource.ts scripts/media_bundle_resource_test.ts
+          deno lint --config supabase/functions/deno.json scripts/media_bundle_resource.ts scripts/media_bundle_resource_test.ts
+          deno test --no-lock --node-modules-dir=manual --config supabase/functions/deno.json scripts/media_bundle_resource_test.ts
 
   repository-security:
     runs-on: ubuntu-24.04

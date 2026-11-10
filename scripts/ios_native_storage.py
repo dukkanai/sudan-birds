@@ -22,7 +22,7 @@ STAGES = frozenset({'inventory', 'create', 'boot', 'boot-wait', 'test',
 
 def command_failure(stage, reason, code=None):
     # Neither command arguments nor exception text can enter this message.
-    if stage not in STAGES or reason not in {'exit', 'interrupted', 'launch', 'cleanup'}:
+    if stage not in STAGES or reason not in {'exit', 'timeout', 'interrupted', 'launch', 'cleanup'}:
         return Failure('Invalid command diagnostic label')
     bounded = str(code) if type(code) is int and -255 <= code <= 255 else 'unknown'
     return Failure(f'stage={stage} reason={reason} exit={bounded}; output suppressed')
@@ -61,12 +61,13 @@ def run(args, seconds=10, capture=False, *, stage):
             raise command_failure(stage, 'launch') from None
         try:
             code = process.wait(timeout=seconds)
-        except BaseException:
+        except BaseException as error:
             try:
                 terminate_owned_group(process)
             except Exception:
                 raise command_failure(stage, 'cleanup') from None
-            raise command_failure(stage, 'interrupted') from None
+            reason = 'timeout' if isinstance(error, subprocess.TimeoutExpired) else 'interrupted'
+            raise command_failure(stage, reason) from None
         if code:
             try:
                 terminate_owned_group(process)
@@ -83,8 +84,8 @@ def run(args, seconds=10, capture=False, *, stage):
                 raise Failure('Invalid inventory') from None
 
 
-def inventory():
-    result = run(['xcrun', 'simctl', 'list', '--json'], capture=True, stage='inventory')
+def inventory(*, cold=False):
+    result = run(['xcrun', 'simctl', 'list', '--json'], capture=True, stage='inventory', seconds=60 if cold else 10)
     if not isinstance(result, dict):
         raise Failure('Invalid inventory shape')
     return result
@@ -162,7 +163,9 @@ def execute(directory):
     pending = directory / 'creation-attempted'
     if path.exists() or pending.exists():
         raise Failure('Invocation directory already used')
-    data = inventory()
+    # A cold CoreSimulator service may need startup time. Exactly this first
+    # pre-creation inventory gets 60 seconds; no retry or fallback is permitted.
+    data = inventory(cold=True)
     runtime, device = select(data)
     name = 'birds-storage-' + uuid.uuid4().hex
     if any(d.get('name') == name for _, d in records(data)):

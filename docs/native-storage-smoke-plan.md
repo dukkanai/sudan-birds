@@ -28,8 +28,9 @@ start application `main`, configure Supabase, or initialize provider/HTTP flows.
 
 ## Current checks and blockers (2026-11-10)
 
-No native runtime test has run. No CI run, push, hosted request, deployment,
-real account/credential, signing or permission change was made for this work.
+No native runtime test has run. Initial local preparation made no hosted app
+request, deployment, real account/credential, signing or permission change.
+The subsequently published CI attempt and its failure are recorded below.
 The editing environment has no Android SDK, adb, Xcode or native device.
 Official Flutter 3.38.5 (Dart 3.10.4) was restored into a private toolchain after
 checking the official release manifest and archive SHA-256:
@@ -176,7 +177,9 @@ unique `birds-storage-<UUID>` name and records the exact new simulator UUID,
 name, runtime and device type in an invocation-private directory. Existing names
 or UUIDs cannot be adopted. Uncertain creation is reported and never guessed away.
 
-Inventory commands have ten-second bounds; create 60 seconds; boot 30 seconds;
+The first pre-creation inventory has a 60-second cold-start bound with no retry;
+all subsequent inventory commands, including cleanup inventories, retain
+ten-second bounds; create 60 seconds; boot 30 seconds;
 bootstatus 180 seconds; test 600 seconds. Failed, interrupted or timed-out subprocess groups receive TERM with a
 ten-second leader wait, then KILL for surviving group descendants with another
 ten-second leader wait. Group IDs come only from the invocation-owned
@@ -208,6 +211,15 @@ operations and do not constitute simulator execution evidence.
 
 Existing source/physical-device/restore/backup gates remain mandatory. No iOS
 runtime result is claimed until the exact candidate job actually passes.
+
+The initial CI attempt on `85fbeda1410336fa80e2c1019d21da42f97965b7`
+(job `129701107128`) failed at the first inventory's previous ten-second limit.
+It reported `stage=inventory reason=interrupted exit=unknown`; cleanup confirmed
+that no owned simulator was created. No storage/runtime test executed. The
+revised first-only 60-second limit addresses that bounded cold-start failure,
+without claiming a successful rerun. Command timeouts now report `reason=timeout`
+distinctly from `reason=interrupted`, with identical owned-group cleanup and no
+raw diagnostic output.
 
 ### Evidence and limits
 

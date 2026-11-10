@@ -133,8 +133,10 @@ class Guards(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory)
             fake_uuid = type('FakeUUID', (), {'hex': 'a' * 32})()
-            with patch.object(smoke.uuid, 'uuid4', return_value=fake_uuid), patch.object(smoke, 'inventory', side_effect=[before, data(), data(), data('Booted')]), patch.object(smoke, 'run') as run:
+            with patch.object(smoke.uuid, 'uuid4', return_value=fake_uuid), patch.object(smoke, 'inventory', side_effect=[before, data(), data(), data('Booted')]) as inventory, patch.object(smoke, 'run') as run:
                 smoke.execute(path)
+            self.assertEqual([call.kwargs for call in inventory.call_args_list],
+                             [{'cold': True}, {}, {}, {}])
             commands = [call.args[0] for call in run.call_args_list]
             self.assertEqual(commands[0], ['xcrun', 'simctl', 'create', NAME, TYPE, RUNTIME])
             self.assertEqual(commands[-1], ['flutter', '--no-version-check', 'test', '--no-pub', 'integration_test/native_storage_test.dart', '-d', UUID, '--dart-define=NATIVE_STORAGE_SMOKE=true', '--reporter', 'expanded'])
@@ -185,10 +187,38 @@ class Guards(unittest.TestCase):
         process.wait.side_effect = [smoke.subprocess.TimeoutExpired('hidden', 1),
                                     smoke.subprocess.TimeoutExpired('hidden', 10), -9]
         with patch.object(smoke.subprocess, 'Popen', return_value=process), patch.object(smoke.os, 'killpg') as kill:
-            with self.assertRaisesRegex(smoke.Failure, 'stage=boot-wait reason=interrupted'):
+            with self.assertRaisesRegex(smoke.Failure, 'stage=boot-wait reason=timeout'):
                 smoke.run(['synthetic-command'], seconds=1, stage='boot-wait')
             self.assertEqual(kill.call_count, 2)
             self.assertEqual([c.kwargs['timeout'] for c in process.wait.call_args_list], [1, 10, 10])
+
+    def test_inventory_cold_bound_is_explicit_not_sticky(self):
+        with patch.object(smoke, 'run', return_value={}) as run:
+            smoke.inventory(cold=True)
+            smoke.inventory()
+            smoke.inventory()
+        self.assertEqual([call.kwargs['seconds'] for call in run.call_args_list], [60, 10, 10])
+        self.assertTrue(all(call.kwargs['stage'] == 'inventory' for call in run.call_args_list))
+
+    def test_cold_inventory_failure_does_not_retry_or_create(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory)
+            with patch.object(smoke, 'inventory', side_effect=smoke.Failure('timeout')) as inventory, patch.object(smoke, 'run') as run:
+                with self.assertRaises(smoke.Failure):
+                    smoke.execute(path)
+                inventory.assert_called_once_with(cold=True)
+                run.assert_not_called()
+            self.assertEqual(list(path.iterdir()), [])
+
+    def test_interruption_distinct_from_timeout_and_cleans_group(self):
+        process = Mock(pid=12345)
+        process.wait.side_effect = [KeyboardInterrupt('SECRET'), -15, -15]
+        with patch.object(smoke.subprocess, 'Popen', return_value=process), patch.object(smoke.os, 'killpg') as kill:
+            with self.assertRaisesRegex(smoke.Failure, '^stage=inventory reason=interrupted exit=unknown; output suppressed$'):
+                smoke.run(['synthetic-command'], seconds=60, stage='inventory')
+            self.assertEqual([c.args for c in kill.call_args_list], [
+                (12345, smoke.signal.SIGTERM), (12345, smoke.signal.SIGKILL)])
+            self.assertEqual([c.kwargs['timeout'] for c in process.wait.call_args_list], [60, 10, 10])
 
     def test_stage_and_exit_diagnostics_are_allowlisted(self):
         for stage in smoke.STAGES:

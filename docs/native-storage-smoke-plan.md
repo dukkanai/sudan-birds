@@ -26,7 +26,7 @@ start application `main`, configure Supabase, or initialize provider/HTTP flows.
   booleans and suppress arbitrary native exception detail instead of printing
   stored values. A cleanup failure is a failure, not a success-with-warning.
 
-## Current checks and blockers (2026-11-10)
+## Initial local-preparation checks and subsequent blockers (2026-11-10)
 
 No native runtime test has run. Initial local preparation made no hosted app
 request, deployment, real account/credential, signing or permission change.
@@ -169,7 +169,11 @@ checkout/Flutter actions, Flutter 3.38.5 and contents-read-only permission.
 It runs independently of `ios-simulator`; no integration target can overwrite
 that job's dependency/provenance artifacts. It uploads no artifacts or app data.
 
-`scripts/ios_native_storage.py` inventories installed `simctl list --json` only.
+`scripts/ios_native_storage.py` uses full installed `simctl list --json` only for
+initial runtime/type selection and existing-device preflight. Later identity
+checks use `simctl list devices --json`, retaining all device/runtime groups
+without re-enumerating runtime/type/pair metadata. No UUID/name filtering can
+hide a conflicting device or weaken the ownership comparison.
 It requires an available iOS runtime >= 13 and iPhone type whose explicit encoded
 min/max runtime bounds include that exact runtime. Missing/unknown compatibility
 is a failure, not a download or physical-device fallback. The helper creates a
@@ -220,6 +224,35 @@ revised first-only 60-second limit addresses that bounded cold-start failure,
 without claiming a successful rerun. Command timeouts now report `reason=timeout`
 distinctly from `reason=interrupted`, with identical owned-group cleanup and no
 raw diagnostic output.
+
+A second attempt on `db6063de46ab13010ef36a961804c17d3c5408b0`
+(job `129704377566`) failed again with `stage=inventory reason=timeout`.
+Its cleanup also timed out at inventory. Reaching cleanup inventory means the
+owned record existed, so creation and post-create ownership verification had
+completed. The old shared label cannot distinguish pre-boot from pre-test
+inventory failure; no storage test pass or successful cleanup is established.
+
+The follow-up changes only the later query scope, not the ten-second
+bound or failure policy. Inventory failures now identify exactly one of:
+`inventory-initial`, `inventory-created`, `inventory-pre-boot`,
+`inventory-pre-test`, `cleanup-inventory-owned`, `cleanup-inventory-stopped`,
+`cleanup-inventory-absent`. Missing/malformed device JSON fails closed rather
+than being mistaken for absence. Device UUIDs must be canonical uppercase
+hyphenated strings; lowercase/undashed aliases are rejected before ownership
+comparison. Duplicate JSON keys at any nesting level are rejected, preventing
+repeated devices/runtime keys from silently discarding earlier records. These
+are malformed-CLI-response safeguards, not evidence of an observed attack. The initial full query remains bounded at
+60 seconds; no retry, adoption, runtime download, device fallback or raw logging
+is added. Commands still discard all subprocess output.
+
+This is a reasoned workload reduction and diagnostic improvement, not evidence
+that full inventory caused the stall or that the simulator service is healthy.
+A subsequent devices-only timeout would remain a genuine runner/CoreSimulator
+prerequisite blocker; do not automatically raise every timeout or repeat CI.
+The Linux editing environment lacks Xcode's local `simctl help list`; the
+standard `list devices --json` command form is not claimed as locally executed
+or validated on the selected macOS runner. Review before a new authorized run.
+
 
 ### Evidence and limits
 

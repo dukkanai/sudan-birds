@@ -1,3 +1,4 @@
+import json
 import contextlib
 import io
 from pathlib import Path
@@ -136,7 +137,10 @@ class Guards(unittest.TestCase):
             with patch.object(smoke.uuid, 'uuid4', return_value=fake_uuid), patch.object(smoke, 'inventory', side_effect=[before, data(), data(), data('Booted')]) as inventory, patch.object(smoke, 'run') as run:
                 smoke.execute(path)
             self.assertEqual([call.kwargs for call in inventory.call_args_list],
-                             [{'cold': True}, {}, {}, {}])
+                             [{'cold': True, 'stage': 'inventory-initial'},
+                              {'stage': 'inventory-created'},
+                              {'stage': 'inventory-pre-boot'},
+                              {'stage': 'inventory-pre-test'}])
             commands = [call.args[0] for call in run.call_args_list]
             self.assertEqual(commands[0], ['xcrun', 'simctl', 'create', NAME, TYPE, RUNTIME])
             self.assertEqual(commands[-1], ['flutter', '--no-version-check', 'test', '--no-pub', 'integration_test/native_storage_test.dart', '-d', UUID, '--dart-define=NATIVE_STORAGE_SMOKE=true', '--reporter', 'expanded'])
@@ -193,12 +197,17 @@ class Guards(unittest.TestCase):
             self.assertEqual([c.kwargs['timeout'] for c in process.wait.call_args_list], [1, 10, 10])
 
     def test_inventory_cold_bound_is_explicit_not_sticky(self):
-        with patch.object(smoke, 'run', return_value={}) as run:
-            smoke.inventory(cold=True)
-            smoke.inventory()
-            smoke.inventory()
+        with patch.object(smoke, 'run', return_value={'devices': {}}) as run:
+            smoke.inventory(cold=True, stage='inventory-initial')
+            smoke.inventory(stage='inventory-created')
+            smoke.inventory(stage='cleanup-inventory-owned')
         self.assertEqual([call.kwargs['seconds'] for call in run.call_args_list], [60, 10, 10])
-        self.assertTrue(all(call.kwargs['stage'] == 'inventory' for call in run.call_args_list))
+        self.assertEqual([call.args[0] for call in run.call_args_list], [
+            ['xcrun', 'simctl', 'list', '--json'],
+            ['xcrun', 'simctl', 'list', 'devices', '--json'],
+            ['xcrun', 'simctl', 'list', 'devices', '--json']])
+        self.assertEqual([call.kwargs['stage'] for call in run.call_args_list],
+                         ['inventory-initial', 'inventory-created', 'cleanup-inventory-owned'])
 
     def test_cold_inventory_failure_does_not_retry_or_create(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -206,7 +215,7 @@ class Guards(unittest.TestCase):
             with patch.object(smoke, 'inventory', side_effect=smoke.Failure('timeout')) as inventory, patch.object(smoke, 'run') as run:
                 with self.assertRaises(smoke.Failure):
                     smoke.execute(path)
-                inventory.assert_called_once_with(cold=True)
+                inventory.assert_called_once_with(cold=True, stage='inventory-initial')
                 run.assert_not_called()
             self.assertEqual(list(path.iterdir()), [])
 
@@ -214,11 +223,85 @@ class Guards(unittest.TestCase):
         process = Mock(pid=12345)
         process.wait.side_effect = [KeyboardInterrupt('SECRET'), -15, -15]
         with patch.object(smoke.subprocess, 'Popen', return_value=process), patch.object(smoke.os, 'killpg') as kill:
-            with self.assertRaisesRegex(smoke.Failure, '^stage=inventory reason=interrupted exit=unknown; output suppressed$'):
-                smoke.run(['synthetic-command'], seconds=60, stage='inventory')
+            with self.assertRaisesRegex(smoke.Failure, '^stage=inventory-initial reason=interrupted exit=unknown; output suppressed$'):
+                smoke.run(['synthetic-command'], seconds=60, stage='inventory-initial')
             self.assertEqual([c.args for c in kill.call_args_list], [
                 (12345, smoke.signal.SIGTERM), (12345, smoke.signal.SIGKILL)])
             self.assertEqual([c.kwargs['timeout'] for c in process.wait.call_args_list], [60, 10, 10])
+
+    def test_every_later_phase_is_devices_only_and_ten_seconds(self):
+        for stage in smoke.DEVICE_PHASES:
+            with self.subTest(stage=stage), patch.object(smoke, 'run', return_value={'devices': {}}) as run:
+                smoke.inventory(stage=stage)
+                run.assert_called_once_with(['xcrun', 'simctl', 'list', 'devices', '--json'],
+                                            capture=True, stage=stage, seconds=10)
+
+    def test_inventory_rejects_unknown_or_widened_phase(self):
+        for kwargs in [{'stage': 'SECRET'}, {'stage': 'inventory-initial'},
+                       {'stage': 'cleanup-inventory-owned', 'cold': True}]:
+            with patch.object(smoke, 'run') as run:
+                with self.assertRaises(smoke.Failure):
+                    smoke.inventory(**kwargs)
+                run.assert_not_called()
+
+    def test_invalid_inventory_cannot_establish_absence(self):
+        for invalid in [{}, [], {'devices': []}, {'devices': {RUNTIME: None}},
+                        {'devices': {RUNTIME: [None]}}, {'devices': {RUNTIME: [{}]}},
+                        {'devices': {RUNTIME: [{'udid': 'SECRET'}]}}]:
+            with self.subTest(value=invalid), patch.object(smoke, 'run', return_value=invalid):
+                with self.assertRaisesRegex(smoke.Failure, '^stage=cleanup-inventory-owned invalid device inventory'):
+                    smoke.inventory(stage='cleanup-inventory-owned')
+
+    def test_noncanonical_uuid_cannot_hide_owned_device_at_cleanup(self):
+        for value in [UUID.lower(), UUID.replace('-', '')]:
+            item = data('Booted')
+            item['devices'][RUNTIME][0]['udid'] = value
+            with self.subTest(value=value), tempfile.TemporaryDirectory() as directory:
+                path = Path(directory)
+                smoke.save(path / 'owned.json', STATE)
+                output = io.StringIO()
+                with patch.object(smoke, 'run', return_value=item) as run, contextlib.redirect_stdout(output):
+                    with self.assertRaisesRegex(smoke.Failure, '^stage=cleanup-inventory-owned invalid device inventory identity$'):
+                        smoke.cleanup(path)
+                    run.assert_called_once_with(['xcrun', 'simctl', 'list', 'devices', '--json'],
+                                                capture=True, stage='cleanup-inventory-owned', seconds=10)
+                self.assertEqual(output.getvalue(), '')
+
+    def test_duplicate_json_keys_cannot_hide_owned_device_at_cleanup(self):
+        device = json.dumps(data('Booted')['devices'][RUNTIME][0])
+        runtime = json.dumps(RUNTIME)
+        malformed = [
+            '{"devices":{' + runtime + ':[' + device + ']},"devices":{}}',
+            '{"devices":{' + runtime + ':[' + device + '],' + runtime + ':[]}}',
+        ]
+        for raw in malformed:
+            with self.subTest(raw=raw), tempfile.TemporaryDirectory() as directory:
+                path = Path(directory)
+                smoke.save(path / 'owned.json', STATE)
+                process = Mock(pid=12345)
+                process.wait.return_value = 0
+
+                def launch(args, **kwargs):
+                    kwargs['stdout'].write(raw.encode())
+                    return process
+
+                output = io.StringIO()
+                with patch.object(smoke.subprocess, 'Popen', side_effect=launch) as popen, contextlib.redirect_stdout(output):
+                    with self.assertRaisesRegex(smoke.Failure, '^stage=cleanup-inventory-owned invalid inventory JSON$'):
+                        smoke.cleanup(path)
+                    self.assertEqual(popen.call_count, 1)
+                    self.assertEqual(popen.call_args.args[0], ['xcrun', 'simctl', 'list', 'devices', '--json'])
+                self.assertEqual(output.getvalue(), '')
+
+    def test_cleanup_inventory_phases_are_distinct(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory)
+            smoke.save(path / 'owned.json', STATE)
+            with patch.object(smoke, 'inventory', side_effect=[data('Booted'), data(), {'devices': {}}]) as inventory, patch.object(smoke, 'run'):
+                smoke.cleanup(path)
+            self.assertEqual([call.kwargs['stage'] for call in inventory.call_args_list],
+                             ['cleanup-inventory-owned', 'cleanup-inventory-stopped',
+                              'cleanup-inventory-absent'])
 
     def test_stage_and_exit_diagnostics_are_allowlisted(self):
         for stage in smoke.STAGES:

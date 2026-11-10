@@ -16,8 +16,12 @@ class Failure(Exception):
     pass
 
 
-STAGES = frozenset({'inventory', 'create', 'boot', 'boot-wait', 'test',
-                    'cleanup-shutdown', 'cleanup-delete'})
+DEVICE_PHASES = frozenset({'inventory-created', 'inventory-pre-boot',
+                           'inventory-pre-test', 'cleanup-inventory-owned',
+                           'cleanup-inventory-stopped', 'cleanup-inventory-absent'})
+STAGES = DEVICE_PHASES | frozenset({'inventory-initial', 'create', 'boot',
+                                  'boot-wait', 'test', 'cleanup-shutdown',
+                                  'cleanup-delete'})
 
 
 def command_failure(stage, reason, code=None):
@@ -48,6 +52,16 @@ def terminate_owned_group(process):
     process.wait(timeout=10)
 
 
+def unique_json_object(pairs):
+    result = {}
+    for key, value in pairs:
+        if key in result:
+            # Never include an untrusted key/value in diagnostic text.
+            raise ValueError('Duplicate JSON key')
+        result[key] = value
+    return result
+
+
 def run(args, seconds=10, capture=False, *, stage):
     if stage not in STAGES:
         raise Failure('Invalid command diagnostic label')
@@ -76,18 +90,40 @@ def run(args, seconds=10, capture=False, *, stage):
             raise command_failure(stage, 'exit', code) from None
         if capture:
             if output.tell() > 2_000_000:
-                raise Failure('Inventory exceeds limit')
+                raise Failure(f'stage={stage} inventory exceeds limit')
             output.seek(0)
             try:
-                return json.load(output)
+                return json.load(output, object_pairs_hook=unique_json_object)
             except (ValueError, UnicodeError):
-                raise Failure('Invalid inventory') from None
+                raise Failure(f'stage={stage} invalid inventory JSON') from None
 
 
-def inventory(*, cold=False):
-    result = run(['xcrun', 'simctl', 'list', '--json'], capture=True, stage='inventory', seconds=60 if cold else 10)
-    if not isinstance(result, dict):
-        raise Failure('Invalid inventory shape')
+def inventory(*, stage, cold=False):
+    if stage == 'inventory-initial' and cold is True:
+        command = ['xcrun', 'simctl', 'list', '--json']
+        seconds = 60
+    elif stage in DEVICE_PHASES and cold is False:
+        # Keep all devices/runtime grouping to verify uniqueness and exact owned
+        # identity, but avoid repeatedly enumerating runtimes/types/device pairs.
+        command = ['xcrun', 'simctl', 'list', 'devices', '--json']
+        seconds = 10
+    else:
+        raise Failure('Invalid inventory phase/bound')
+    result = run(command, capture=True, stage=stage, seconds=seconds)
+    if not isinstance(result, dict) or not isinstance(result.get('devices'), dict):
+        raise Failure(f'stage={stage} invalid device inventory shape')
+    # Missing/malformed devices must never turn into proof of absence at cleanup.
+    for runtime, devices in result['devices'].items():
+        if not isinstance(runtime, str) or not isinstance(devices, list):
+            raise Failure(f'stage={stage} invalid device inventory shape')
+        for device in devices:
+            if not isinstance(device, dict) or not isinstance(device.get('udid'), str):
+                raise Failure(f'stage={stage} invalid device inventory shape')
+            try:
+                if str(uuid.UUID(device['udid'])).upper() != device['udid']:
+                    raise ValueError('Noncanonical UUID')
+            except ValueError:
+                raise Failure(f'stage={stage} invalid device inventory identity') from None
     return result
 
 
@@ -148,7 +184,7 @@ def save(path, state):
 def load(path):
     if not stat.S_ISREG(path.lstat().st_mode) or path.is_symlink():
         raise Failure('Invalid ownership record')
-    state = json.loads(path.read_text())
+    state = json.loads(path.read_text(), object_pairs_hook=unique_json_object)
     if (set(state) != {'name', 'uuid', 'runtime', 'device'} or
             not re.fullmatch(r'birds-storage-[0-9a-f]{32}', state['name']) or
             str(uuid.UUID(state['uuid'])).upper() != state['uuid'] or
@@ -165,7 +201,7 @@ def execute(directory):
         raise Failure('Invocation directory already used')
     # A cold CoreSimulator service may need startup time. Exactly this first
     # pre-creation inventory gets 60 seconds; no retry or fallback is permitted.
-    data = inventory(cold=True)
+    data = inventory(cold=True, stage='inventory-initial')
     runtime, device = select(data)
     name = 'birds-storage-' + uuid.uuid4().hex
     if any(d.get('name') == name for _, d in records(data)):
@@ -174,7 +210,7 @@ def execute(directory):
     # simctl create returns text, so use subsequent inventory rather than trusting
     # stdout. A failed/uncertain create is never permission to adopt/delete.
     run(['xcrun', 'simctl', 'create', name, device, runtime], seconds=60, stage='create')
-    matches = [(r, d) for r, d in records(inventory()) if d.get('name') == name]
+    matches = [(r, d) for r, d in records(inventory(stage='inventory-created')) if d.get('name') == name]
     if len(matches) != 1:
         raise Failure('Created simulator identity uncertain')
     state = {'name': name, 'uuid': matches[0][1].get('udid'),
@@ -187,11 +223,11 @@ def execute(directory):
         raise Failure('Created UUID existed before invocation')
     save(path, state)
     pending.unlink()
-    if owned(inventory(), state).get('state') != 'Shutdown':
+    if owned(inventory(stage='inventory-pre-boot'), state).get('state') != 'Shutdown':
         raise Failure('Fresh simulator not shutdown')
     run(['xcrun', 'simctl', 'boot', state['uuid']], seconds=30, stage='boot')
     run(['xcrun', 'simctl', 'bootstatus', state['uuid'], '-b'], seconds=180, stage='boot-wait')
-    if owned(inventory(), state).get('state') != 'Booted':
+    if owned(inventory(stage='inventory-pre-test'), state).get('state') != 'Booted':
         raise Failure('Owned simulator did not boot')
     run(['flutter', '--no-version-check', 'test', '--no-pub',
          'integration_test/native_storage_test.dart', '-d', state['uuid'],
@@ -207,7 +243,7 @@ def cleanup(directory):
         print('Cleanup: no owned simulator was created')
         return
     state = load(path)
-    device = owned(inventory(), state, absent_ok=True)
+    device = owned(inventory(stage='cleanup-inventory-owned'), state, absent_ok=True)
     if device is None:
         print('Cleanup: owned simulator already absent')
         return
@@ -215,10 +251,10 @@ def cleanup(directory):
         run(['xcrun', 'simctl', 'shutdown', state['uuid']], seconds=30, stage='cleanup-shutdown')
     elif device.get('state') != 'Shutdown':
         raise Failure('Simulator state uncertain; no destructive cleanup attempted')
-    if owned(inventory(), state).get('state') != 'Shutdown':
+    if owned(inventory(stage='cleanup-inventory-stopped'), state).get('state') != 'Shutdown':
         raise Failure('Simulator shutdown unconfirmed')
     run(['xcrun', 'simctl', 'delete', state['uuid']], seconds=30, stage='cleanup-delete')
-    if owned(inventory(), state, absent_ok=True) is not None:
+    if owned(inventory(stage='cleanup-inventory-absent'), state, absent_ok=True) is not None:
         raise Failure('Simulator deletion unconfirmed')
     print('Cleanup: owned simulator deletion verified')
 

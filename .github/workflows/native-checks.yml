@@ -7,6 +7,7 @@ on:
       - 'app/**'
       - 'scripts/flutter_plugin_repositories_test.py'
       - 'scripts/*native_dependency_evidence*'
+      - 'scripts/ios_native_storage*'
       - 'docs/native-dependency-evidence.md'
       - '.github/workflows/native-checks.yml'
       - '.github/workflows/ci.yml'
@@ -108,3 +109,32 @@ jobs:
           if-no-files-found: error
           include-hidden-files: false
           retention-days: 7
+
+  ios-native-storage:
+    runs-on: macos-15
+    timeout-minutes: 25
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: subosito/flutter-action@fd55f4c5af5b953cc57a2be44cb082c8f6635e8e
+        with:
+          flutter-version: '3.38.5'
+          channel: stable
+          cache: true
+      - name: Verify simulator orchestration guards (offline)
+        run: python3 -m unittest discover -s scripts -p 'ios_native_storage_test.py' -v
+      - run: cd app && flutter pub get --enforce-lockfile
+      - name: Allocate private simulator invocation
+        run: |
+          umask 077
+          echo "BIRDS_SIM_STATE=$(mktemp -d "$RUNNER_TEMP/birds-storage.XXXXXXXX")" >> "$GITHUB_ENV"
+      - name: Run real storage smoke on owned installed simulator
+        timeout-minutes: 17
+        run: cd app && python3 ../scripts/ios_native_storage.py run "$BIRDS_SIM_STATE"
+      - name: Clean up only this invocation's simulator
+        if: always() && env.BIRDS_SIM_STATE != ''
+        timeout-minutes: 3
+        run: cd app && python3 ../scripts/ios_native_storage.py cleanup "$BIRDS_SIM_STATE"

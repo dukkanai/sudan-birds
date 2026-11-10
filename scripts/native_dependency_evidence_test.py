@@ -5,6 +5,7 @@ import hashlib
 import io
 import json
 import os
+import re
 from pathlib import Path
 import subprocess
 import tempfile
@@ -554,9 +555,18 @@ class EvidenceBoundaryTest(unittest.TestCase):
 
 
 class WorkflowBoundaryTest(unittest.TestCase):
+    def job(self, workflow, name):
+        # Match only top-level job bodies, stopping before the next sibling job.
+        bodies = re.findall(
+            r'^  ' + re.escape(name) + r':\n(.*?)(?=^  [A-Za-z0-9_-]+:|\Z)',
+            workflow.split('jobs:\n', 1)[1], re.MULTILINE | re.DOTALL,
+        )
+        self.assertEqual(len(bodies), 1, 'Expected exactly one job: ' + name)
+        return bodies[0]
+
     def test_ios_explicitly_provisions_pinned_go_before_build_and_scan(self):
         workflow = (ROOT / '.github/workflows/native-checks.yml').read_text()
-        ios = workflow.split('  ios-simulator:', 1)[1]
+        ios = self.job(workflow, 'ios-simulator')
         setup = """      - name: Prepare Go for evidence secret scan
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
@@ -577,15 +587,16 @@ class WorkflowBoundaryTest(unittest.TestCase):
         self.assertIn('contents: read', workflow)
         self.assertNotIn('contents: write', workflow)
         self.assertNotIn('continue-on-error', workflow)
-        self.assertNotIn('if: always()', workflow)
         self.assertNotIn('pull_request_target', workflow)
         for platform, job, build in (
-            ('android', workflow.split('  android-debug:', 1)[1].split('  ios-simulator:', 1)[0],
+            ('android', self.job(workflow, 'android-debug'),
              'flutter build apk --debug'),
-            ('ios', workflow.split('  ios-simulator:', 1)[1],
+            ('ios', self.job(workflow, 'ios-simulator'),
              'flutter build ios --simulator --debug --no-codesign'),
         ):
             with self.subTest(platform=platform):
+                self.assertNotIn('if:', job)
+                self.assertNotIn('|| true', job)
                 capture = 'bash scripts/capture_native_dependency_evidence.sh ' + platform
                 scan = 'gitleaks/v8@v8.21.2 dir --redact'
                 upload = 'actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9'
@@ -602,6 +613,25 @@ class WorkflowBoundaryTest(unittest.TestCase):
                     for name in evidence.OUTPUT_NAMES[platform]
                 })
                 self.assertEqual(len(lines), 4 if platform == 'android' else 5)
+
+    def test_always_runs_only_owned_simulator_cleanup_never_uploads(self):
+        workflow = (ROOT / '.github/workflows/native-checks.yml').read_text()
+        storage = self.job(workflow, 'ios-native-storage')
+        condition = "        if: always() && env.BIRDS_SIM_STATE != ''"
+        self.assertEqual(workflow.count('always()'), 1)
+        self.assertEqual(storage.count('if:'), 1)
+        self.assertNotIn('upload-artifact', storage)
+        self.assertNotIn('continue-on-error', storage)
+        self.assertNotIn('|| true', storage)
+        steps = storage.split('      - ')
+        conditional = [step for step in steps if 'if:' in step]
+        self.assertEqual(len(conditional), 1)
+        self.assertEqual(conditional[0].strip(), (
+            "name: Clean up only this invocation's simulator\n"
+            + condition + "\n"
+            "        timeout-minutes: 3\n"
+            '        run: cd app && python3 ../scripts/ios_native_storage.py cleanup "$BIRDS_SIM_STATE"'
+        ))
 
     def test_capture_is_postbuild_offline_and_scoped(self):
         script = (ROOT / 'scripts/capture_native_dependency_evidence.sh').read_text()

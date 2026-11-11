@@ -24,12 +24,13 @@ STAGES = DEVICE_PHASES | frozenset({'inventory-initial', 'create', 'boot',
                                   'cleanup-delete'})
 
 
-def command_failure(stage, reason, code=None):
+def command_failure(stage, reason, code=None, *, cleanup_failed=False):
     # Neither command arguments nor exception text can enter this message.
     if stage not in STAGES or reason not in {'exit', 'timeout', 'interrupted', 'launch', 'cleanup'}:
         return Failure('Invalid command diagnostic label')
     bounded = str(code) if type(code) is int and -255 <= code <= 255 else 'unknown'
-    return Failure(f'stage={stage} reason={reason} exit={bounded}; output suppressed')
+    cleanup = ' cleanup=failed' if cleanup_failed else ''
+    return Failure(f'stage={stage} reason={reason} exit={bounded}{cleanup}; output suppressed')
 
 
 def terminate_owned_group(process):
@@ -76,17 +77,18 @@ def run(args, seconds=10, capture=False, *, stage):
         try:
             code = process.wait(timeout=seconds)
         except BaseException as error:
+            reason = 'timeout' if isinstance(error, subprocess.TimeoutExpired) else 'interrupted'
+            cleanup_failed = False
             try:
                 terminate_owned_group(process)
             except Exception:
-                raise command_failure(stage, 'cleanup') from None
-            reason = 'timeout' if isinstance(error, subprocess.TimeoutExpired) else 'interrupted'
-            raise command_failure(stage, reason) from None
+                cleanup_failed = True
+            raise command_failure(stage, reason, cleanup_failed=cleanup_failed) from None
         if code:
             try:
                 terminate_owned_group(process)
             except Exception:
-                raise command_failure(stage, 'cleanup', code) from None
+                raise command_failure(stage, 'exit', code, cleanup_failed=True) from None
             raise command_failure(stage, 'exit', code) from None
         if capture:
             if output.tell() > 2_000_000:

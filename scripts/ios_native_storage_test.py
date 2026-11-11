@@ -179,6 +179,29 @@ class Guards(unittest.TestCase):
                 (12345, smoke.signal.SIGTERM), (12345, smoke.signal.SIGKILL)])
             self.assertEqual([c.kwargs['timeout'] for c in process.wait.call_args_list], [10, 10, 10])
 
+    def test_cleanup_failure_preserves_original_failure_without_leaking(self):
+        cases = [
+            (smoke.subprocess.TimeoutExpired('SECRET', 10), 'timeout', 'unknown'),
+            (KeyboardInterrupt('SECRET'), 'interrupted', 'unknown'),
+            (7, 'exit', '7'),
+        ]
+        for outcome, reason, code in cases:
+            with self.subTest(reason=reason):
+                process = Mock(pid=12345)
+                if isinstance(outcome, BaseException):
+                    process.wait.side_effect = outcome
+                else:
+                    process.wait.return_value = outcome
+                with patch.object(smoke.subprocess, 'Popen', return_value=process), patch.object(
+                        smoke, 'terminate_owned_group', side_effect=OSError('SECRET')) as cleanup:
+                    with self.assertRaises(smoke.Failure) as failure:
+                        smoke.run(['SECRET'], stage='inventory-pre-test')
+                    self.assertEqual(str(failure.exception),
+                                     f'stage=inventory-pre-test reason={reason} exit={code} cleanup=failed; output suppressed')
+                    cleanup.assert_called_once_with(process)
+                    self.assertIsNone(failure.exception.__cause__)
+                    self.assertTrue(failure.exception.__suppress_context__)
+
     def test_success_does_not_stop_shared_services_or_group(self):
         process = Mock(pid=12345)
         process.wait.return_value = 0

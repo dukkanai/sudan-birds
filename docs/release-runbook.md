@@ -15,6 +15,8 @@ No workflow in this foundation publishes to an app store or deploys production. 
 
 The placeholder `beta.yml` and `release.yml` intentionally fail with these instructions. They cannot be used to imply a delivered signed build.
 
+An inert, GitHub-first staging implementation is documented in [GitHub iOS staging](github-ios-staging.md). Its example stays outside the active workflow directory, with signing inputs disabled/unconfigured. Offline guard tests do not establish signing, TestFlight delivery or release readiness.
+
 ### Application Edge gateway compatibility
 
 Use `supabase/config.toml` as the reviewed deployment target: `verify_jwt=false`

@@ -8,6 +8,7 @@ on:
       - 'scripts/flutter_plugin_repositories_test.py'
       - 'scripts/*native_dependency_evidence*'
       - 'scripts/ios_native_storage*'
+      - 'scripts/ios_toolchain_probe*'
       - 'docs/native-dependency-evidence.md'
       - '.github/workflows/native-checks.yml'
       - '.github/workflows/ci.yml'
@@ -109,6 +110,10 @@ jobs:
           if-no-files-found: error
           include-hidden-files: false
           retention-days: 7
+
+      # This read-only gate is preparation, not an application functional test.
+      - name: Check proposed signing toolchain capabilities (no credentials)
+        run: python3 scripts/ios_toolchain_probe.py
 
   ios-native-storage:
     runs-on: macos-15

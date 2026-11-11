@@ -194,6 +194,10 @@ jobs:
         run: go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.7 -shellcheck= -pyflakes=
       - name: Repository policy checks
         run: python3 scripts/check_repository.py
+      - name: Inert iOS staging pipeline guards (offline, no credentials)
+        run: |
+          python3 -m unittest discover -s scripts -p 'ios_staging*_test.py' -v
+          python3 -m unittest discover -s scripts -p 'ios_toolchain_probe_test.py' -v
       - name: Native evidence boundary tests (offline)
         run: python3 -m unittest discover -s scripts -p 'native_dependency_evidence_test.py'
       - name: Secret scan (redacted, complete Git history)

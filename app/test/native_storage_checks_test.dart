@@ -24,7 +24,10 @@ void main() {
 
   test('guard suppresses platform, matcher and other exception data', () async {
     for (final error in <Object>[
-      PlatformException(code: 'SYNTHETIC-PRIVATE', message: 'SYNTHETIC-PRIVATE'),
+      PlatformException(
+        code: 'SYNTHETIC-PRIVATE',
+        message: 'SYNTHETIC-PRIVATE',
+      ),
       TestFailure('SYNTHETIC-PRIVATE'),
       StateError('SYNTHETIC-PRIVATE'),
     ]) {

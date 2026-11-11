@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'local_diagnostics.dart';
 import 'package:app_links/app_links.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'auth_config.dart';
@@ -73,7 +74,13 @@ class MobileOAuthCoordinator {
   Future<void> listenForLinks(AppLinks links) async {
     _links = links.uriLinkStream.listen(
       (uri) => unawaited(handleCallback(uri)),
-      onError: (Object _) => notice(oauthRetryMessage),
+      onError: (Object _) {
+        localDiagnostics.record(
+          FailureBoundary.oauthLinks,
+          FailureCode.unexpected,
+        );
+        notice(oauthRetryMessage);
+      },
     );
     try {
       final initial = await links.getInitialLink().timeout(
@@ -81,6 +88,10 @@ class MobileOAuthCoordinator {
       );
       if (!_disposed && initial != null) await handleCallback(initial);
     } catch (_) {
+      localDiagnostics.record(
+        FailureBoundary.oauthLinks,
+        FailureCode.unexpected,
+      );
       if (!_disposed) notice(oauthRetryMessage);
     }
   }
@@ -177,8 +188,19 @@ class MobileOAuthCoordinator {
     } on ObsoleteAuthFlow {
       // Canceled flow; do not poison a newer session or expose raw SDK errors.
     } catch (_) {
+      localDiagnostics.record(
+        FailureBoundary.oauthCallback,
+        FailureCode.unexpected,
+        outcomeUnknown: installing,
+      );
       if (_current(flow)) {
-        await signOut().catchError((Object _) {});
+        await signOut().catchError((Object _) {
+          localDiagnostics.record(
+            FailureBoundary.oauthCleanup,
+            FailureCode.unexpected,
+            outcomeUnknown: true,
+          );
+        });
         notice(storage.failed ? secureStorageMessage : oauthRetryMessage);
       }
     } finally {

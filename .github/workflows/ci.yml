@@ -114,6 +114,29 @@ jobs:
           export DENO_BIN="$(command -v deno)"
           export DENO_DIR="$RUNNER_TEMP/media-http-cache"
           timeout --signal=TERM --kill-after=10s 180s python3 scripts/media_http_local.py --local-disposable "$RUNNER_TEMP/birds-media-status.json"
+      - name: Remaining HTTP harness boundary checks (offline)
+        run: |
+          python3 -m unittest discover -s scripts -p 'remaining_http_local_test.py'
+          export DENO_DIR="$RUNNER_TEMP/media-http-cache"
+          FILES=(scripts/remaining_http_local.ts scripts/remaining_http_local_guard_test.ts)
+          deno fmt --check --config supabase/functions/deno.json "${FILES[@]}"
+          deno lint --config supabase/functions/deno.json "${FILES[@]}"
+          deno check --no-lock --node-modules-dir=manual --config supabase/functions/deno.json "${FILES[@]}"
+          SDK_ENV='SMITHY_NEW_RETRIES_2026,AWS_LAMBDA_NODEJS_NO_GLOBAL_AWSLAMBDA,AWS_LAMBDA_BENCHMARK_MODE,AWS_NEW_RETRIES_2026'
+          env -i PATH=/usr/bin:/bin DENO_DIR="$DENO_DIR" "$(command -v deno)" test \
+            --cached-only --no-remote --no-lock --no-prompt --node-modules-dir=manual \
+            --deny-net --deny-read --deny-write --deny-run --deny-sys --deny-ffi --allow-env="$SDK_ENV" \
+            --config supabase/functions/deno.json scripts/remaining_http_local_guard_test.ts
+      - name: Real local contact and deletion HTTP (simulated fences)
+        run: |
+          umask 077
+          trap 'rm -f "$RUNNER_TEMP/birds-remaining-status.json"' EXIT
+          # Fresh stack data: scheduled cleanup must not select earlier harness fixtures.
+          "$RUNNER_TEMP/birds-cli/node_modules/.bin/supabase" db reset --local
+          docker exec -i supabase_db_sudan-birds-local psql -U postgres -d postgres -v ON_ERROR_STOP=1 < scripts/remaining_http_fixture.sql
+          "$RUNNER_TEMP/birds-cli/node_modules/.bin/supabase" status --output json > "$RUNNER_TEMP/birds-remaining-status.json"
+          export DENO_BIN="$(command -v deno)" DENO_DIR="$RUNNER_TEMP/media-http-cache"
+          timeout --signal=TERM --kill-after=10s 180s python3 scripts/remaining_http_local.py --local-disposable "$RUNNER_TEMP/birds-remaining-status.json"
       - name: Stop isolated services
         if: always()
         run: |

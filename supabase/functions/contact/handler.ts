@@ -10,7 +10,10 @@ export function createContactHandler(deps = { authenticated }) {
       p_listing: uuid(input.listing_id),
       p_explicit_consent: true,
     });
-    if (error) throw new ApiError(403, "contact_denied");
+    if (error?.code === "42501") throw new ApiError(403, "contact_denied");
+    // A transport/database outage is not evidence that the caller is forbidden.
+    // Keep failures closed and sanitized while preserving a retryable status.
+    if (error) throw new ApiError(503, "contact_unavailable");
     if (data === null || (Array.isArray(data) && data.length === 0)) {
       throw new ApiError(404, "contact_unavailable");
     }

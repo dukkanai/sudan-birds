@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:typed_data';
+import 'local_diagnostics.dart';
 
 class AppFailure {
   const AppFailure(this.message, {this.outcomeUnknown = false});
@@ -19,13 +20,22 @@ Future<Result<T>> protect<T>(
   Future<T> Function() action, {
   Duration? timeout = const Duration(seconds: 20),
   bool mutation = false,
+  FailureBoundary? boundary,
 }) async {
+  final source =
+      boundary ??
+      (mutation ? FailureBoundary.mutation : FailureBoundary.operation);
   try {
     final pending = action();
     return Result.success(
       await (timeout == null ? pending : pending.timeout(timeout)),
     );
   } on TimeoutException {
+    localDiagnostics.record(
+      source,
+      FailureCode.timeout,
+      outcomeUnknown: mutation,
+    );
     return Result.failure(
       AppFailure(
         'انتهت مهلة الاتصال. قد تكون العملية وصلت للخادم؛ تحقق من المحتوى قبل إعادة الإرسال.',
@@ -33,8 +43,18 @@ Future<Result<T>> protect<T>(
       ),
     );
   } on AppFailure catch (failure) {
+    localDiagnostics.record(
+      source,
+      FailureCode.rejected,
+      outcomeUnknown: failure.outcomeUnknown,
+    );
     return Result.failure(failure);
   } catch (_) {
+    localDiagnostics.record(
+      source,
+      FailureCode.unexpected,
+      outcomeUnknown: mutation,
+    );
     // Never expose raw exceptions: SDK errors may contain credentials or PII.
     return Result.failure(
       AppFailure(
@@ -56,8 +76,24 @@ Future<Result<T>> guardResult<T>(
   Future<Result<T>> Function() action, {
   bool mutation = false,
 }) async {
-  final result = await protect(action, timeout: null, mutation: mutation);
-  return result.value ?? Result.failure(result.failure!);
+  final boundary = mutation
+      ? FailureBoundary.uiMutationGuard
+      : FailureBoundary.uiGuard;
+  final result = await protect(
+    action,
+    timeout: null,
+    mutation: mutation,
+    boundary: boundary,
+  );
+  final inner = result.value;
+  if (inner?.failure != null) {
+    localDiagnostics.record(
+      boundary,
+      FailureCode.rejected,
+      outcomeUnknown: inner!.failure!.outcomeUnknown,
+    );
+  }
+  return inner ?? Result.failure(result.failure!);
 }
 
 Future<Result<T>> guardMutation<T>(Future<Result<T>> Function() action) =>

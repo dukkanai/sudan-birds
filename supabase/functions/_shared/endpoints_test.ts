@@ -202,7 +202,12 @@ Deno.test("contact RPC denials empty results and transport failures never leak d
   f.routes.set("/rest/v1/rpc/reveal_listing_contact", () => {
     throw new Error(privateMarker);
   });
-  await response(handler, f.request(validInputs.contact), 403, "contact_denied");
+  await response(handler, f.request(validInputs.contact), 503, "contact_unavailable");
+  for (const code of ["08006", "57014", "PGRST000", "unexpected"]) {
+    f.rpc("reveal_listing_contact", { message: privateMarker, code }, 503);
+    await response(handler, f.request(validInputs.contact), 503, "contact_unavailable");
+  }
+  assert(f.effects.length === 0);
 });
 
 Deno.test("public media read keeps anonymous and verified caller contexts separate", async () => {

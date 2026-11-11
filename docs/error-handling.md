@@ -60,3 +60,29 @@ separate release gates and must apply to the final source being distributed.
 Process termination, operating-system failures, out-of-memory termination and an
 unavailable logging service cannot be guaranteed to produce an application error
 report. The implementation does not claim absolute capture of every failure.
+
+## Local diagnostic coverage
+
+`localDiagnostics.snapshot` is an immutable, in-process inspection interface for
+up to 100 recent failure observations. `reset()` clears the live buffer; already
+obtained snapshots remain unchanged. Process exit loses the buffer. Nothing is
+written to disk, printed, uploaded, or shared. There is no export UI or telemetry
+service. Events accept only closed boundary/code enums, a UTC timestamp, and an
+outcome-unknown flag. Exceptions, stack traces, runtime types, messages, URLs,
+account identifiers, contact data and tokens are never accepted by this recorder.
+Recording is best effort and non-throwing: diagnostic failure must not replace an
+operation's original failure or prevent its existing user-visible warning.
+
+Covered observations: shared operation/mutation wrappers (timeout, known failure,
+unexpected failure), UI guards (thrown and returned failures), startup, Flutter,
+platform and zone safety nets, secure-storage queue failures, OAuth link delivery,
+callback exchange/install and failed callback cleanup. Nested boundaries can
+record more than one observation for one failure; this is not an incident count.
+Known failures retain their existing result and uncertainty flags. Runtime safety
+nets mark the outcome unknown conservatively and retain the Arabic warning.
+
+These labels identify containment boundaries, not individual requests or users.
+They do not claim universal error capture, native process-crash persistence,
+backend monitoring, or production crash reporting. Existing operation-specific
+failure/recovery behavior remains authoritative. The recorder cannot diagnose
+unobserved native crashes, device termination or failures before Dart starts.

@@ -6,6 +6,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'app.dart';
 import 'auth_config.dart';
 import 'domain.dart';
+import 'local_diagnostics.dart';
 import 'repository.dart';
 import 'interrupted_image_selection.dart';
 import 'secure_auth_storage.dart';
@@ -15,15 +16,21 @@ final runtimeError = ValueNotifier<String?>(null);
 const unexpectedErrorMessage =
     'حدث خطأ غير متوقع. لم نؤكد نجاح العملية؛ تحقق من حالة الطلب قبل تكراره، ثم أعد فتح الشاشة.';
 
-void captureUnexpectedError() {
+void captureUnexpectedError({FailureBoundary boundary = FailureBoundary.zone}) {
+  localDiagnostics.record(
+    boundary,
+    FailureCode.unexpected,
+    outcomeUnknown: true,
+  );
   scheduleMicrotask(() => runtimeError.value = unexpectedErrorMessage);
 }
 
 void installRuntimeErrorHandlers() {
   // Final safety nets only. Never print/transmit raw errors or stack traces.
-  FlutterError.onError = (_) => captureUnexpectedError();
+  FlutterError.onError = (_) =>
+      captureUnexpectedError(boundary: FailureBoundary.flutter);
   PlatformDispatcher.instance.onError = (_, _) {
-    captureUnexpectedError();
+    captureUnexpectedError(boundary: FailureBoundary.platform);
     return true;
   };
   ErrorWidget.builder = (_) => const UnexpectedErrorView();
@@ -128,6 +135,7 @@ void main() {
             );
           },
           timeout: null,
+          boundary: FailureBoundary.startup,
         ); // Each native operation is bounded. Do not orphan SDK
         // initialization behind a non-canceling outer Future.timeout.
         if (result.isSuccess) {

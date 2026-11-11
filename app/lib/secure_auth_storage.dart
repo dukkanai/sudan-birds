@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'domain.dart';
+import 'local_diagnostics.dart';
 
 const secureStorageMessage =
     'تعذر تأكيد حفظ أو مسح بيانات الدخول في التخزين الآمن. أُوقفت إجراءات الحساب. افتح قفل الجهاز وأعد مسح الجلسة من زر الحساب قبل تسجيل الدخول مجدداً.';
@@ -148,6 +149,11 @@ class SecureAuthStorage {
     } on ObsoleteAuthFlow {
       rethrow;
     } catch (_) {
+      localDiagnostics.record(
+        FailureBoundary.secureStorage,
+        FailureCode.storageUnavailable,
+        outcomeUnknown: true,
+      );
       failed = true;
       acceptsSessions = false;
       _notify();

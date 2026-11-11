@@ -9,6 +9,7 @@ import signal
 import stat
 import subprocess
 import tempfile
+import time
 import uuid
 
 
@@ -66,6 +67,17 @@ def unique_json_object(pairs):
 def run(args, seconds=10, capture=False, *, stage):
     if stage not in STAGES:
         raise Failure('Invalid command diagnostic label')
+    started = time.monotonic()
+    try:
+        return _run(args, seconds, capture, stage=stage)
+    finally:
+        # Bounded duration includes owned-process cleanup on failure. Never log
+        # command arguments, inventory contents, exception text, or native logs.
+        elapsed_ms = min(86_400_000, max(0, int((time.monotonic() - started) * 1000)))
+        print(f'TIMING: stage={stage} elapsed_ms={elapsed_ms}')
+
+
+def _run(args, seconds, capture, *, stage):
     # No native/plugin logs reach CI or survive this invocation. JSON inventories
     # are bounded and returned only for validation, never printed.
     with tempfile.TemporaryFile() as output:
@@ -108,7 +120,9 @@ def inventory(*, stage, cold=False):
         # Keep all devices/runtime grouping to verify uniqueness and exact owned
         # identity, but avoid repeatedly enumerating runtimes/types/device pairs.
         command = ['xcrun', 'simctl', 'list', 'devices', '--json']
-        seconds = 10
+        # Both phases timed out after a successful boot in the observed CI run.
+        # Widen only these two reads; keep all ownership and cleanup guards.
+        seconds = 60 if stage in {'inventory-pre-test', 'cleanup-inventory-owned'} else 10
     else:
         raise Failure('Invalid inventory phase/bound')
     result = run(command, capture=True, stage=stage, seconds=seconds)

@@ -224,7 +224,7 @@ class Guards(unittest.TestCase):
             smoke.inventory(cold=True, stage='inventory-initial')
             smoke.inventory(stage='inventory-created')
             smoke.inventory(stage='cleanup-inventory-owned')
-        self.assertEqual([call.kwargs['seconds'] for call in run.call_args_list], [60, 10, 10])
+        self.assertEqual([call.kwargs['seconds'] for call in run.call_args_list], [60, 10, 60])
         self.assertEqual([call.args[0] for call in run.call_args_list], [
             ['xcrun', 'simctl', 'list', '--json'],
             ['xcrun', 'simctl', 'list', 'devices', '--json'],
@@ -252,12 +252,13 @@ class Guards(unittest.TestCase):
                 (12345, smoke.signal.SIGTERM), (12345, smoke.signal.SIGKILL)])
             self.assertEqual([c.kwargs['timeout'] for c in process.wait.call_args_list], [60, 10, 10])
 
-    def test_every_later_phase_is_devices_only_and_ten_seconds(self):
+    def test_only_post_boot_and_initial_cleanup_inventory_get_sixty_seconds(self):
         for stage in smoke.DEVICE_PHASES:
             with self.subTest(stage=stage), patch.object(smoke, 'run', return_value={'devices': {}}) as run:
                 smoke.inventory(stage=stage)
                 run.assert_called_once_with(['xcrun', 'simctl', 'list', 'devices', '--json'],
-                                            capture=True, stage=stage, seconds=10)
+                                            capture=True, stage=stage,
+                                            seconds=60 if stage in {'inventory-pre-test', 'cleanup-inventory-owned'} else 10)
 
     def test_inventory_rejects_unknown_or_widened_phase(self):
         for kwargs in [{'stage': 'SECRET'}, {'stage': 'inventory-initial'},
@@ -287,7 +288,7 @@ class Guards(unittest.TestCase):
                     with self.assertRaisesRegex(smoke.Failure, '^stage=cleanup-inventory-owned invalid device inventory identity$'):
                         smoke.cleanup(path)
                     run.assert_called_once_with(['xcrun', 'simctl', 'list', 'devices', '--json'],
-                                                capture=True, stage='cleanup-inventory-owned', seconds=10)
+                                                capture=True, stage='cleanup-inventory-owned', seconds=60)
                 self.assertEqual(output.getvalue(), '')
 
     def test_duplicate_json_keys_cannot_hide_owned_device_at_cleanup(self):
@@ -314,7 +315,8 @@ class Guards(unittest.TestCase):
                         smoke.cleanup(path)
                     self.assertEqual(popen.call_count, 1)
                     self.assertEqual(popen.call_args.args[0], ['xcrun', 'simctl', 'list', 'devices', '--json'])
-                self.assertEqual(output.getvalue(), '')
+                self.assertRegex(output.getvalue(),
+                                 r'^TIMING: stage=cleanup-inventory-owned elapsed_ms=[0-9]+\n$')
 
     def test_cleanup_inventory_phases_are_distinct(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -342,6 +344,35 @@ class Guards(unittest.TestCase):
             with self.assertRaisesRegex(smoke.Failure, '^stage=create reason=launch exit=unknown; output suppressed$'):
                 smoke.run(['anything'], stage='create')
             kill.assert_not_called()
+
+    def test_timing_is_allowlisted_and_preserves_failure(self):
+        for outcome in [None, smoke.Failure('SECRET'), KeyboardInterrupt('SECRET')]:
+            output = io.StringIO()
+            with self.subTest(outcome=type(outcome).__name__), patch.object(
+                    smoke, '_run', side_effect=outcome) as execute, patch.object(
+                    smoke.time, 'monotonic', side_effect=[100.0, 101.25]), contextlib.redirect_stdout(output):
+                if outcome is None:
+                    smoke.run(['SECRET'], stage='test')
+                else:
+                    with self.assertRaises(type(outcome)) as caught:
+                        smoke.run(['SECRET'], stage='test')
+                    self.assertIs(caught.exception, outcome)
+                execute.assert_called_once_with(['SECRET'], 10, False, stage='test')
+            self.assertEqual(output.getvalue(), 'TIMING: stage=test elapsed_ms=1250\n')
+
+    def test_timing_bounds_and_invalid_stage_do_not_leak(self):
+        for finish, expected in [(99.0, 0), (1000000.0, 86400000)]:
+            output = io.StringIO()
+            with patch.object(smoke, '_run'), patch.object(
+                    smoke.time, 'monotonic', side_effect=[100.0, finish]), contextlib.redirect_stdout(output):
+                smoke.run(['SECRET'], stage='boot')
+            self.assertEqual(output.getvalue(), f'TIMING: stage=boot elapsed_ms={expected}\n')
+        output = io.StringIO()
+        with patch.object(smoke, '_run') as execute, contextlib.redirect_stdout(output):
+            with self.assertRaises(smoke.Failure):
+                smoke.run(['SECRET'], stage='SECRET')
+            execute.assert_not_called()
+        self.assertEqual(output.getvalue(), '')
 
     def test_bounded_runner_suppresses_output(self):
         self.assertIsNone(smoke.run(['python3', '-c', "print('SYNTHETIC')"], seconds=5, stage='test'))

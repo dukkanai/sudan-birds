@@ -148,6 +148,24 @@ class Guards(unittest.TestCase):
             self.assertEqual(smoke.load(path / 'owned.json'), STATE)
             self.assertFalse((path / 'creation-attempted').exists())
 
+    def test_post_boot_inventory_failure_never_starts_test_and_keeps_ownership(self):
+        before = data()
+        before['devices'] = {}
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory)
+            fake_uuid = type('FakeUUID', (), {'hex': 'a' * 32})()
+            with patch.object(smoke.uuid, 'uuid4', return_value=fake_uuid), patch.object(
+                    smoke, 'inventory', side_effect=[
+                        before, data(), data(), smoke.Failure('post-boot inventory timeout')
+                    ]) as inventory, patch.object(smoke, 'run') as run:
+                with self.assertRaises(smoke.Failure):
+                    smoke.execute(path)
+            self.assertEqual(inventory.call_count, 4)
+            self.assertEqual([call.kwargs['stage'] for call in run.call_args_list],
+                             ['create', 'boot', 'boot-wait'])
+            self.assertEqual(smoke.load(path / 'owned.json'), STATE)
+            self.assertFalse((path / 'creation-attempted').exists())
+
     def test_failed_create_never_creates_ownership_record(self):
         before = data()
         before['devices'] = {}
@@ -252,13 +270,13 @@ class Guards(unittest.TestCase):
                 (12345, smoke.signal.SIGTERM), (12345, smoke.signal.SIGKILL)])
             self.assertEqual([c.kwargs['timeout'] for c in process.wait.call_args_list], [60, 10, 10])
 
-    def test_only_post_boot_and_initial_cleanup_inventory_get_sixty_seconds(self):
+    def test_phase_specific_inventory_bounds(self):
         for stage in smoke.DEVICE_PHASES:
             with self.subTest(stage=stage), patch.object(smoke, 'run', return_value={'devices': {}}) as run:
                 smoke.inventory(stage=stage)
                 run.assert_called_once_with(['xcrun', 'simctl', 'list', 'devices', '--json'],
                                             capture=True, stage=stage,
-                                            seconds=60 if stage in {'inventory-pre-test', 'cleanup-inventory-owned'} else 10)
+                                            seconds={'inventory-pre-test': 180, 'cleanup-inventory-owned': 60}.get(stage, 10))
 
     def test_inventory_rejects_unknown_or_widened_phase(self):
         for kwargs in [{'stage': 'SECRET'}, {'stage': 'inventory-initial'},

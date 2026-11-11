@@ -120,9 +120,9 @@ def inventory(*, stage, cold=False):
         # Keep all devices/runtime grouping to verify uniqueness and exact owned
         # identity, but avoid repeatedly enumerating runtimes/types/device pairs.
         command = ['xcrun', 'simctl', 'list', 'devices', '--json']
-        # Both phases timed out after a successful boot in the observed CI run.
-        # Widen only these two reads; keep all ownership and cleanup guards.
-        seconds = 60 if stage in {'inventory-pre-test', 'cleanup-inventory-owned'} else 10
+        # Post-boot inventory exceeded 60 seconds in run 43012583526.
+        # Keep one bounded read and all ownership/cleanup guards; never retry.
+        seconds = {'inventory-pre-test': 180, 'cleanup-inventory-owned': 60}.get(stage, 10)
     else:
         raise Failure('Invalid inventory phase/bound')
     result = run(command, capture=True, stage=stage, seconds=seconds)

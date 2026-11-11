@@ -136,7 +136,8 @@ class _ProfilePageState extends State<ProfilePage>
                   const Text(
                     'لا تُنشئ ملفاً جديداً أثناء حذف الحساب. إذا تعذر التحقق من حالة الحذف، أعد المحاولة أولاً.',
                   ),
-                  if (error != null) Text(error!),
+                  if (error != null)
+                    Semantics(liveRegion: true, child: Text(error!)),
                   TextButton(
                     onPressed: load,
                     child: const Text('إعادة التحقق من حالة الحساب'),
@@ -298,6 +299,7 @@ class _FilterPageState extends State<FilterPage> {
   }
 
   Future<void> load() async {
+    if (!mounted) return;
     setState(() {
       loading = true;
       loadFailed = false;
@@ -338,6 +340,7 @@ class _FilterPageState extends State<FilterPage> {
     onChanged: change,
   );
   Future<void> date(bool start) async {
+    if (!mounted) return;
     final selected = await showDatePicker(
       context: context,
       initialDate:
@@ -358,7 +361,7 @@ class _FilterPageState extends State<FilterPage> {
   }
 
   void apply() {
-    if (loading || loadFailed) return;
+    if (!mounted || loading || loadFailed) return;
     final low = parseAmount(min.text), high = parseAmount(max.text);
     String? issue =
         validateAmount(min.text, required: false) ??
@@ -520,7 +523,8 @@ class _FilterPageState extends State<FilterPage> {
                       : 'إلى ${arabicDate(until!.subtract(const Duration(days: 1)))}',
                 ),
               ),
-              if (error != null) Text(error!),
+              if (error != null)
+                Semantics(liveRegion: true, child: Text(error!)),
               FilledButton(
                 onPressed: apply,
                 child: const Text('تطبيق الفلاتر'),
@@ -629,6 +633,7 @@ class _PublicationPageState extends State<PublicationPage>
       return;
     }
     final result = await guardResult(() => widget.repository.taxonomy());
+    if (!isAccountCurrent) return;
     final profile = await guardResult(() => widget.repository.profile());
     if (mounted && isAccountCurrent) {
       setState(() {
@@ -1141,7 +1146,7 @@ class _DetailPageState extends State<DetailPage>
                                 ),
                               ),
                             );
-                        if (changed != null && mounted) {
+                        if (changed != null && isAccountCurrent) {
                           setState(() {
                             entry = changed;
                             revealed = null;
@@ -1195,7 +1200,7 @@ class _DetailPageState extends State<DetailPage>
                         final result = await guardResult(
                           () => widget.repository.block(entry.ownerId, true),
                         );
-                        if (!context.mounted) return;
+                        if (!context.mounted || !isAccountCurrent) return;
                         if (result.isSuccess) {
                           Navigator.pop(context);
                         } else {

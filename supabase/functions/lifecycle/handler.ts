@@ -44,6 +44,7 @@ export function createLifecycleHandler(deps = {
     if (input.action === "deletion_job") {
       const { data, error } = await service.rpc("get_deletion_job", { p_job: jobId });
       if (error || !data?.[0]) throw new ApiError(404, "deletion_job_not_found");
+      if (data[0].id !== jobId) throw new ApiError(500, "invalid_deletion_job");
       const result = await processDeletion(data[0], lifecycle);
       return json(result, result.status === "completed" ? 200 : 202);
     }

@@ -1,5 +1,7 @@
 import { check, createSdkStorage, FixtureAssertion } from "./media_sdk_fixture.ts";
-import { scenarioArgs } from "./media_sdk_resource.ts";
+import { scenarioArgs, sdkAuthRuntime } from "./media_sdk_resource.ts";
+import { createClient } from "npm:@supabase/supabase-js@2.57.4";
+import { authenticated, serviceClient } from "../supabase/functions/_shared/auth.ts";
 import { ApiError } from "../supabase/functions/_shared/http.ts";
 
 async function rejects(operation: () => Promise<unknown>, code?: string) {
@@ -296,4 +298,136 @@ Deno.test("no-destroy exists only as an explicit counterfactual option", async (
     sdk.effects.clients === 1 && sdk.effects.closed === 1 && sdk.effects.destroys === 0,
     "counterfactual lifecycle mislabeled",
   );
+});
+
+Deno.test("resource Auth transport injection preserves production timeout normalization and identities", async () => {
+  const originalTimeout = AbortSignal.timeout;
+  const originalLog = console.error;
+  const logs: unknown[] = [];
+  const signals: AbortSignal[] = [];
+  const owner = "00000000-0000-4000-8000-000000000001";
+  let failing = false;
+  AbortSignal.timeout = (ms) => {
+    check(ms === 15_000, "backend request deadline changed");
+    const signal = new AbortController().signal;
+    signals.push(signal);
+    return signal;
+  };
+  console.error = (value) => logs.push(value);
+  const env: Record<string, string> = {
+    SUPABASE_URL: "https://synthetic-project.invalid",
+    SUPABASE_ANON_KEY: "synthetic-public",
+    SUPABASE_SERVICE_ROLE_KEY: "synthetic-service",
+  };
+  const runtime = sdkAuthRuntime((name) => env[name], (input, init) => {
+    check(init?.signal instanceof AbortSignal, "production backend wrapper was bypassed");
+    const req = new Request(input, init);
+    const isAuth = new URL(req.url).pathname === "/auth/v1/user";
+    check(
+      req.headers.get("authorization") ===
+        `Bearer ${isAuth ? "synthetic-caller" : "synthetic-service"}`,
+      "request identity changed",
+    );
+    if (failing) throw new Error("PRIVATE_SYNTHETIC_TRANSPORT_DETAIL");
+    return Promise.resolve(Response.json(isAuth ? { id: owner } : { ok: true }));
+  }, createClient);
+  try {
+    const req = () =>
+      new Request("https://synthetic.invalid", {
+        headers: { authorization: "Bearer synthetic-caller" },
+      });
+    check((await authenticated(req(), runtime)).user.id === owner, "verified identity changed");
+    check(!(await serviceClient(runtime).rpc("synthetic_rpc")).error, "service RPC failed");
+    failing = true;
+    await rejects(() => authenticated(req(), runtime), "authentication_unavailable");
+    check(
+      (await serviceClient(runtime).rpc("synthetic_rpc")).error,
+      "transport failure became success",
+    );
+    check(signals.length === 4, "not every Auth/RPC request used backend deadline");
+    check(
+      logs.length === 2 && logs.every((log) => log === '{"event":"upstream_transport_failed"}'),
+      "raw SDK exception escaped",
+    );
+  } finally {
+    AbortSignal.timeout = originalTimeout;
+    console.error = originalLog;
+  }
+});
+
+Deno.test("SDK fixture destroy failures preserve confirmed outcomes and primary errors", async () => {
+  const original = console.error;
+  const logs: unknown[] = [];
+  console.error = (value) => logs.push(value);
+  try {
+    const sdk = createSdkStorage(image, () => {}, {
+      onDestroy() {
+        throw new Error("PRIVATE_SYNTHETIC_DESTROY_DETAIL");
+      },
+    });
+    await sdk.deps.signRead(key);
+    sdk.setMode("wrong_length");
+    await rejects(() => sdk.deps.downloadImage(key, image.length), "invalid_image");
+    sdk.setMode("normal");
+    check(
+      await sdk.deps.removePayloadAndFence("synthetic/orphan.jpg"),
+      "confirmed fence result lost",
+    );
+    check(sdk.effects.clients === 3 && sdk.effects.destroys === 3, "destroy ownership lost");
+    check(
+      logs.length === 3 && logs.every((log) => log === '{"event":"storage_client_cleanup_failed"}'),
+      "raw destroy exception escaped",
+    );
+  } finally {
+    console.error = original;
+  }
+});
+
+Deno.test("SDK fixture signed PUT response cleanup preserves success conflict and failure within bounded grace", async () => {
+  const originalTimer = globalThis.setTimeout;
+  const originalLog = console.error;
+  const delays: number[] = [];
+  const logs: unknown[] = [];
+  globalThis.setTimeout = ((callback: (...args: unknown[]) => void, delay?: number) => {
+    delays.push(delay ?? 0);
+    return originalTimer(callback, delay === 1_000 ? 5 : delay);
+  }) as typeof setTimeout;
+  console.error = (value) => logs.push(value);
+  try {
+    for (const mode of ["normal", "put_conflict", "put_failed"] as const) {
+      for (const cancel of ["reject", "hang"] as const) {
+        const sdk = createSdkStorage(image, () => {}, {
+          putCancellation: () =>
+            cancel === "reject"
+              ? Promise.reject(new Error("PRIVATE_SYNTHETIC_RESPONSE_DETAIL"))
+              : new Promise<void>(() => {}),
+        });
+        sdk.setMode(mode);
+        if (mode === "normal") await sdk.deps.writeVerified(key, image, expiry);
+        else {await rejects(
+            () => sdk.deps.writeVerified(key, image, expiry),
+            mode === "put_conflict" ? "upload_conflict" : "image_storage_failed",
+          );}
+        check(
+          sdk.effects.put_response_canceled === 1 && sdk.effects.destroys === 1,
+          "PUT cleanup skipped",
+        );
+      }
+    }
+    check(
+      delays.filter((delay) => delay === 1_000).length === 6,
+      "bounded cancellation grace skipped",
+    );
+    check(
+      logs.length === 6 &&
+        logs.every((log) =>
+          log === '{"event":"stream_cleanup_failed"}' ||
+          log === '{"event":"stream_cleanup_timeout"}'
+        ),
+      "raw cleanup failure escaped",
+    );
+  } finally {
+    globalThis.setTimeout = originalTimer;
+    console.error = originalLog;
+  }
 });

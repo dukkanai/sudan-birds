@@ -1,3 +1,6 @@
+import { cancelStream, releaseStreamLock } from "./stream_cleanup.ts";
+import { reportFailure } from "./diagnostics.ts";
+
 export class ApiError extends Error {
   constructor(readonly status: number, readonly code: string) {
     super(code);
@@ -23,6 +26,7 @@ export function boundary(handler: (r: Request) => Promise<Response> | Response) 
     } catch (error) {
       const status = error instanceof ApiError ? error.status : 500;
       const code = error instanceof ApiError ? error.code : "internal_error";
+      if (status >= 500) reportFailure("request_failed", requestId);
       return json({ error: code, request_id: requestId }, status);
     }
   };
@@ -38,15 +42,23 @@ export async function body(req: Request): Promise<Record<string, unknown>> {
   if (!reader) throw new ApiError(400, "invalid_json");
   const chunks: Uint8Array[] = [];
   let size = 0;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let cancellation: Promise<void> | undefined;
+  // One total deadline, not a fresh allowance for each attacker-controlled chunk.
+  const timeout = new Promise<never>((_resolve, reject) => {
+    timer = setTimeout(() => {
+      reject(new ApiError(408, "body_timeout"));
+      cancellation ??= cancelStream(reader);
+    }, 10_000);
+  });
   try {
     while (true) {
-      const next = await reader.read();
+      const next = await Promise.race([reader.read(), timeout]);
       if (next.done) break;
       size += next.value.byteLength;
       if (size > 8192) {
-        try {
-          await reader.cancel();
-        } catch { /* Cancellation failure must not hide the exceeded byte limit. */ }
+        cancellation ??= cancelStream(reader);
+        await cancellation;
         throw new ApiError(413, "body_too_large");
       }
       chunks.push(next.value);
@@ -64,7 +76,9 @@ export async function body(req: Request): Promise<Record<string, unknown>> {
     if (error instanceof ApiError) throw error;
     throw new ApiError(400, "invalid_json");
   } finally {
-    reader.releaseLock();
+    clearTimeout(timer);
+    await cancellation;
+    releaseStreamLock(reader);
   }
 }
 export function uuid(value: unknown): string {

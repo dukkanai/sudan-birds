@@ -13,6 +13,7 @@ import {
   readExactImageStream,
 } from "../supabase/functions/_shared/image_stream.ts";
 import { ApiError } from "../supabase/functions/_shared/http.ts";
+import { reportFailure } from "../supabase/functions/_shared/diagnostics.ts";
 
 const bucket = "synthetic-bucket";
 const host = `${bucket}.synthetic.invalid`;
@@ -146,6 +147,8 @@ export function createSdkStorage(
     now?: () => number;
     afterSign?: () => Promise<void> | void;
     onEvent?: (event: { client: number; name: string }) => void;
+    onDestroy?: () => void;
+    putCancellation?: () => Promise<void>;
   } = {},
 ) {
   let mode: StorageMode = "normal";
@@ -165,6 +168,7 @@ export function createSdkStorage(
     presign_put: 0,
     presign_get: 0,
     signed_put: 0,
+    put_response_canceled: 0,
     verified_signatures: 0,
     streams: 0,
     closed: 0,
@@ -328,6 +332,7 @@ export function createSdkStorage(
         state.destroyed = true;
         effects.destroys++;
         event("destroy");
+        options.onDestroy?.();
       },
     }));
     sample("client_created");
@@ -338,7 +343,14 @@ export function createSdkStorage(
     try {
       return await operation(c);
     } finally {
-      if (!options.counterfactualNoDestroy) c.destroy();
+      if (!options.counterfactualNoDestroy) {
+        try {
+          c.destroy();
+        } catch {
+          // Match production's outcome-preserving owned-client cleanup guard.
+          reportFailure("storage_client_cleanup_failed");
+        }
+      }
     }
   };
   const signUpload = (key: string, bytes: number, mime: string, expiresIn = 120) =>
@@ -393,11 +405,19 @@ export function createSdkStorage(
     effects.signed_put++;
     const key = decodeURIComponent(new URL(signed).pathname.slice(1));
     const conflict = mode === "put_conflict" || objects.has(key);
+    const body = options.putCancellation
+      ? new ReadableStream<Uint8Array>({
+        cancel() {
+          effects.put_response_canceled++;
+          return options.putCancellation!();
+        },
+      })
+      : null;
     if (conflict || mode === "put_failed") {
-      return new Response(null, { status: conflict ? 412 : 500 });
+      return new Response(body, { status: conflict ? 412 : 500 });
     }
     objects.set(key, { bytes: bytes.length, tombstone: false });
-    return new Response(null, { status: 200 });
+    return new Response(body, { status: 200 });
   };
   const deps = {
     storageConfiguration: () => ({ account: "a".repeat(32), bucket, ...credentials }),
@@ -434,13 +454,13 @@ export function createSdkStorage(
         AbortSignal.timeout(Math.min(15_000, Math.floor(remainingMs))),
       );
       if (!response.ok) {
-        await response.body?.cancel();
+        if (response.body) await cancelImageStream(response.body);
         throw new ApiError(
           response.status === 412 ? 409 : 502,
           response.status === 412 ? "upload_conflict" : "image_storage_failed",
         );
       }
-      await response.body?.cancel();
+      if (response.body) await cancelImageStream(response.body);
       sample("after_signed_write");
     },
     removePayloadAndFence: (key: string) =>

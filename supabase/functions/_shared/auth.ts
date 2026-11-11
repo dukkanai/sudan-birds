@@ -1,8 +1,14 @@
-import { createClient } from "npm:@supabase/supabase-js@2.57.4";
+import {
+  createClient,
+  isAuthError,
+  isAuthRetryableFetchError,
+} from "npm:@supabase/supabase-js@2.57.4";
 import { ApiError, uuid } from "./http.ts";
+import { backendFetch } from "./backend_fetch.ts";
 export interface AuthRuntime {
   getEnv: (name: string) => string | undefined;
   createClient: typeof createClient;
+  fetch?: typeof fetch;
 }
 const runtime: AuthRuntime = { getEnv: (name) => Deno.env.get(name), createClient };
 export function requiredEnv(name: string, get = runtime.getEnv): string {
@@ -18,7 +24,7 @@ export async function authenticated(req: Request, deps: AuthRuntime = runtime) {
     requiredEnv("SUPABASE_URL", deps.getEnv),
     supabaseKey("public", deps.getEnv),
     {
-      global: { headers: { Authorization: authorization } },
+      global: { headers: { Authorization: authorization }, fetch: backendFetch(deps.fetch) },
       auth: { persistSession: false, autoRefreshToken: false },
     },
   );
@@ -26,13 +32,21 @@ export async function authenticated(req: Request, deps: AuthRuntime = runtime) {
   try {
     const { data, error } = await client.auth.getUser(token);
     const user = data?.user;
+    if (error) throw error;
     // The SDK can normalize malformed HTTP 200 bodies into a truthy "user".
     // Require an Auth-returned identity, never decode caller claims to replace it.
-    if (error || !user || typeof user !== "object" || Array.isArray(user)) throw new Error();
+    if (!user || typeof user !== "object" || Array.isArray(user)) throw new Error();
     uuid(user.id);
     return { client, user, token };
-  } catch {
-    // Includes Auth denial, SDK response decoding errors and invalid identities.
+  } catch (error) {
+    // Unavailable verification is not proof that a session expired. Still deny
+    // all downstream work, without prompting needless reauthentication.
+    if (
+      isAuthRetryableFetchError(error) ||
+      (isAuthError(error) &&
+        (error.status === 429 || (typeof error.status === "number" && error.status >= 500)))
+    ) throw new ApiError(503, "authentication_unavailable");
+    // Confirmed denials and malformed successful identities remain rejected.
     throw new ApiError(401, "invalid_session");
   }
 }
@@ -44,6 +58,7 @@ export function serviceClient(deps: AuthRuntime = runtime) {
     requiredEnv("SUPABASE_URL", deps.getEnv),
     supabaseKey("secret", deps.getEnv),
     {
+      global: { fetch: backendFetch(deps.fetch) },
       auth: { persistSession: false, autoRefreshToken: false },
     },
   );
@@ -134,6 +149,7 @@ export async function publicReadClient(req: Request, deps: AuthRuntime = runtime
     known,
     () =>
       deps.createClient(requiredEnv("SUPABASE_URL", deps.getEnv), key, {
+        global: { fetch: backendFetch(deps.fetch) },
         auth: { persistSession: false, autoRefreshToken: false },
       }),
     async () => (await authenticated(req, deps)).client,

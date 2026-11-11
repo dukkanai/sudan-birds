@@ -9,6 +9,15 @@ import { requiredEnv } from "./auth.ts";
 import { ApiError } from "./http.ts";
 import { presignCreateOnly } from "./presign.ts";
 import { cancelImageStream, readExactImageStream } from "./image_stream.ts";
+import { reportFailure } from "./diagnostics.ts";
+function destroyStorage(client: S3Client): void {
+  try {
+    client.destroy();
+  } catch {
+    // Cleanup cannot erase a confirmed write/fence or obscure the primary error.
+    reportFailure("storage_client_cleanup_failed");
+  }
+}
 export function storageConfiguration(get?: (name: string) => string | undefined) {
   const account = requiredEnv("R2_ACCOUNT_ID", get);
   if (!/^[a-f\d]{32}$/i.test(account)) throw new ApiError(503, "service_not_configured");
@@ -43,7 +52,7 @@ export async function signUpload(key: string, bytes: number, mime: string, expir
   try {
     return await presignCreateOnly(client, requiredEnv("R2_BUCKET"), key, bytes, mime, expiresIn);
   } finally {
-    client.destroy();
+    destroyStorage(client);
   }
 }
 export async function signRead(key: string) {
@@ -55,7 +64,7 @@ export async function signRead(key: string) {
       { expiresIn: 60 },
     );
   } finally {
-    client.destroy();
+    destroyStorage(client);
   }
 }
 export async function downloadImage(key: string, expectedBytes: number): Promise<Uint8Array> {
@@ -78,7 +87,7 @@ export async function downloadImage(key: string, expectedBytes: number): Promise
     // this operation's transport instead of waiting forever.
     return await readExactImageStream(stream, expectedBytes, signal);
   } finally {
-    client.destroy();
+    destroyStorage(client);
   }
 }
 export async function writeVerified(key: string, bytes: Uint8Array, intentExpiresAt: string) {
@@ -106,13 +115,13 @@ export async function writeVerified(key: string, bytes: Uint8Array, intentExpire
     redirect: "error",
   });
   if (!response.ok) {
-    await response.body?.cancel();
+    if (response.body) await cancelImageStream(response.body);
     throw new ApiError(
       response.status === 412 ? 409 : 502,
       response.status === 412 ? "upload_conflict" : "image_storage_failed",
     );
   }
-  await response.body?.cancel();
+  if (response.body) await cancelImageStream(response.body);
 }
 export async function removePayloadAndFence(key: string): Promise<boolean> {
   const client = storage();
@@ -139,6 +148,6 @@ export async function removePayloadAndFence(key: string): Promise<boolean> {
     }
     return true;
   } finally {
-    client.destroy();
+    destroyStorage(client);
   }
 }

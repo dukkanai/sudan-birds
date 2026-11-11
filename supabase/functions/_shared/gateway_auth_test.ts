@@ -134,7 +134,11 @@ Deno.test("Auth denial or missing user stops all handlers even with convincing m
             denial === "missing-user" ? 404 : denial === "revoked" ? 401 : 503,
           ),
       );
-      await result(await f.handlers()[name](f.request(input, bearer)), 401, "invalid_session");
+      await result(
+        await f.handlers()[name](f.request(input, bearer)),
+        denial === "unavailable" ? 503 : 401,
+        denial === "unavailable" ? "authentication_unavailable" : "invalid_session",
+      );
       authOnly(f, bearer);
     }
   }
@@ -206,7 +210,10 @@ Deno.test("verified modern caller header is forwarded unchanged for contact and 
   for (const name of ["contact", "media", "mediaRead"] as const) {
     const f = fixture();
     const bearer = accept(f);
-    f.rpc("reveal_listing_contact", [{ phone: "synthetic-contact" }]);
+    f.rpc("reveal_listing_contact", [{
+      contact_kind: "phone",
+      contact_value: "synthetic-contact",
+    }]);
     f.routes.set("/rest/v1/media", () => reply([{ object_key: "verified/rls-visible.jpg" }]));
     const input = name === "contact"
       ? { listing_id: id, explicit_consent: true }
@@ -369,4 +376,38 @@ Deno.test("accepted modern authentication does not enable the media pipeline", a
   }
   assert(f.calls.length === 2 && f.calls.every((c) => c.path === "/auth/v1/user"));
   assert(f.effects.length === 0);
+});
+
+Deno.test("Auth outages and rate limits stay retryable without granting access or anonymous fallback", async () => {
+  for (const status of [429, 500, 502, 503, 504]) {
+    for (const [name, input] of userInputs) {
+      const f = fixture();
+      const bearer = accept(f);
+      f.env.MEDIA_PIPELINE_ENABLED = "true";
+      f.routes.set("/auth/v1/user", () => reply({ message: privateMarker }, status));
+      await result(
+        await f.handlers()[name](f.request(input, bearer)),
+        503,
+        "authentication_unavailable",
+      );
+      authOnly(f, bearer);
+    }
+  }
+});
+
+Deno.test("Auth transport failure stays retryable through every user-authenticated handler", async () => {
+  for (const [name, input] of userInputs) {
+    const f = fixture();
+    const bearer = accept(f);
+    f.env.MEDIA_PIPELINE_ENABLED = "true";
+    f.routes.set("/auth/v1/user", () => {
+      throw new Error(privateMarker);
+    });
+    await result(
+      await f.handlers()[name](f.request(input, bearer)),
+      503,
+      "authentication_unavailable",
+    );
+    authOnly(f, bearer);
+  }
 });

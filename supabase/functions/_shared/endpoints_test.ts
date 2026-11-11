@@ -183,9 +183,9 @@ Deno.test("contact validates explicit consent and listing before caller-scoped R
     "invalid_id",
   );
   assert(rpcCalls(f).length === 0);
-  f.rpc("reveal_listing_contact", [{ phone: "synthetic-contact" }]);
+  f.rpc("reveal_listing_contact", [{ contact_kind: "phone", contact_value: "synthetic-contact" }]);
   const data = await response(handler, f.request(validInputs.contact), 200);
-  assert(data.contact.phone === "synthetic-contact");
+  assert(data.contact.contact_value === "synthetic-contact");
   const call = rpcCalls(f)[0];
   assert(call.authorization === `Bearer ${f.valid}` && call.apikey === publicKey);
   assert(call.body.p_listing === id && call.body.p_explicit_consent === true);
@@ -884,4 +884,121 @@ Deno.test("deletion readiness owner mismatch cannot delete either Auth account",
   );
   assert(data.status === "pending");
   assert(!f.calls.some((c) => c.path.includes("/admin/users/")));
+});
+
+Deno.test("malformed media commit success never fences the possibly published object", async () => {
+  for (
+    const malformed of [{}, { media_id: id }, {
+      media_id: "invalid",
+      published_key: "verified/other.jpg",
+    }]
+  ) {
+    const f = fixture();
+    prepareMedia(f);
+    f.rpc("commit_verified_media", [malformed]);
+    await response(
+      f.handlers().media,
+      f.request({ action: "complete", intent_id: id }),
+      409,
+      "verification_pending_retry",
+    );
+    assert(f.effects.join(",") === "service-client,download,write");
+  }
+});
+
+Deno.test("malformed or mismatched deletion jobs stop privileged work in account and lifecycle endpoints", async () => {
+  for (
+    const entry of [
+      job({ id: "invalid" }),
+      job({ state: "unknown" }),
+      job({ state: "completed", not_before: "invalid" }),
+    ]
+  ) {
+    const f = fixture();
+    f.rpc("is_cleanup_admin", true);
+    f.rpc("begin_account_deletion", entry);
+    f.rpc("get_deletion_job", [entry]);
+    await response(
+      f.handlers().accountDelete,
+      f.request(validInputs.accountDelete),
+      500,
+      "invalid_deletion_job",
+    );
+    await response(
+      f.handlers().lifecycle,
+      f.request({ action: "deletion_job", job_id: id }),
+      500,
+      "invalid_deletion_job",
+    );
+    assert(
+      rpcCalls(f).every((call) =>
+        ["is_cleanup_admin", "begin_account_deletion", "get_deletion_job"].some((name) =>
+          call.path.endsWith(name)
+        )
+      ),
+    );
+    assert(f.effects.every((effect) => effect === "service-client"));
+  }
+  const f = fixture();
+  f.rpc("is_cleanup_admin", true);
+  f.rpc("get_deletion_job", [job({ id: other })]);
+  await response(
+    f.handlers().lifecycle,
+    f.request({ action: "deletion_job", job_id: id }),
+    500,
+    "invalid_deletion_job",
+  );
+  assert(f.effects.join(",") === "service-client");
+});
+
+Deno.test("malformed Auth deletion success requires independent absence proof before completion", async () => {
+  for (const malformed of [{}, null, { user: null }, { user: { id: other } }]) {
+    for (const absent of [true, false]) {
+      const f = fixture();
+      prepareDeletion(f);
+      f.routes.set(`DELETE /auth/v1/admin/users/${owner}`, () => reply(malformed));
+      f.routes.set(
+        `GET /auth/v1/admin/users/${owner}`,
+        () =>
+          absent
+            ? reply({ code: "user_not_found", message: privateMarker }, 404)
+            : reply({ user: { id: owner } }),
+      );
+      const data = await response(
+        f.handlers().accountDelete,
+        f.request(validInputs.accountDelete),
+        absent ? 200 : 202,
+      );
+      assert(data.status === (absent ? "completed" : "pending"));
+      assert(rpcCalls(f).some((call) => call.path.endsWith("finish_account_deletion")) === absent);
+    }
+  }
+});
+
+Deno.test("contact response validation rejects malformed success and excludes unexpected backend fields", async () => {
+  const f = fixture();
+  for (
+    const malformed of ["private-string", {}, [{}], [null], [{
+      contact_kind: "phone",
+      contact_value: 7,
+    }], [{ contact_kind: "unknown", contact_value: privateMarker }]]
+  ) {
+    f.rpc("reveal_listing_contact", malformed);
+    await response(
+      f.handlers().contact,
+      f.request(validInputs.contact),
+      502,
+      "invalid_contact_response",
+    );
+  }
+  f.rpc("reveal_listing_contact", [{
+    contact_kind: "phone",
+    contact_value: "synthetic-contact",
+    unexpected: privateMarker,
+  }]);
+  const result = await response(f.handlers().contact, f.request(validInputs.contact), 200);
+  assert(
+    JSON.stringify(result.contact) ===
+      JSON.stringify({ contact_kind: "phone", contact_value: "synthetic-contact" }),
+  );
 });

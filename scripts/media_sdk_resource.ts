@@ -1,4 +1,15 @@
 /** Explicit local-only, synthetic SDK/handler experiment. No service integration. */
+import type { AuthRuntime } from "../supabase/functions/_shared/auth.ts";
+
+// Inject only the transport. Auth/runtime construction must retain the real
+// backendFetch deadline and error-normalization wrapper around that transport.
+export function sdkAuthRuntime(
+  getEnv: AuthRuntime["getEnv"],
+  fetcher: typeof fetch,
+  createClient: AuthRuntime["createClient"],
+): AuthRuntime {
+  return { getEnv, fetch: fetcher, createClient };
+}
 const SCENARIOS = [
   "sequential",
   "sequential-paced",
@@ -88,65 +99,59 @@ export async function runSdkResource() {
     SUPABASE_ANON_KEY: "synthetic-public-no-access",
     SUPABASE_SERVICE_ROLE_KEY: "synthetic-service-no-access",
   };
-  const runtime: Parameters<typeof auth.authenticated>[1] = {
-    getEnv: (name) => env[name],
-    createClient: ((url, key, options) =>
-      createClient(url, key, {
-        ...options,
-        global: {
-          ...options?.global,
-          fetch: async (input, init) => {
-            if (delayMs) await pause(delayMs);
-            const req = new Request(input, init);
-            const url = new URL(req.url);
-            assert(url.origin === env.SUPABASE_URL, "Auth/RPC origin");
-            if (url.pathname === "/auth/v1/user") {
-              effects.auth++;
-              assert(
-                req.headers.get("authorization") === "Bearer synthetic-caller-no-access",
-                "Auth fixture credential",
-              );
-              return Response.json({
-                id: owner,
-                aud: "authenticated",
-                role: "authenticated",
-                created_at: "2026-01-01T00:00:00Z",
-                app_metadata: {},
-                user_metadata: {},
-              });
-            }
-            const inputBody = await req.json();
-            assert(
-              req.headers.get("apikey") === env.SUPABASE_SERVICE_ROLE_KEY &&
-                inputBody.p_owner === owner && inputBody.p_intent === intent,
-              "RPC ownership",
-            );
-            if (url.pathname === "/rest/v1/rpc/prepare_media_verification") {
-              effects.prepare++;
-              cleanKey = `synthetic/clean-${++prepared}.jpg`;
-              return Response.json([{
-                intent_id: intent,
-                source_key: "synthetic/source.jpg",
-                clean_key: cleanKey,
-                expected_bytes: bytes.length,
-                existing_media: null,
-                expires_at: "2099-01-01T00:00:00Z",
-              }]);
-            }
-            if (url.pathname === "/rest/v1/rpc/commit_verified_media") {
-              effects.commit++;
-              assert(
-                inputBody.p_key === cleanKey && inputBody.p_bytes === 571691 &&
-                  inputBody.p_width === 640 && inputBody.p_height === 640,
-                "canonical output",
-              );
-              return Response.json([{ media_id: media, published_key: cleanKey }]);
-            }
-            throw new DriverAssertion("unexpected Auth/RPC route");
-          },
-        },
-      })) as typeof createClient,
-  };
+  const runtime = sdkAuthRuntime(
+    (name) => env[name],
+    async (input, init) => {
+      if (delayMs) await pause(delayMs);
+      const req = new Request(input, init);
+      const url = new URL(req.url);
+      assert(url.origin === env.SUPABASE_URL, "Auth/RPC origin");
+      if (url.pathname === "/auth/v1/user") {
+        effects.auth++;
+        assert(
+          req.headers.get("authorization") === "Bearer synthetic-caller-no-access",
+          "Auth fixture credential",
+        );
+        return Response.json({
+          id: owner,
+          aud: "authenticated",
+          role: "authenticated",
+          created_at: "2026-01-01T00:00:00Z",
+          app_metadata: {},
+          user_metadata: {},
+        });
+      }
+      const inputBody = await req.json();
+      assert(
+        req.headers.get("apikey") === env.SUPABASE_SERVICE_ROLE_KEY &&
+          inputBody.p_owner === owner && inputBody.p_intent === intent,
+        "RPC ownership",
+      );
+      if (url.pathname === "/rest/v1/rpc/prepare_media_verification") {
+        effects.prepare++;
+        cleanKey = `synthetic/clean-${++prepared}.jpg`;
+        return Response.json([{
+          intent_id: intent,
+          source_key: "synthetic/source.jpg",
+          clean_key: cleanKey,
+          expected_bytes: bytes.length,
+          existing_media: null,
+          expires_at: "2099-01-01T00:00:00Z",
+        }]);
+      }
+      if (url.pathname === "/rest/v1/rpc/commit_verified_media") {
+        effects.commit++;
+        assert(
+          inputBody.p_key === cleanKey && inputBody.p_bytes === 571691 &&
+            inputBody.p_width === 640 && inputBody.p_height === 640,
+          "canonical output",
+        );
+        return Response.json([{ media_id: media, published_key: cleanKey }]);
+      }
+      throw new DriverAssertion("unexpected Auth/RPC route");
+    },
+    createClient,
+  );
   const handler = createMediaHandler({
     ...sdk.deps,
     authenticated: (req) => auth.authenticated(req, runtime),

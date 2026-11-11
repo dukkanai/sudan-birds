@@ -36,6 +36,7 @@ class _MediaPanelState extends State<MediaPanel> {
   }
 
   Future<void> load() async {
+    if (!mounted) return;
     final request = ++generation;
     setState(() {
       loading = true;
@@ -65,7 +66,7 @@ class _MediaPanelState extends State<MediaPanel> {
           asset: asset,
         ),
       if (error != null) ...[
-        Text(error!),
+        Semantics(liveRegion: true, child: Text(error!)),
         TextButton(onPressed: load, child: const Text('إعادة تحميل الصور')),
       ],
       if (widget.repository.signedIn &&
@@ -125,6 +126,7 @@ class _PrivateImageState extends State<PrivateImage> {
   }
 
   Future<void> load() async {
+    if (!mounted) return;
     final request = ++generation;
     final previousUrl = url;
     setState(() {
@@ -162,7 +164,10 @@ class _PrivateImageState extends State<PrivateImage> {
 
   Widget retry() => Column(
     children: [
-      Text(error ?? 'تعذر عرض الصورة أو انتهت صلاحية رابطها.'),
+      Semantics(
+        liveRegion: true,
+        child: Text(error ?? 'تعذر عرض الصورة أو انتهت صلاحية رابطها.'),
+      ),
       TextButton(onPressed: load, child: const Text('تجديد رابط الصورة')),
     ],
   );
@@ -272,11 +277,17 @@ class _UploadImagePageState extends State<UploadImagePage>
         imageQuality: 90,
         requestFullMetadata: false,
       );
-      if (file == null) return null;
-      if (await file.length() > 10485760) {
+      // The picker can return after the route or its account has gone away.
+      // Do not read or decode that file under a stale consent/screen scope.
+      if (file == null || !isAccountCurrent) return null;
+      final length = await file.length();
+      if (!isAccountCurrent) return null;
+      if (length > 10485760) {
         throw const AppFailure('اختر صورة أصغر من ١٠ ميغابايت.');
       }
-      return compute(sanitizeJpeg, await file.readAsBytes());
+      final source = await file.readAsBytes();
+      if (!isAccountCurrent) return null;
+      return compute(sanitizeJpeg, source);
     }, timeout: null);
     if (mounted && isAccountCurrent) {
       setState(() {

@@ -63,42 +63,36 @@ export function fixture() {
   };
   const runtime: AuthRuntime = {
     getEnv: (name) => env[name],
-    createClient: ((url, key, options) =>
-      createClient(url, key, {
-        ...options,
-        global: {
-          ...options?.global,
-          fetch: async (input, init) => {
-            const req = new Request(input, init);
-            const url = new URL(req.url);
-            const text = await req.text();
-            const call: Call = {
-              path: url.pathname,
-              search: url.search,
-              method: req.method,
-              authorization: req.headers.get("authorization"),
-              apikey: req.headers.get("apikey"),
-              body: text ? JSON.parse(text) : {},
-            };
-            calls.push(call);
-            const route = routes.get(`${call.method} ${call.path}`) ?? routes.get(call.path);
-            if (route) return await route(call);
-            if (call.path === "/auth/v1/user") {
-              return accepted.has((call.authorization ?? "").slice(7))
-                ? reply({
-                  id: owner,
-                  aud: "authenticated",
-                  role: "authenticated",
-                  created_at: "2026-01-01T00:00:00Z",
-                  app_metadata: {},
-                  user_metadata: {},
-                })
-                : reply({ code: "bad_jwt", message: privateMarker }, 401);
-            }
-            throw new Error(`Unexpected synthetic transport call: ${call.method} ${call.path}`);
-          },
-        },
-      })) as typeof createClient,
+    createClient,
+    fetch: async (input, init) => {
+      const req = new Request(input, init);
+      const url = new URL(req.url);
+      const text = await req.text();
+      const call: Call = {
+        path: url.pathname,
+        search: url.search,
+        method: req.method,
+        authorization: req.headers.get("authorization"),
+        apikey: req.headers.get("apikey"),
+        body: text ? JSON.parse(text) : {},
+      };
+      calls.push(call);
+      const route = routes.get(`${call.method} ${call.path}`) ?? routes.get(call.path);
+      if (route) return await route(call);
+      if (call.path === "/auth/v1/user") {
+        return accepted.has((call.authorization ?? "").slice(7))
+          ? reply({
+            id: owner,
+            aud: "authenticated",
+            role: "authenticated",
+            created_at: "2026-01-01T00:00:00Z",
+            app_metadata: {},
+            user_metadata: {},
+          })
+          : reply({ code: "bad_jwt", message: privateMarker }, 401);
+      }
+      throw new Error(`Unexpected synthetic transport call: ${call.method} ${call.path}`);
+    },
   };
   const auth = {
     authenticated: (req: Request) => authenticated(req, runtime),

@@ -11,7 +11,17 @@ export function createContactHandler(deps = { authenticated }) {
       p_explicit_consent: true,
     });
     if (error) throw new ApiError(403, "contact_denied");
-    if (!data?.length) throw new ApiError(404, "contact_unavailable");
-    return json({ contact: data[0] });
+    if (data === null || (Array.isArray(data) && data.length === 0)) {
+      throw new ApiError(404, "contact_unavailable");
+    }
+    const contact = Array.isArray(data) && data.length === 1 ? data[0] : null;
+    if (
+      !contact || !["phone", "whatsapp", "email"].includes(contact.contact_kind) ||
+      typeof contact.contact_value !== "string" || !contact.contact_value
+    ) throw new ApiError(502, "invalid_contact_response");
+    // Return only the contract fields, never an unexpected backend field.
+    return json({
+      contact: { contact_kind: contact.contact_kind, contact_value: contact.contact_value },
+    });
   });
 }

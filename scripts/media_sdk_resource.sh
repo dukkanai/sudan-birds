@@ -10,16 +10,32 @@ case "${DENO_BIN:-}" in /*) ;; *) echo 'DENO_BIN must be an absolute pinned Deno
 case "${DENO_DIR:-}" in /*) ;; *) echo 'DENO_DIR must be an absolute prepared cache directory' >&2; exit 2 ;; esac
 cd "$(dirname "$0")/.."
 # Only SDK metadata names, in an otherwise empty environment. No host secrets.
-# Reviewed R2 lifetime/canonical deadline, bounded streams, timed trial gate,
-# and dependency resolution. This supplements, never relabels, old measurements.
+# Reviewed Auth transport, R2 lifetime/canonical deadline, bounded streams,
+# media/codec/trial graph, fixture/driver and dependency resolution. These pins
+# admit the current harness; they never relabel historical measurements.
 # Refuse to run after source drift; review correspondence before updating pins.
 if ! sha256sum --check --status <<'PINS'
-3d5d123807e591ac2d0c87cfb0614221a0bcfb267333e1b4cd285608bf04b0ec  supabase/functions/_shared/r2.ts
+843bb541a46b9827915a8584e67888b73e1e2ab28c2d27246a6f8f7214752ba3  supabase/functions/_shared/r2.ts
 9d13e1270e5c5ccf426eac2d60a76d7403fce56513d740160bd8be59fa9a3b61  supabase/functions/_shared/presign.ts
-15da1ef31bbd24a6f2fd3ab2aa725609a2c8f2803ed2e264e50fd277589aebcf  supabase/functions/_shared/image_stream.ts
-e6993502583a43b07e98912a6bb15c13a2b76db547b5aaf5aa2102560de292e8  supabase/functions/package-lock.json
-f2c1422d5318b67242408688fd8b055c1758f3389960561105b214d3866cee79  supabase/functions/media/handler.ts
+cbc217cde13ae0dbb345c25ba293ec4c25e8ea997334d501303ad1f5c4229419  supabase/functions/_shared/image_stream.ts
+2d0fcf4de9cda2e63eda394aae18e8d5acd37a9b6249c4f6cda72532c1425171  supabase/functions/_shared/stream_cleanup.ts
+71a07623170872d815c347d19f8a0dfe12fec7dff22ebe82508395310ca79242  supabase/functions/_shared/diagnostics.ts
+05aa0a48a28fcecf7fd930465ee36a231d1826fc48bf542b5a88c66c7e757911  supabase/functions/_shared/auth.ts
+2ebe32a7e4e6dc6bd45735af7d6e0e6c653278980e607056ca08a2955ddbebe5  supabase/functions/_shared/backend_fetch.ts
+3cb3314183986f65e9892b7a46eab8414222a5ad2c0e56c4c8b668db0f909f39  supabase/functions/_shared/http.ts
+660ca9f3088d371e0474c227a50235fab9621626278c743c43155be2f3372a98  supabase/functions/_shared/media_service.ts
 9f901fd45685d0f0fb8ec5c3c6e1ee9bbbf77202d4a50f769da24e26fbe99a2c  supabase/functions/_shared/media_trial.ts
+949968cb02c2d544c0e58cff6b5d366cade1424536fe69bdee88166acf44f155  supabase/functions/_shared/codec_capacity.ts
+ab419165810611f0f4af87e21a1a5a1781675232b99dd92ddb05ad2d56cd7ee6  supabase/functions/_shared/images.ts
+64d8091e5e142b119a9f6bc6b1def276675a755a9d5f28968e3a78c158265898  supabase/functions/_shared/bounded_jpeg_encoder.ts
+6d489b33c6db0818fdf5c004dc7f5d8341e73c9ea1ecf03c8fb7e37c1fe3f55c  supabase/functions/_shared/upload_input.ts
+f2c1422d5318b67242408688fd8b055c1758f3389960561105b214d3866cee79  supabase/functions/media/handler.ts
+3e304154903bd9097aceae3e637d2c874102f815aeff560563af267c87507eb7  supabase/functions/codec-diagnostic/fixture.ts
+88fccb808c6ed210ebdf6e73ccf5edf025491fd0fcdb755e0fcb774ea64b83c1  supabase/functions/deno.json
+aa383fb1356a4d45e986b0c63dd43886086c489215e5a867e9f943cb901b4445  supabase/functions/package.json
+e6993502583a43b07e98912a6bb15c13a2b76db547b5aaf5aa2102560de292e8  supabase/functions/package-lock.json
+89029cb284a630644f958fcfba161de0f71cbd3d3d975dc76687ac2e40dac76b  scripts/media_sdk_fixture.ts
+8d4931574b1eebfb82ad0bfbca62459ff01f6cb33578bc04f3b58a8a61613e71  scripts/media_sdk_resource.ts
 PINS
 then
   echo 'Reviewed SDK source/dependency pin changed; stop and review adapter correspondence.' >&2

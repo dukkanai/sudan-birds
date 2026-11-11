@@ -116,9 +116,7 @@ class _HomePageState extends State<HomePage> {
         if (mounted) refresh();
       },
       onError: (Object _, StackTrace _) {
-        if (mounted) {
-          setState(() => error = 'تعذر تحديث حالة الحساب. أعد المحاولة.');
-        }
+        if (mounted) invalidateFeed();
       },
     );
     refresh();
@@ -132,7 +130,25 @@ class _HomePageState extends State<HomePage> {
     super.dispose();
   }
 
+  void invalidateFeed() {
+    // A failed session observation invalidates both visible data and requests
+    // already in flight. A late success must not erase this failure.
+    setState(() {
+      generation++;
+      loading = false;
+      loadingMore = false;
+      hasMore = false;
+      entries = [];
+      cursor = null;
+      entriesUserId = null;
+      entriesSignedIn = false;
+      moreError = null;
+      error = 'تعذر التحقق من جلسة الحساب. أُخفي المحتوى؛ أعد المحاولة.';
+    });
+  }
+
   Future<void> refresh({bool more = false}) async {
+    if (!mounted) return;
     if (more && (loading || loadingMore || !hasMore || cursor == null)) return;
     final before = more ? cursor : null;
     final request = ++generation;
@@ -151,6 +167,11 @@ class _HomePageState extends State<HomePage> {
       () => widget.repository.feed(kind, appliedFilter.withCursor(before)),
     );
     if (!mounted || request != generation) return;
+    if (requestUserId != widget.repository.currentUserId ||
+        requestSignedIn != widget.repository.signedIn) {
+      invalidateFeed();
+      return;
+    }
     setState(() {
       loading = false;
       loadingMore = false;
@@ -183,7 +204,7 @@ class _HomePageState extends State<HomePage> {
   }
 
   Future<void> account() async {
-    if (accountOpen || authBusy) return;
+    if (!mounted || accountOpen || authBusy) return;
     accountOpen = true;
     final originalUser = widget.repository.currentUserId;
     final originalSignedIn = widget.repository.signedIn;
@@ -215,168 +236,183 @@ class _HomePageState extends State<HomePage> {
         closeSheet();
       },
     );
-    await showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      builder: (context) => StreamBuilder<void>(
-        stream: widget.repository.authChanges,
-        builder: (context, snapshot) {
-          sheetContext = context;
-          if (!sameAccount() || snapshot.hasError) {
+    final opened = await protect(
+      () => showModalBottomSheet<void>(
+        context: context,
+        isScrollControlled: true,
+        builder: (context) => StreamBuilder<void>(
+          stream: widget.repository.authChanges,
+          builder: (context, snapshot) {
+            sheetContext = context;
+            if (!sameAccount() || snapshot.hasError) {
+              return SafeArea(
+                child: Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Text(
+                        'تغيرت جلسة الحساب. أغلق هذه القائمة وافتحها مجدداً.',
+                      ),
+                      TextButton(
+                        onPressed: () => Navigator.pop(context),
+                        child: const Text('إغلاق'),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            }
             return SafeArea(
-              child: Padding(
-                padding: const EdgeInsets.all(20),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Text(
-                      'تغيرت جلسة الحساب. أغلق هذه القائمة وافتحها مجدداً.',
-                    ),
-                    TextButton(
-                      onPressed: () => Navigator.pop(context),
-                      child: const Text('إغلاق'),
-                    ),
-                  ],
+              child: SingleChildScrollView(
+                child: Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      const Text(
+                        'الحساب',
+                        style: TextStyle(
+                          fontSize: 24,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      if (widget.repository.isPreview)
+                        const Text(
+                          'معاينة محلية فقط. لا توجد جلسة أو بيانات محفوظة على خادم.',
+                        ),
+                      if (!widget.repository.signedIn &&
+                          !widget.repository.sessionCleanupRequired) ...[
+                        const Text(
+                          'التصفح متاح للجميع. النشر والإبلاغ يتطلب تسجيل الدخول.',
+                        ),
+                        for (final provider in ['google', 'apple'])
+                          Padding(
+                            padding: const EdgeInsets.only(top: 12),
+                            child: OutlinedButton(
+                              onPressed: () async {
+                                if (authBusy || !sameAccount()) return;
+                                authBusy = true;
+                                final result = await guardResult(() {
+                                  Navigator.pop(context);
+                                  return widget.repository.signIn(provider);
+                                });
+                                authBusy = false;
+                                message(
+                                  result.failure?.message ??
+                                      'أكمل تسجيل الدخول في المتصفح، ثم ارجع للتطبيق.',
+                                );
+                              },
+                              child: Text(
+                                provider == 'google'
+                                    ? 'الدخول باستخدام Google'
+                                    : 'الدخول باستخدام Apple',
+                              ),
+                            ),
+                          ),
+                      ] else
+                        FilledButton(
+                          onPressed: () async {
+                            if (authBusy || !sameAccount()) return;
+                            authBusy = true;
+                            final result = await guardResult(() {
+                              Navigator.pop(context);
+                              return widget.repository.signOut();
+                            });
+                            authBusy = false;
+                            if (mounted) setState(() {});
+                            message(
+                              result.failure?.message ?? 'تم تسجيل الخروج',
+                            );
+                          },
+                          child: Text(
+                            widget.repository.sessionCleanupRequired
+                                ? 'إعادة مسح الجلسة المحلية'
+                                : 'تسجيل الخروج',
+                          ),
+                        ),
+                      if (widget.repository.signedIn)
+                        TextButton(
+                          onPressed: () {
+                            if (!sameAccount()) return;
+                            Navigator.pop(context);
+                            Navigator.of(this.context).push<void>(
+                              accountPageRoute(
+                                repository: widget.repository,
+                                builder: (_) => BlockedUsersPage(
+                                  repository: widget.repository,
+                                ),
+                              ),
+                            );
+                          },
+                          child: const Text('الحسابات المحظورة وإلغاء الحظر'),
+                        ),
+                      if (widget.repository.signedIn)
+                        FilledButton(
+                          onPressed: () {
+                            if (!sameAccount()) return;
+                            Navigator.pop(context);
+                            Navigator.of(this.context).push<void>(
+                              accountPageRoute(
+                                repository: widget.repository,
+                                builder: (_) =>
+                                    ProfilePage(repository: widget.repository),
+                              ),
+                            );
+                          },
+                          child: const Text('الملف الشخصي وإعدادات التواصل'),
+                        ),
+                      if (widget.repository.signedIn) ...[
+                        DeletionStatusPanel(repository: widget.repository),
+                        ModeratorAccessTile(repository: widget.repository),
+                      ],
+                      const DraftLegalLinks(),
+                      const SizedBox(height: 16),
+                      const Text(
+                        'نسخة تأسيسية غير جاهزة للنشر العام. سياسة الخصوصية القانونية واختبارات التشغيل الفعلي قيد الإكمال.',
+                      ),
+                    ],
+                  ),
                 ),
               ),
             );
-          }
-          return SafeArea(
-            child: SingleChildScrollView(
-              child: Padding(
-                padding: const EdgeInsets.all(24),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    const Text(
-                      'الحساب',
-                      style: TextStyle(
-                        fontSize: 24,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    if (widget.repository.isPreview)
-                      const Text(
-                        'معاينة محلية فقط. لا توجد جلسة أو بيانات محفوظة على خادم.',
-                      ),
-                    if (!widget.repository.signedIn &&
-                        !widget.repository.sessionCleanupRequired) ...[
-                      const Text(
-                        'التصفح متاح للجميع. النشر والإبلاغ يتطلب تسجيل الدخول.',
-                      ),
-                      for (final provider in ['google', 'apple'])
-                        Padding(
-                          padding: const EdgeInsets.only(top: 12),
-                          child: OutlinedButton(
-                            onPressed: () async {
-                              if (authBusy || !sameAccount()) return;
-                              authBusy = true;
-                              Navigator.pop(context);
-                              final result = await guardResult(
-                                () => widget.repository.signIn(provider),
-                              );
-                              authBusy = false;
-                              message(
-                                result.failure?.message ??
-                                    'أكمل تسجيل الدخول في المتصفح، ثم ارجع للتطبيق.',
-                              );
-                            },
-                            child: Text(
-                              provider == 'google'
-                                  ? 'الدخول باستخدام Google'
-                                  : 'الدخول باستخدام Apple',
-                            ),
-                          ),
-                        ),
-                    ] else
-                      FilledButton(
-                        onPressed: () async {
-                          if (authBusy || !sameAccount()) return;
-                          authBusy = true;
-                          Navigator.pop(context);
-                          final result = await guardResult(
-                            () => widget.repository.signOut(),
-                          );
-                          authBusy = false;
-                          if (mounted) setState(() {});
-                          message(result.failure?.message ?? 'تم تسجيل الخروج');
-                        },
-                        child: Text(
-                          widget.repository.sessionCleanupRequired
-                              ? 'إعادة مسح الجلسة المحلية'
-                              : 'تسجيل الخروج',
-                        ),
-                      ),
-                    if (widget.repository.signedIn)
-                      TextButton(
-                        onPressed: () {
-                          if (!sameAccount()) return;
-                          Navigator.pop(context);
-                          Navigator.of(this.context).push<void>(
-                            accountPageRoute(
-                              repository: widget.repository,
-                              builder: (_) => BlockedUsersPage(
-                                repository: widget.repository,
-                              ),
-                            ),
-                          );
-                        },
-                        child: const Text('الحسابات المحظورة وإلغاء الحظر'),
-                      ),
-                    if (widget.repository.signedIn)
-                      FilledButton(
-                        onPressed: () {
-                          if (!sameAccount()) return;
-                          Navigator.pop(context);
-                          Navigator.of(this.context).push<void>(
-                            accountPageRoute(
-                              repository: widget.repository,
-                              builder: (_) =>
-                                  ProfilePage(repository: widget.repository),
-                            ),
-                          );
-                        },
-                        child: const Text('الملف الشخصي وإعدادات التواصل'),
-                      ),
-                    if (widget.repository.signedIn) ...[
-                      DeletionStatusPanel(repository: widget.repository),
-                      ModeratorAccessTile(repository: widget.repository),
-                    ],
-                    const DraftLegalLinks(),
-                    const SizedBox(height: 16),
-                    const Text(
-                      'نسخة تأسيسية غير جاهزة للنشر العام. سياسة الخصوصية القانونية واختبارات التشغيل الفعلي قيد الإكمال.',
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          );
-        },
+          },
+        ),
       ),
+      timeout: null,
     );
     accountOpen = false;
     if (mounted) setState(() {});
-    await sessionChanges.cancel();
+    final cleanup = await protect(sessionChanges.cancel, timeout: null);
+    final failure = opened.failure ?? cleanup.failure;
+    if (failure != null) message(failure.message);
   }
 
   Future<void> publish() async {
-    if (publicationOpen) return;
+    if (!mounted || publicationOpen) return;
     if (!widget.repository.signedIn) {
       await account();
       return;
     }
     publicationOpen = true;
     final authorId = widget.repository.currentUserId;
-    final saved = await Navigator.of(context).push<FeedEntry>(
-      accountPageRoute(
-        repository: widget.repository,
-        builder: (_) =>
-            PublicationPage(repository: widget.repository, kind: kind),
+    final opened = await protect(
+      () => Navigator.of(context).push<FeedEntry>(
+        accountPageRoute(
+          repository: widget.repository,
+          builder: (_) =>
+              PublicationPage(repository: widget.repository, kind: kind),
+        ),
       ),
+      timeout: null,
     );
     publicationOpen = false;
+    if (!opened.isSuccess) {
+      message(opened.failure!.message);
+      return;
+    }
+    final saved = opened.value;
     if (saved != null &&
         mounted &&
         widget.repository.signedIn &&
@@ -432,7 +468,8 @@ class _HomePageState extends State<HomePage> {
                 if (widget.startupNotice != null)
                   FutureBuilder<String?>(
                     future: widget.startupNotice,
-                    builder: (context, snapshot) => snapshot.data == null
+                    builder: (context, snapshot) =>
+                        snapshot.data == null && !snapshot.hasError
                         ? const SizedBox.shrink()
                         : Semantics(
                             liveRegion: true,
@@ -442,7 +479,11 @@ class _HomePageState extends State<HomePage> {
                                 context,
                               ).colorScheme.tertiaryContainer,
                               padding: const EdgeInsets.all(12),
-                              child: Text(snapshot.data!),
+                              child: Text(
+                                snapshot.hasError
+                                    ? 'تعذر التحقق من استعادة اختيار الصور. لم تُرفق صورة تلقائياً؛ اخترها مجدداً من الإعلان المطلوب.'
+                                    : snapshot.data!,
+                              ),
                             ),
                           ),
                   ),
@@ -514,7 +555,7 @@ class _HomePageState extends State<HomePage> {
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Text(error!),
+                    Semantics(liveRegion: true, child: Text(error!)),
                     const SizedBox(height: 16),
                     FilledButton(
                       onPressed: refresh,
@@ -690,7 +731,7 @@ class _BlockedUsersPageState extends State<BlockedUsersPage>
                   'لا تكشف الخدمة ملفات الحسابات المحظورة. يُعرض معرّف الحساب بدلاً من الاسم.',
                 ),
                 if (error != null) ...[
-                  Text(error!),
+                  Semantics(liveRegion: true, child: Text(error!)),
                   TextButton(
                     onPressed: load,
                     child: const Text('إعادة المحاولة'),

@@ -56,9 +56,14 @@ export function lifecycleDependencies(
       return data;
     },
     async deleteAuth(owner) {
-      const { error } = await service.auth.admin.deleteUser(owner);
-      if (error) {
-        if (error.status === 401 || error.status === 403) {
+      // A response decoder can throw after the DELETE committed. Keep that
+      // outcome uncertain and reconcile below, rather than assuming failure.
+      const deletion = await service.auth.admin.deleteUser(owner).catch(() => null);
+      const data = deletion?.data, error = deletion?.error;
+      // The SDK can normalize a malformed 200 body into a truthy user. Require
+      // the confirmed target identity, or independently prove its absence.
+      if (error || data?.user?.id !== owner) {
+        if (error?.status === 401 || error?.status === 403) {
           throw new ApiError(503, "auth_configuration_required");
         }
         const check = await service.auth.admin.getUserById(owner);

@@ -1,5 +1,9 @@
 # Supplemental SDK lifetime and timed-gate evidence, 2026-11-09
 
+Current harness correspondence was separately updated in the
+[2026-11-11 error-boundary alignment](media-sdk-error-boundary-alignment.md). That
+update adds no resource measurements and does not relabel the evidence below.
+
 This supplements the historical bundle/SDK experiments; it does not replace or
 relabel them. Production base is `b99b53b9da51b2dbf534afb4e915a0bf830cedc5`
 plus the exact uncommitted, independently reviewed source hashes below. This is

@@ -12,11 +12,44 @@ import 'secure_auth_storage.dart';
 import 'mobile_oauth.dart';
 
 final runtimeError = ValueNotifier<String?>(null);
+const unexpectedErrorMessage =
+    'حدث خطأ غير متوقع. لم نؤكد نجاح العملية؛ تحقق من حالة الطلب قبل تكراره، ثم أعد فتح الشاشة.';
 
 void captureUnexpectedError() {
-  scheduleMicrotask(
-    () => runtimeError.value =
-        'حدث خطأ غير متوقع. لم نؤكد نجاح العملية؛ أعد فتح الشاشة وحاول مجدداً.',
+  scheduleMicrotask(() => runtimeError.value = unexpectedErrorMessage);
+}
+
+void installRuntimeErrorHandlers() {
+  // Final safety nets only. Never print/transmit raw errors or stack traces.
+  FlutterError.onError = (_) => captureUnexpectedError();
+  PlatformDispatcher.instance.onError = (_, _) {
+    captureUnexpectedError();
+    return true;
+  };
+  ErrorWidget.builder = (_) => const UnexpectedErrorView();
+}
+
+class UnexpectedErrorView extends StatelessWidget {
+  const UnexpectedErrorView({super.key});
+
+  @override
+  Widget build(BuildContext context) => Directionality(
+    textDirection: TextDirection.rtl,
+    child: ColoredBox(
+      color: const Color(0xfffafafa),
+      child: Center(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(20),
+          child: Semantics(
+            liveRegion: true,
+            child: const Text(
+              'تعذر عرض هذا الجزء. لم نؤكد نجاح العملية؛ تحقق من حالة الطلب قبل تكراره، ثم أعد فتح الشاشة.',
+              style: TextStyle(color: Colors.black, fontSize: 20),
+            ),
+          ),
+        ),
+      ),
+    ),
   );
 }
 
@@ -24,25 +57,7 @@ void main() {
   runZonedGuarded(
     () async {
       WidgetsFlutterBinding.ensureInitialized();
-      // Global safety nets complement typed recoverable failures at I/O boundaries.
-      // Raw errors and stacks are deliberately never printed or transmitted.
-      FlutterError.onError = (_) => captureUnexpectedError();
-      PlatformDispatcher.instance.onError = (_, _) {
-        captureUnexpectedError();
-        return true;
-      };
-      ErrorWidget.builder = (_) => const Directionality(
-        textDirection: TextDirection.rtl,
-        child: ColoredBox(
-          color: Color(0xfffafafa),
-          child: Center(
-            child: Text(
-              'تعذر عرض هذا الجزء. أعد فتح الشاشة.',
-              style: TextStyle(color: Colors.black, fontSize: 20),
-            ),
-          ),
-        ),
-      );
+      installRuntimeErrorHandlers();
       const url = String.fromEnvironment('SUPABASE_URL');
       const key = String.fromEnvironment('SUPABASE_ANON_KEY');
       const redirect = String.fromEnvironment('AUTH_REDIRECT_URL');
@@ -147,10 +162,11 @@ void main() {
 }
 
 class AuthStartupApp extends StatelessWidget {
-  const AuthStartupApp({super.key});
+  const AuthStartupApp({super.key, this.errorSignal});
+  final ValueNotifier<String?>? errorSignal;
 
   @override
-  Widget build(BuildContext context) => const MaterialApp(
+  Widget build(BuildContext context) => MaterialApp(
     debugShowCheckedModeBanner: false,
     home: Directionality(
       textDirection: TextDirection.rtl,
@@ -159,16 +175,26 @@ class AuthStartupApp extends StatelessWidget {
           child: Center(
             child: SingleChildScrollView(
               padding: EdgeInsets.all(24),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  CircularProgressIndicator(semanticsLabel: 'جارٍ فتح التطبيق'),
-                  SizedBox(height: 24),
-                  Text(
-                    'جارٍ التحقق من التخزين الآمن لبيانات الدخول…',
-                    textAlign: TextAlign.center,
-                  ),
-                ],
+              child: ValueListenableBuilder<String?>(
+                valueListenable: errorSignal ?? runtimeError,
+                builder: (context, error, _) => Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (error == null)
+                      const CircularProgressIndicator(
+                        semanticsLabel: 'جارٍ فتح التطبيق',
+                      ),
+                    const SizedBox(height: 24),
+                    if (error != null)
+                      Semantics(liveRegion: true, child: Text(error)),
+                    Text(
+                      error == null
+                          ? 'جارٍ التحقق من التخزين الآمن لبيانات الدخول…'
+                          : 'تعذر إكمال فتح التطبيق. افتح قفل الجهاز ثم أعد تشغيل التطبيق. لم نستخدم تخزيناً بديلاً.',
+                      textAlign: TextAlign.center,
+                    ),
+                  ],
+                ),
               ),
             ),
           ),

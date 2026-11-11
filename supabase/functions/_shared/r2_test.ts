@@ -746,3 +746,45 @@ Deno.test("R2 delayed actual signer cannot start PUT past deadline and uses a fr
     AbortSignal.timeout = originalTimeout;
   }
 });
+
+Deno.test("R2 signed PUT keeps confirmed HTTP outcomes when response cancellation rejects or hangs", async () => {
+  for (const status of [200, 412, 503]) {
+    for (const cleanup of ["reject", "hang"]) {
+      await withStorage(async () => {
+        let cancelled = false;
+        globalThis.fetch = () =>
+          Promise.resolve(
+            new Response(
+              new ReadableStream({
+                cancel() {
+                  cancelled = true;
+                  return cleanup === "reject"
+                    ? Promise.reject(new Error("SECRET_SIGNED_URL"))
+                    : new Promise<void>(() => {});
+                },
+              }),
+              { status },
+            ),
+          );
+        const write = writeVerified(key, bytes, "2099-01-01T00:00:00Z");
+        if (status === 200) await write;
+        else await rejects(write, status === 412 ? "upload_conflict" : "image_storage_failed");
+        assert(cancelled, "Response body was not cancelled");
+      });
+    }
+  }
+});
+
+Deno.test("R2 client destruction failures do not replace original errors or confirmed signing", async () => {
+  for (const failure of [false, true]) {
+    await withStorage(async () => {
+      const destroy = S3Client.prototype.destroy;
+      S3Client.prototype.destroy = function () {
+        destroy.call(this);
+        throw new Error("SECRET_TRANSPORT_CONTEXT");
+      };
+      if (failure) await rejects(signUpload(key, bytes.length, "image/jpeg", 604801));
+      else assert(new URL(await signRead(key)).searchParams.has("X-Amz-Signature"), "Signing lost");
+    });
+  }
+});

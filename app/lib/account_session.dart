@@ -13,6 +13,7 @@ mixin AccountBoundState<T extends StatefulWidget> on State<T> {
   StreamSubscription<void>? _accountSubscription;
 
   bool get isAccountCurrent =>
+      mounted &&
       !_invalidated &&
       accountRepository.signedIn == _initialSignedIn &&
       accountRepository.currentUserId == _initialUser;

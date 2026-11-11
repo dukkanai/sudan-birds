@@ -11,8 +11,8 @@ function assert(v: unknown): asserts v {
 function fixture() {
   const calls: string[] = [];
   const job: DeletionJob = {
-    id: "job",
-    owner_id: "owner",
+    id: "00000000-0000-4000-8000-000000000001",
+    owner_id: "00000000-0000-4000-8000-000000000002",
     state: "pending",
     not_before: new Date(0).toISOString(),
   };
@@ -29,7 +29,7 @@ function fixture() {
     },
     ready: () => {
       calls.push("ready");
-      return Promise.resolve("owner");
+      return Promise.resolve("00000000-0000-4000-8000-000000000002");
     },
     deleteAuth: () => {
       calls.push("auth");
@@ -147,5 +147,53 @@ Deno.test("unknown failures never leak raw messages and ordinary remaining batch
     assert(!JSON.stringify(result).includes("SECRET"));
     assert(result.status === "pending");
     if (error instanceof ApiError) assert("blocker_code" in result && result.blocker_code === null);
+  }
+});
+
+Deno.test("invalid deletion jobs cannot run cleanup Auth deletion or report completion", async () => {
+  for (
+    const overrides of [
+      { id: "" },
+      { owner_id: "" },
+      { state: "unknown" },
+      { not_before: "invalid" },
+      { state: "completed", owner_id: "invalid" },
+    ]
+  ) {
+    const { job, deps, calls } = fixture();
+    deps.list = () => {
+      calls.push("list");
+      return Promise.resolve([]);
+    };
+    deps.recordFailure = () => {
+      calls.push("record");
+      return Promise.resolve();
+    };
+    let code;
+    try {
+      await processDeletion({ ...job, ...overrides } as DeletionJob, deps);
+    } catch (error) {
+      code = (error as { code?: string }).code;
+    }
+    assert(code === "invalid_deletion_job" && calls.length === 0);
+  }
+});
+
+Deno.test("failure-record persistence error is observable while retaining original blocker", async () => {
+  const { job, deps } = fixture();
+  const original = console.error;
+  const logs: unknown[] = [];
+  console.error = (value) => logs.push(value);
+  try {
+    deps.remove = () => Promise.reject(new ApiError(503, "storage_permission_required"));
+    deps.recordFailure = () => Promise.reject(new Error("SECRET_SQL"));
+    const result = await processDeletion(job, deps);
+    assert(
+      result.status === "pending" && "blocker_code" in result &&
+        result.blocker_code === "storage_permission_required",
+    );
+    assert(logs.length === 1 && logs[0] === '{"event":"deletion_failure_record_pending"}');
+  } finally {
+    console.error = original;
   }
 });

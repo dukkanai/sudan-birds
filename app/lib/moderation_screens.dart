@@ -124,8 +124,18 @@ class ModeratorAccessTile extends StatefulWidget {
   State<ModeratorAccessTile> createState() => _ModeratorAccessTileState();
 }
 
-class _ModeratorAccessTileState extends State<ModeratorAccessTile> {
+class _ModeratorAccessTileState extends State<ModeratorAccessTile>
+    with AccountBoundState<ModeratorAccessTile> {
+  @override
+  BirdsRepository get accountRepository => widget.repository;
+  @override
+  void clearAccountData() {
+    allowed = false;
+    error = null;
+  }
+
   bool loading = true, allowed = false;
+  bool pending = false;
   String? error;
   @override
   void initState() {
@@ -134,8 +144,15 @@ class _ModeratorAccessTileState extends State<ModeratorAccessTile> {
   }
 
   Future<void> load() async {
+    if (!isAccountCurrent || pending) return;
+    pending = true;
+    setState(() {
+      loading = true;
+      error = null;
+    });
     final result = await guardResult(() => widget.repository.isModerator());
-    if (mounted) {
+    pending = false;
+    if (isAccountCurrent) {
       setState(() {
         loading = false;
         allowed = result.value == true;
@@ -146,20 +163,31 @@ class _ModeratorAccessTileState extends State<ModeratorAccessTile> {
 
   @override
   Widget build(BuildContext context) {
+    if (!isAccountCurrent) return const SizedBox.shrink();
     if (loading) return const SizedBox.shrink();
     if (error != null) {
-      return TextButton(
-        onPressed: load,
-        child: const Text('إعادة التحقق من صلاحية الإشراف'),
+      return Column(
+        children: [
+          Semantics(liveRegion: true, child: Text(error!)),
+          TextButton(
+            onPressed: load,
+            child: const Text('إعادة التحقق من صلاحية الإشراف'),
+          ),
+        ],
       );
     }
     if (!allowed) return const SizedBox.shrink();
     return OutlinedButton.icon(
-      onPressed: () => Navigator.of(context).push<void>(
-        MaterialPageRoute(
-          builder: (_) => ModerationQueuePage(repository: widget.repository),
-        ),
-      ),
+      onPressed: () {
+        if (!isAccountCurrent) return;
+        Navigator.of(context).push<void>(
+          accountPageRoute(
+            repository: widget.repository,
+            isAllowed: () => isAccountCurrent,
+            builder: (_) => ModerationQueuePage(repository: widget.repository),
+          ),
+        );
+      },
       icon: const Icon(Icons.shield_outlined),
       label: const Text('مراجعة البلاغات (للمشرفين)'),
     );
@@ -493,9 +521,19 @@ class DeletionStatusPanel extends StatefulWidget {
   State<DeletionStatusPanel> createState() => _DeletionStatusPanelState();
 }
 
-class _DeletionStatusPanelState extends State<DeletionStatusPanel> {
+class _DeletionStatusPanelState extends State<DeletionStatusPanel>
+    with AccountBoundState<DeletionStatusPanel> {
+  @override
+  BirdsRepository get accountRepository => widget.repository;
+  @override
+  void clearAccountData() {
+    status = null;
+    error = null;
+  }
+
   DeletionStatus? status;
   String? error;
+  bool pending = false;
   @override
   void initState() {
     super.initState();
@@ -503,9 +541,15 @@ class _DeletionStatusPanelState extends State<DeletionStatusPanel> {
   }
 
   Future<void> load() async {
+    if (!isAccountCurrent || pending) return;
+    setState(() {
+      pending = true;
+      error = null;
+    });
     final result = await guardResult(() => widget.repository.deletionStatus());
-    if (mounted) {
+    if (isAccountCurrent) {
       setState(() {
+        pending = false;
         status = result.value;
         error = result.failure?.message;
       });
@@ -514,10 +558,21 @@ class _DeletionStatusPanelState extends State<DeletionStatusPanel> {
 
   @override
   Widget build(BuildContext context) {
+    if (!isAccountCurrent) return const SizedBox.shrink();
+    if (pending) {
+      return const LinearProgressIndicator(
+        semanticsLabel: 'التحقق من حالة الحذف',
+      );
+    }
     if (error != null) {
-      return TextButton(
-        onPressed: load,
-        child: const Text('تعذر التحقق من حالة حذف الحساب؛ إعادة المحاولة'),
+      return Column(
+        children: [
+          Semantics(liveRegion: true, child: Text(error!)),
+          TextButton(
+            onPressed: load,
+            child: const Text('تعذر التحقق من حالة حذف الحساب؛ إعادة المحاولة'),
+          ),
+        ],
       );
     }
     if (status == null) return const SizedBox.shrink();
@@ -536,13 +591,16 @@ class _DeletionStatusPanelState extends State<DeletionStatusPanel> {
             if (!status!.completed)
               TextButton(
                 onPressed: () async {
+                  if (!isAccountCurrent) return;
                   await Navigator.of(context).push<void>(
-                    MaterialPageRoute(
+                    accountPageRoute(
+                      repository: widget.repository,
+                      isAllowed: () => isAccountCurrent,
                       builder: (_) =>
                           DeleteAccountPage(repository: widget.repository),
                     ),
                   );
-                  if (mounted) await load();
+                  if (isAccountCurrent) await load();
                 },
                 child: const Text('متابعة طلب حذف الحساب'),
               ),

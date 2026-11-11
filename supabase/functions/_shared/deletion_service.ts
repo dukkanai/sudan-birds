@@ -1,5 +1,6 @@
-import { ApiError } from "./http.ts";
+import { ApiError, uuid } from "./http.ts";
 import { deletionFailure } from "./deletion_errors.ts";
+import { reportFailure } from "./diagnostics.ts";
 export interface DeletionJob {
   id: string;
   owner_id: string;
@@ -20,6 +21,18 @@ export async function processDeletion(
   deps: DeletionDependencies,
   now = Date.now(),
 ) {
+  // Database replies are runtime data. Validate before even returning "completed"
+  // and before invoking privileged cleanup/Auth operations with their identifiers.
+  try {
+    uuid(job?.id);
+    uuid(job.owner_id);
+    if (
+      !["pending", "auth_pending", "completed"].includes(job.state) ||
+      typeof job.not_before !== "string" || !Number.isFinite(Date.parse(job.not_before))
+    ) throw new Error();
+  } catch {
+    throw new ApiError(500, "invalid_deletion_job");
+  }
   if (job.state === "completed") return { status: "completed" as const };
   const wait = Math.ceil((Date.parse(job.not_before) - now) / 1000);
   if (!Number.isFinite(wait)) throw new ApiError(500, "invalid_deletion_job");
@@ -40,7 +53,11 @@ export async function processDeletion(
     const failure = deletionFailure(error);
     try {
       await deps.recordFailure(job.id, failure.code);
-    } catch { /* Return classification even if persistence is temporarily unavailable. */ }
+    } catch {
+      // Preserve the original pending classification, but do not silently lose
+      // the fact that its durable failure/retry bookkeeping could not be saved.
+      reportFailure("deletion_failure_record_pending");
+    }
     return {
       status: "pending" as const,
       job_id: job.id,

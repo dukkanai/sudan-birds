@@ -1,18 +1,6 @@
 import { ApiError } from "./http.ts";
-// A broken underlying source must not turn cancellation into an unbounded wait.
-// After this grace the operation owner may destroy its transport. Resolution
-// means cancellation settled OR the grace elapsed, not necessarily both.
-export async function cancelImageStream(source: { cancel(): Promise<void> }): Promise<void> {
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  try {
-    await Promise.race([
-      source.cancel().catch(() => {/* Preserve the original safe failure. */}),
-      new Promise<void>((resolve) => timer = setTimeout(resolve, 1_000)),
-    ]);
-  } finally {
-    clearTimeout(timer);
-  }
-}
+import { cancelStream as cancelImageStream, releaseStreamLock } from "./stream_cleanup.ts";
+export { cancelImageStream };
 export async function readExactImageStream(
   stream: ReadableStream<Uint8Array>,
   expected: number,
@@ -49,7 +37,7 @@ export async function readExactImageStream(
   } finally {
     signal.removeEventListener("abort", abort);
     await cancellation;
-    reader.releaseLock();
+    releaseStreamLock(reader);
   }
   if (size !== expected) throw new ApiError(400, "invalid_image");
   const bytes = new Uint8Array(size);

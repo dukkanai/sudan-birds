@@ -115,7 +115,7 @@ def _run(args, seconds, capture, *, stage):
 def inventory(*, stage, cold=False):
     if stage == 'inventory-initial' and cold is True:
         command = ['xcrun', 'simctl', 'list', '--json']
-        seconds = 60
+        seconds = 240
     elif stage in DEVICE_PHASES and cold is False:
         # Keep all devices/runtime grouping to verify uniqueness and exact owned
         # identity, but avoid repeatedly enumerating runtimes/types/device pairs.
@@ -216,7 +216,9 @@ def execute(directory):
     if path.exists() or pending.exists():
         raise Failure('Invocation directory already used')
     # A cold CoreSimulator service may need startup time. Exactly this first
-    # pre-creation inventory gets 60 seconds; no retry or fallback is permitted.
+    # pre-creation inventory gets 240 seconds; no retry or fallback is permitted.
+    # CoreSimulator may spend over 150 seconds mounting installed runtime images:
+    # https://github.com/actions/runner-images/issues/15247
     data = inventory(cold=True, stage='inventory-initial')
     runtime, device = select(data)
     name = 'birds-storage-' + uuid.uuid4().hex

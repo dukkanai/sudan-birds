@@ -112,7 +112,7 @@ jobs:
 
   ios-native-storage:
     runs-on: macos-15
-    timeout-minutes: 25
+    timeout-minutes: 30
     permissions:
       contents: read
     steps:
@@ -132,7 +132,7 @@ jobs:
           umask 077
           echo "BIRDS_SIM_STATE=$(mktemp -d "$RUNNER_TEMP/birds-storage.XXXXXXXX")" >> "$GITHUB_ENV"
       - name: Run real storage smoke on owned installed simulator
-        timeout-minutes: 17
+        timeout-minutes: 21
         run: cd app && python3 ../scripts/ios_native_storage.py run "$BIRDS_SIM_STATE"
       - name: Clean up only this invocation's simulator
         if: always() && env.BIRDS_SIM_STATE != ''

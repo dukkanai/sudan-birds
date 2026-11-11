@@ -224,7 +224,7 @@ class Guards(unittest.TestCase):
             smoke.inventory(cold=True, stage='inventory-initial')
             smoke.inventory(stage='inventory-created')
             smoke.inventory(stage='cleanup-inventory-owned')
-        self.assertEqual([call.kwargs['seconds'] for call in run.call_args_list], [60, 10, 60])
+        self.assertEqual([call.kwargs['seconds'] for call in run.call_args_list], [240, 10, 60])
         self.assertEqual([call.args[0] for call in run.call_args_list], [
             ['xcrun', 'simctl', 'list', '--json'],
             ['xcrun', 'simctl', 'list', 'devices', '--json'],

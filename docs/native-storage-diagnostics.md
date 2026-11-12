@@ -23,11 +23,36 @@ Sources:
   are not that fixture. A finish observation includes failed tests and is not a
   pass. Skipped, retried, duplicate or malformed completion leaves it unknown.
 
-ANSI/decorated lines, invalid UTF-8, duplicate keys, partial lines and unsupported
-formats do not become stage evidence. Observations do not control cleanup,
-process exit status, CI success or signing readiness. Without a process event,
-build/install/launch/VM discovery and earlier Flutter setup remain indistinguishable.
-Do not guess from missing events or human logs.
+Three exact Flutter 3.38.5 native-tool messages additionally yield fixed
+observations: `Running pod install...`, `Running Xcode build...`, and
+`Xcode build done.`. Only bounded spaces/numeric duration formatting is accepted;
+durations and raw messages are discarded. The first two may be observed as an
+unterminated padded line at reader shutdown because
+[SummaryStatus](https://github.com/flutter/flutter/blob/3.38.5/packages/flutter_tools/lib/src/base/logger.dart)
+does not append a newline until completion/cancellation. Partial JSON events are
+still ignored. ANSI, prefixes, arbitrary suffixes and embedded messages are not
+stripped or searched. These are pinned status-message observations, not a general
+Flutter output parser.
+
+The [Xcode implementation](https://github.com/flutter/flutter/blob/3.38.5/packages/flutter_tools/lib/src/ios/mac.dart)
+emits `build done` before checking build success. Accordingly `xcode_return` does
+not mean success, installation or app launch. Likewise the
+[CocoaPods message](https://github.com/flutter/flutter/blob/3.38.5/packages/flutter_tools/lib/src/macos/cocoapods.dart)
+only establishes that its start message was observed. Missing messages always
+remain unknown. Fixed `input_limit`, `line_limit` and `partial_line` flags explain
+why the stream was incomplete. Any parser-budget exhaustion already changed the
+old summary to `stream=incomplete`; `stream=bounded` never meant exhaustion.
+
+Observations do not control cleanup, process exit status, CI success or signing
+readiness. No verbose mode, raw artifact or extra native command is introduced.
+Build/install/launch/VM discovery remain indistinguishable when no corresponding
+observations arrive. Do not infer that the app never ran from missing events.
+
+An explicit direct-target prebuild is not introduced. Flutter's
+[integration platform](https://github.com/flutter/flutter/blob/3.38.5/packages/flutter_tools/lib/src/test/flutter_platform.dart)
+generates a bootstrap listener and passes that generated entrypoint into the
+native build. Building the integration source directly is not the same harness
+and would add another compilation without proving the original stall's cause.
 
 ## Evidence and limits
 
@@ -42,6 +67,14 @@ Successful source `6981015304351a46633e69f653a536b83dac3d46`, native
 used the same app, native fixture/orchestration, macOS image
 `macos-15-arm64/20261104.0514.1` and Flutter 3.38.5. Its test command completed in
 239704 ms. No root cause for later timeouts is established.
+
+At source `79427cb6ff7ef2fa9ad0dad2697b7c21e911a624`,
+[job 131283587633](https://github.com/dukkanai/sudan-birds/actions/runs/43247380853/job/131283587633)
+timed out after 600461 ms, with both machine observations unknown and
+`stream=bounded`. Boot and the pre-test Booted inventory completed; owned
+simulator deletion was verified afterward. This is neither a parser-limit signal
+nor proof of a compilation failure or an unstarted app. The new fixed native-tool
+observations have not yet run on that hosted environment.
 
 Local tests use synthetic machine events, real local child pipes, output floods,
 timeout/reader faults and retained pipe handles. They do not run an iOS simulator

@@ -584,6 +584,99 @@ class ProgressGuards(unittest.TestCase):
         with self.assertRaises(OSError):
             smoke.os.fstat(pipe.reader)
 
+    def test_exact_pinned_tool_messages_only_fixed_observations(self):
+        parser = progress.MachineProgress()
+        parser.feed(b'Running pod install...          85ms\n')
+        parser.feed(b'Running Xcode build...          \n')
+        parser.feed(b'Xcode build done.               12.3s\n')
+        self.assertEqual(parser.tool_summary(),
+                         'TOOL_PROGRESS: pod_start=observed xcode_start=observed '
+                         'xcode_return=observed input_limit=no line_limit=no partial_line=no')
+        self.assertNotIn('12.3', parser.tool_summary())
+        self.assertIn('storage_test=unknown', parser.summary())
+
+    def test_tool_return_does_not_claim_success_or_process_start(self):
+        parser = progress.MachineProgress()
+        parser.feed(b'Xcode build done. 2.0s\nFailed to build iOS app\n')
+        self.assertIn('xcode_return=observed', parser.tool_summary())
+        self.assertIn('xcode_start=unknown', parser.tool_summary())
+        self.assertIn('device_process=unknown', parser.summary())
+        self.assertNotIn('success', parser.tool_summary())
+
+    def test_tool_start_without_newline_at_every_chunk_boundary(self):
+        raw = b'Running Xcode build...                      '
+        for split in range(len(raw) + 1):
+            parser = progress.MachineProgress()
+            parser.feed(raw[:split])
+            parser.feed(raw[split:])
+            parser.finish()
+            self.assertIn('xcode_start=observed', parser.tool_summary())
+            self.assertIn('partial_line=yes', parser.tool_summary())
+            self.assertIn('stream=incomplete', parser.summary())
+            self.assertEqual(parser.buffer, bytearray())
+
+    def test_partial_return_or_machine_event_not_promoted(self):
+        for raw in [b'Xcode build done. 2.0s', json.dumps(self.start()).encode(),
+                    b'Running Xcode', b'Running Xcode build... SECRET']:
+            parser = progress.MachineProgress()
+            parser.feed(raw)
+            parser.finish()
+            self.assertIn('xcode_start=unknown xcode_return=unknown', parser.tool_summary())
+            self.assertIn('storage_test=unknown', parser.summary())
+
+    def test_tool_ansi_prefix_suffix_embedded_message_never_matches(self):
+        raw = b'Running Xcode build...'
+        for invalid in [b'\x1b[31m' + raw, raw + b'\x1b[0m', b'prefix ' + raw,
+                        raw + b' SECRET', b'"' + raw + b'"', raw + b'\r',
+                        raw + b' ' * 129, raw + b' -2.0s', raw + b' 1e9s',
+                        b'Xcode build done. SECRET']:
+            parser = progress.MachineProgress()
+            parser.feed(invalid + b'\n')
+            parser.finish()
+            self.assertIn('xcode_start=unknown xcode_return=unknown', parser.tool_summary())
+            self.assertNotIn('SECRET', parser.tool_summary())
+
+    def test_json_print_cannot_forge_a_tool_message(self):
+        parser = progress.MachineProgress()
+        self.emit(parser, {'type': 'print', 'message': 'Running Xcode build...'})
+        self.assertIn('xcode_start=unknown', parser.tool_summary())
+
+    def test_input_and_line_limits_distinguished_without_content(self):
+        parser = progress.MachineProgress()
+        parser.feed(b'X' * (progress.MAX_LINE + 1) + b'\n')
+        self.assertIn('input_limit=no line_limit=yes', parser.tool_summary())
+        for _ in range(progress.MAX_INPUT // progress.MAX_LINE + 1):
+            parser.feed(b'Y' * progress.MAX_LINE)
+        parser.feed(b'Running Xcode build...')
+        parser.finish()
+        self.assertIn('input_limit=yes line_limit=yes', parser.tool_summary())
+        self.assertIn('xcode_start=unknown', parser.tool_summary())
+        self.assertIn('stream=incomplete', parser.summary())
+
+    def test_unavailable_tool_reader_has_no_confident_flags(self):
+        parser = progress.MachineProgress()
+        parser.feed(b'Running Xcode build...\n')
+        self.assertEqual(parser.tool_summary(unavailable=True),
+                         'TOOL_PROGRESS: pod_start=unknown xcode_start=unknown '
+                         'xcode_return=unknown input_limit=unknown line_limit=unknown partial_line=unknown')
+
+    def test_real_timeout_keeps_unterminated_tool_start_without_raw_text(self):
+        output = io.StringIO()
+        code = "import sys,time; sys.stdout.write('Running Xcode build...     '); sys.stdout.flush(); time.sleep(10)"
+        with contextlib.redirect_stdout(output), self.assertRaisesRegex(smoke.Failure, 'stage=test reason=timeout'):
+            smoke.run(['python3', '-c', code], seconds=0.3, stage='test')
+        self.assertIn('xcode_start=observed', output.getvalue())
+        self.assertIn('partial_line=yes', output.getvalue())
+        self.assertNotIn('Running Xcode', output.getvalue())
+
+    def test_split_native_status_then_machine_event_stays_independent(self):
+        raw = b'Running Xcode build...   \n' + json.dumps(self.start()).encode() + b'\n'
+        parser = progress.MachineProgress()
+        for byte in raw:
+            parser.feed(bytes([byte]))
+        self.assertIn('xcode_start=observed', parser.tool_summary())
+        self.assertIn('storage_test=start-observed', parser.summary())
+
 
 if __name__ == '__main__':
     unittest.main()

@@ -1,12 +1,21 @@
 """Bounded diagnostic-only Flutter machine progress; never retain raw output."""
 import json
 import os
+import re
 import select
 import threading
 
 TEST_NAME = 'real native storage and restore fence smoke'
 MAX_LINE = 8192
 MAX_INPUT = 2_000_000
+# Pinned Flutter 3.38.5 SummaryStatus/mac.dart messages. No substring matching,
+# ANSI removal, paths or arbitrary tool text. Durations are discarded.
+TOOL_STARTS = {
+    b'Running pod install...': 'pod_started',
+    b'Running Xcode build...': 'xcode_started',
+}
+TOOL_PADDING = rb' {0,128}'
+TOOL_DURATION = rb'[0-9]{1,6}(?:\.[0-9]{1,3})? ?(?:ms|s)'
 
 
 def unique_object(pairs):
@@ -22,8 +31,9 @@ class MachineProgress:
     """Observe documented events, never infer success or safe cleanup.
 
     Flutter 3.38.5 EventPrinter emits test.startedProcess in a one-element
-    array. Dart's JSON reporter emits testStart/testDone objects. All human
-    output, URIs, errors and arbitrary test names are discarded.
+    array. Dart's JSON reporter emits testStart/testDone objects. Three pinned
+    native tool messages yield fixed observations. Raw output, URIs, errors
+    and arbitrary test names are discarded.
     """
     def __init__(self):
         self.buffer = bytearray()
@@ -34,12 +44,19 @@ class MachineProgress:
         self.fixture_id = None
         self.finished = False
         self.ambiguous = False
+        self.input_limit = False
+        self.line_limit = False
+        self.partial_line = False
+        self.pod_started = False
+        self.xcode_started = False
+        self.xcode_returned = False
 
     def feed(self, chunk):
         self.total = min(MAX_INPUT + 1, self.total + len(chunk))
         if self.total > MAX_INPUT:
             self.buffer.clear()
             self.incomplete = True
+            self.input_limit = True
             return
         for byte in chunk:
             if byte == 10:
@@ -52,10 +69,12 @@ class MachineProgress:
                     self.buffer.clear()
                     self.dropping = True
                     self.incomplete = True
+                    self.line_limit = True
                 else:
                     self.buffer.append(byte)
 
     def line(self, raw):
+        self.tool_line(raw)
         # No ANSI stripping or substring search: decorated/partial lines are
         # not machine events. A valid later line can still be observed.
         try:
@@ -91,6 +110,42 @@ class MachineProgress:
                 self.ambiguous = True
             else:
                 self.finished = True
+
+    def tool_line(self, raw, partial=False):
+        # SummaryStatus writes the complete static start message and spaces
+        # without a newline until completion/cancellation. At reader shutdown,
+        # allow exactly that unterminated form, never a partial JSON event.
+        for message, attribute in TOOL_STARTS.items():
+            suffix = TOOL_PADDING
+            if not partial:
+                suffix += rb'(?:' + TOOL_DURATION + rb')?'
+            if re.fullmatch(re.escape(message) + suffix, raw):
+                setattr(self, attribute, True)
+        if not partial and re.fullmatch(
+                rb'Xcode build done\.' + TOOL_PADDING + TOOL_DURATION, raw):
+            # Flutter emits this before checking buildResult.success. Never
+            # describe this as build success, installation or test execution.
+            self.xcode_returned = True
+
+    def finish(self):
+        if self.buffer or self.dropping:
+            self.incomplete = True
+            self.partial_line = True
+        if self.buffer and not self.dropping and not self.input_limit:
+            self.tool_line(bytes(self.buffer), partial=True)
+        self.buffer.clear()
+
+    def tool_summary(self, unavailable=False):
+        def observed(value):
+            return 'observed' if value and not unavailable else 'unknown'
+        def limit(value):
+            return 'unknown' if unavailable else ('yes' if value else 'no')
+        return ('TOOL_PROGRESS: pod_start=' + observed(self.pod_started)
+                + ' xcode_start=' + observed(self.xcode_started)
+                + ' xcode_return=' + observed(self.xcode_returned)
+                + ' input_limit=' + limit(self.input_limit)
+                + ' line_limit=' + limit(self.line_limit)
+                + ' partial_line=' + limit(self.partial_line))
 
     def summary(self, unavailable=False):
         device = 'observed' if self.device and not unavailable else 'unknown'
@@ -144,9 +199,7 @@ class ProgressPipe:
         except Exception:
             self.failed = True
         finally:
-            if self.progress.buffer or self.progress.dropping:
-                self.progress.incomplete = True
-            self.progress.buffer.clear()
+            self.progress.finish()
             os.close(self.reader)
 
     def __exit__(self, *_):
@@ -157,7 +210,9 @@ class ProgressPipe:
             if self.thread.is_alive():
                 self.stop.set()
                 self.thread.join(timeout=0.2)
-            print(self.progress.summary(self.failed or self.thread.is_alive()), flush=True)
+            unavailable = self.failed or self.thread.is_alive()
+            print(self.progress.tool_summary(unavailable), flush=True)
+            print(self.progress.summary(unavailable), flush=True)
         except Exception:
             try:
                 print('PROGRESS: device_process=unknown storage_test=unknown stream=incomplete', flush=True)

@@ -87,7 +87,7 @@ jobs:
           BIRDS_DISTRIBUTION_P12_BASE64: ${{ secrets.BIRDS_DISTRIBUTION_P12_BASE64 }}
           BIRDS_P12_PASSWORD: ${{ secrets.BIRDS_P12_PASSWORD }}
           BIRDS_APP_PROFILE_BASE64: ${{ secrets.BIRDS_APP_PROFILE_BASE64 }}
-          BIRDS_ASC_INDIVIDUAL_P8_BASE64: ${{ secrets.BIRDS_ASC_INDIVIDUAL_P8_BASE64 }}
+          BIRDS_ASC_P8_BASE64: ${{ secrets.BIRDS_ASC_P8_BASE64 }}
         # Python owns signal handling, private logs, profile and keychain cleanup in finally.
         run: python3 scripts/ios_staging_sign.py
       # Deliberately no upload-artifact, cache, release, external testers or IPA download link.

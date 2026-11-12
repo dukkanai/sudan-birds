@@ -80,7 +80,7 @@ def empty_result():
         'status': 'signing_preparation_blocked',
         'toolchain_present': False,
         'xcode_version': None, 'xcode_build': None, 'ios_sdk_version': None,
-        'exact_toolchain': False, 'api_key_subject': False,
+        'exact_toolchain': False, 'api_key_subject': False, 'api_key': False, 'api_issuer': False,
         'upload_package': False, 'wait': False,
         'queries_succeeded': False,
     }
@@ -107,6 +107,7 @@ def probe():
             and result['ios_sdk_version'] == '26.2')
         help_text = query(COMMANDS[2])
         for field, option in [('api_key_subject', '--api-key-subject'),
+                              ('api_key', '--api-key'), ('api_issuer', '--api-issuer'),
                               ('upload_package', '--upload-package'),
                               ('wait', '--wait')]:
             result[field] = bool(re.search(
@@ -115,7 +116,7 @@ def probe():
     except ProbeFailure:
         return result
     if all(result[field] for field in (
-            'exact_toolchain', 'api_key_subject', 'upload_package', 'wait',
+            'exact_toolchain', 'api_key_subject', 'api_key', 'api_issuer', 'upload_package', 'wait',
             'queries_succeeded')):
         result['status'] = 'signing_preparation_capabilities_present'
     return result

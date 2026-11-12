@@ -26,10 +26,10 @@ import urllib.request
 import zipfile
 
 from ios_staging_guard import (Blocked, CONFIG, ROOT, GitHub, NoRedirect, full,
-                               live_gate, require, validate_config)
+                               live_gate, require, validate_config, validate_uploader)
 
 SECRET_NAMES = ('BIRDS_DISTRIBUTION_P12_BASE64', 'BIRDS_P12_PASSWORD',
-                'BIRDS_APP_PROFILE_BASE64', 'BIRDS_ASC_INDIVIDUAL_P8_BASE64')
+                'BIRDS_APP_PROFILE_BASE64', 'BIRDS_ASC_P8_BASE64')
 GROUP_TERM_SECONDS = 2.0
 GROUP_KILL_SECONDS = 2.0
 
@@ -105,13 +105,42 @@ def validate_profile(profile, c, now):
     require(c['certificate_sha1'] in fingerprints, 'Profile does not include the approved signing certificate.')
 
 
+def validate_app(app, c):
+    require(isinstance(app, dict) and app.get('type') == 'apps' and app.get('id') == c['asc_app_id']
+            and app.get('attributes', {}).get('bundleId') == c['bundle_id'],
+            'Apple target app identity differs from the approved app.')
+
+
 def validate_apps(body, c):
-    apps = body.get('data', [])
-    require(isinstance(apps, list) and len(apps) == 1 and body.get('links', {}).get('next') in {None, ''},
-            'Uploader can see more than one app, or complete app access could not be verified.')
-    require(apps[0].get('type') == 'apps' and apps[0].get('id') == c['asc_app_id']
-            and apps[0].get('attributes', {}).get('bundleId') == c['bundle_id'],
-            'Uploader does not address only the approved app.')
+    validate_uploader(c)
+    if c['uploader_kind'] == 'team':
+        # An exact resource read verifies the destination, NOT the key's authority.
+        validate_app(body.get('data'), c)
+    else:
+        apps = body.get('data', [])
+        require(isinstance(apps, list) and len(apps) == 1 and body.get('links', {}).get('next') in {None, ''},
+                'Uploader can see more than one app, or complete app access could not be verified.')
+        validate_app(apps[0], c)
+
+
+def apps_path(c):
+    validate_uploader(c)
+    return '/v1/apps/' + c['asc_app_id'] if c['uploader_kind'] == 'team' else '/v1/apps?limit=200'
+
+
+def uploader_auth(c):
+    validate_uploader(c)
+    auth = ['--api-key', c['uploader_key_id']]
+    if c['uploader_kind'] == 'team':
+        return auth + ['--api-issuer', c['uploader_issuer_id']]
+    return auth + ['--api-key-subject', 'user']
+
+
+def validate_uploader_help(help_text, c):
+    options = uploader_auth(c)[::2] + ['--upload-package', '--wait']
+    require(all(re.search(r'(?<![\w-])' + re.escape(flag) + r'(?![\w-])', help_text) for flag in options),
+            'Installed altool lacks the exact reviewed upload/authentication flags; no credential fallback.')
+
 
 
 def der_to_jose(der):
@@ -137,12 +166,17 @@ def base64url(value):
     return base64.urlsafe_b64encode(value).rstrip(b'=').decode('ascii')
 
 
-def make_individual_jwt(c, key_path, run, now):
+def make_uploader_jwt(c, key_path, run, now):
+    validate_uploader(c)
     pub = run(['/usr/bin/openssl', 'pkey', '-in', str(key_path), '-pubout', '-outform', 'DER'], 'uploader-key')
     prefix = bytes.fromhex('3059301306072a8648ce3d020106082a8648ce3d03010703420004')
     require(len(pub) == 91 and pub.startswith(prefix), 'Uploader key must be an EC P-256 key.')
     header = {'alg': 'ES256', 'kid': c['uploader_key_id'], 'typ': 'JWT'}
-    payload = {'sub': 'user', 'iat': int(now), 'exp': int(now) + 120, 'aud': 'appstoreconnect-v1'}
+    payload = {'iat': int(now), 'exp': int(now) + 120, 'aud': 'appstoreconnect-v1'}
+    if c['uploader_kind'] == 'team':
+        payload['iss'] = c['uploader_issuer_id']
+    else:
+        payload['sub'] = 'user'
     parts = [base64url(json.dumps(v, separators=(',', ':')).encode()) for v in (header, payload)]
     unsigned = '.'.join(parts).encode('ascii')
     sig = run(['/usr/bin/openssl', 'dgst', '-sha256', '-sign', str(key_path)], 'uploader-jwt', input_bytes=unsigned)
@@ -285,8 +319,7 @@ class Invocation:
         require(self.run(['/usr/bin/xcrun', '--sdk', 'iphoneos', '--show-sdk-version'], 'sdk').decode().strip() == c['ios_sdk'],
                 'Exact iOS SDK unavailable.')
         help_text = self.run(['/usr/bin/xcrun', 'altool', '--help'], 'uploader-capability').decode()
-        require(all(flag in help_text for flag in ('--api-key-subject', '--upload-package', '--wait')),
-                'Installed altool cannot verify support for individual-key uploads; no team-key fallback.')
+        validate_uploader_help(help_text, c)
         # Secrets live only in this private temp directory; no source or cache destinations.
         p12 = self.write('certificate.p12', decode_secret(private['BIRDS_DISTRIBUTION_P12_BASE64']))
         profile_file = self.write('profile.mobileprovision', decode_secret(private['BIRDS_APP_PROFILE_BASE64']))
@@ -365,10 +398,15 @@ class Invocation:
                 'Exported app was signed by a different certificate.')
         with ipa.open('rb') as file:
             self.digest = hashlib.file_digest(file, 'sha256').hexdigest()
+        self.upload_verified_ipa(private, ipa)
+
+    def upload_verified_ipa(self, private, ipa):
+        # Called only after exported identity/version/signature/profile checks.
+        c = self.c
         # Uploader key is materialized only after all project build commands finish.
-        key = self.write('ApiKey_' + c['uploader_key_id'] + '.p8', decode_secret(private['BIRDS_ASC_INDIVIDUAL_P8_BASE64']))
-        token = make_individual_jwt(c, key, self.run, time.time())
-        validate_apps(apple_get('/v1/apps?limit=200', token), c)
+        key = self.write('ApiKey_' + c['uploader_key_id'] + '.p8', decode_secret(private['BIRDS_ASC_P8_BASE64']))
+        token = make_uploader_jwt(c, key, self.run, time.time())
+        validate_apps(apple_get(apps_path(c), token), c)
         query = urllib.parse.urlencode({'filter[app]': c['asc_app_id'], 'filter[version]': c['build_number'], 'limit': '2'})
         builds = apple_get('/v1/builds?' + query, token)
         require(builds.get('data') == [] and builds.get('links', {}).get('next') in {None, ''},
@@ -378,11 +416,11 @@ class Invocation:
         self.status = 'upload_outcome_uncertain'
         self.run(['/usr/bin/xcrun', 'altool', '--upload-package', str(ipa), '--platform', 'ios',
                   '--apple-id', c['asc_app_id'], '--bundle-id', c['bundle_id'], '--bundle-version', c['build_number'],
-                  '--bundle-short-version-string', c['build_version'], '--api-key', c['uploader_key_id'],
-                  '--api-key-subject', 'user', '--wait', '--output-format', 'json'], 'apple-upload', timeout=900)
+                  '--bundle-short-version-string', c['build_version']] + uploader_auth(c) +
+                 ['--wait', '--output-format', 'json'], 'apple-upload', timeout=900)
         self.status = 'upload_accepted_processing_unverified'
         # One read after an accepted upload, not a retry of the upload itself.
-        token = make_individual_jwt(c, key, self.run, time.time())
+        token = make_uploader_jwt(c, key, self.run, time.time())
         builds = apple_get('/v1/builds?' + query, token)
         data = builds.get('data', [])
         if len(data) == 1 and data[0].get('attributes', {}).get('processingState') == 'VALID':

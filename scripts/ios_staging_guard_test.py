@@ -35,7 +35,15 @@ def config():
              approved_team_id='ABCDE12345', bundle_id='invalid.fixture.sudanbirds', asc_app_id='1234567890',
              profile_uuid='11111111-1111-4111-8111-111111111111', certificate_sha1='D' * 40,
              uploader_key_id='ABC1234567', uploader_access_reviewed=True,
+             uploader_kind='individual', uploader_scope='single_app', uploader_issuer_id=None,
              build_version='0.1.0', build_number='1', staging_limitations_acknowledged=True)
+    return c
+
+
+def team_config():
+    c = config()
+    c.update(uploader_kind='team', uploader_scope='all_apps',
+             uploader_issuer_id='11111111-2222-4333-8444-555555555555')
     return c
 
 
@@ -106,6 +114,29 @@ class ConfigurationTests(unittest.TestCase):
                 candidate = deepcopy(c)
                 candidate[field] = value
                 gate.validate_config(candidate)
+
+    def test_reviewed_team_configuration_passes(self):
+        gate.validate_config(team_config())
+
+    def test_credential_scope_and_issuer_combinations_fail_closed(self):
+        for c in (config(), team_config()):
+            for field, value in [('uploader_kind', None), ('uploader_kind', 'automatic'),
+                                 ('uploader_scope', None), ('uploader_scope', 'unrestricted'),
+                                 ('uploader_scope', 'single_app' if c['uploader_kind'] == 'team' else 'all_apps'),
+                                 ('uploader_access_reviewed', False), ('uploader_role', 'ADMIN'),
+                                 ('uploader_issuer_id', ''), ('uploader_issuer_id', 'issuer; env')]:
+                with self.subTest(kind=c['uploader_kind'], field=field, value=value), self.assertRaises(gate.Blocked):
+                    gate.validate_config(dict(c, **{field: value}))
+        for issuer in (None, '00000000-0000-0000-0000-000000000000', 'ABCDE12345',
+                       team_config()['uploader_issuer_id'] + '\n'):
+            with self.assertRaises(gate.Blocked):
+                gate.validate_config(dict(team_config(), uploader_issuer_id=issuer))
+        with self.assertRaises(gate.Blocked):
+            gate.validate_config(dict(config(), uploader_issuer_id=team_config()['uploader_issuer_id']))
+        c = config()
+        del c['uploader_issuer_id']
+        with self.assertRaises(gate.Blocked):
+            gate.validate_config(c)
 
     def test_changed_ci_definition_is_rejected(self):
         c = config()
@@ -313,6 +344,73 @@ class SigningTests(unittest.TestCase):
             if mutation == 'empty': b['data'] = []
             with self.assertRaises(gate.Blocked): sign.validate_apps(b, c)
 
+    def test_team_reads_exact_target_without_claiming_single_app_access(self):
+        c = team_config()
+        self.assertEqual(sign.apps_path(c), '/v1/apps/' + c['asc_app_id'])
+        self.assertEqual(sign.apps_path(config()), '/v1/apps?limit=200')
+        app = {'type': 'apps', 'id': c['asc_app_id'], 'attributes': {'bundleId': c['bundle_id']}}
+        sign.validate_apps({'data': app}, c)
+        for wrong in (None, [], [app], dict(app, id='9999999999'), dict(app, type='builds'),
+                      dict(app, attributes={'bundleId': 'invalid.other.app'})):
+            with self.assertRaises(gate.Blocked):
+                sign.validate_apps({'data': wrong}, c)
+
+    def test_auth_flags_are_explicit_and_help_is_exact(self):
+        for c in (config(), team_config()):
+            auth = sign.uploader_auth(c)
+            self.assertEqual(auth[:2], ['--api-key', c['uploader_key_id']])
+            self.assertEqual(auth[2:], ['--api-issuer', c['uploader_issuer_id']] if c['uploader_kind'] == 'team'
+                             else ['--api-key-subject', 'user'])
+            flags = auth[::2] + ['--upload-package', '--wait']
+            sign.validate_uploader_help(' '.join(flags), c)
+            for flag in flags:
+                with self.assertRaises(gate.Blocked):
+                    sign.validate_uploader_help(' '.join(flags).replace(flag, flag + '-other'), c)
+        with self.assertRaises(gate.Blocked):
+            sign.validate_uploader_help('--apiKey --apiIssuer --upload-package --wait', team_config())
+
+    def test_both_paths_upload_only_approved_identity_once_and_reject_existing_build(self):
+        for c in (config(), team_config()):
+            app = {'type': 'apps', 'id': c['asc_app_id'], 'attributes': {'bundleId': c['bundle_id']}}
+            body = {'data': app if c['uploader_kind'] == 'team' else [app]}
+            for scenario in ('accepted', 'wrong_app', 'existing', 'paged', 'timeout', 'nonzero'):
+                with self.subTest(kind=c['uploader_kind'], scenario=scenario), tempfile.TemporaryDirectory() as folder:
+                    invocation = sign.Invocation(c, {'RUNNER_TEMP': folder})
+                    invocation.write = mock.Mock(return_value=Path(folder) / 'synthetic.p8')
+                    invocation.run = mock.Mock(return_value=b'')
+                    if scenario == 'timeout': invocation.run.side_effect = subprocess.TimeoutExpired('private', 1)
+                    if scenario == 'nonzero': invocation.run.side_effect = gate.Blocked('Private upload failed.')
+                    apps = deepcopy(body)
+                    if scenario == 'wrong_app':
+                        (apps['data'] if c['uploader_kind'] == 'team' else apps['data'][0])['id'] = '9999999999'
+                    before = {'data': []}
+                    if scenario == 'existing': before['data'] = [{'type': 'builds'}]
+                    if scenario == 'paged': before['links'] = {'next': 'more'}
+                    with mock.patch.object(sign, 'make_uploader_jwt', return_value='synthetic'), \
+                            mock.patch.object(sign, 'apple_get', side_effect=[apps, before, {'data': []}]) as read:
+                        private = {'BIRDS_ASC_P8_BASE64': base64.b64encode(b'synthetic').decode()}
+                        if scenario == 'accepted':
+                            invocation.upload_verified_ipa(private, Path(folder) / 'verified.ipa')
+                        else:
+                            with self.assertRaises((gate.Blocked, subprocess.TimeoutExpired)):
+                                invocation.upload_verified_ipa(private, Path(folder) / 'verified.ipa')
+                    self.assertEqual(read.call_args_list[0].args[0], sign.apps_path(c))
+                    if scenario in ('wrong_app', 'existing', 'paged'):
+                        invocation.run.assert_not_called()
+                        self.assertFalse(invocation.upload_started)
+                        self.assertEqual(invocation.status, 'not_uploaded')
+                    else:
+                        invocation.run.assert_called_once()
+                        command = invocation.run.call_args.args[0]
+                        for flag, value in [('--apple-id', c['asc_app_id']), ('--bundle-id', c['bundle_id']),
+                                            ('--bundle-version', c['build_number']),
+                                            ('--bundle-short-version-string', c['build_version'])]:
+                            self.assertEqual(command[command.index(flag) + 1], value)
+                        self.assertEqual(command[-7:-3], sign.uploader_auth(c))
+                        self.assertEqual(invocation.status, 'upload_accepted_processing_unverified' if scenario == 'accepted'
+                                         else 'upload_outcome_uncertain')
+                    self.assertEqual(invocation.cleanup(), [])
+
     def test_exported_signature_entitlements_are_exact(self):
         c = config()
         app_id = c['approved_team_id'] + '.' + c['bundle_id']
@@ -370,6 +468,12 @@ class SigningTests(unittest.TestCase):
             with self.assertRaises(gate.Blocked): sign.der_to_jose(bytes.fromhex(value))
 
     def test_synthetic_individual_jwt_is_verified_by_openssl(self):
+        self.verify_synthetic_jwt(config(), {'sub': 'user'})
+
+    def test_synthetic_team_jwt_is_verified_by_openssl(self):
+        self.verify_synthetic_jwt(team_config(), {'iss': team_config()['uploader_issuer_id']})
+
+    def verify_synthetic_jwt(self, c, claims):
         with tempfile.TemporaryDirectory(prefix='birds-jwt-test-') as folder:
             folder = Path(folder)
             key = folder / 'fixture.key'
@@ -378,10 +482,10 @@ class SigningTests(unittest.TestCase):
             def run(command, stage, input_bytes=None):
                 command = ['openssl'] + command[1:]
                 return subprocess.run(command, input=input_bytes, check=True, capture_output=True).stdout
-            jwt = sign.make_individual_jwt(config(), key, run, 1000)
+            jwt = sign.make_uploader_jwt(c, key, run, 1000)
             header, payload, signature = jwt.split('.')
             body = json.loads(base64.urlsafe_b64decode(payload + '=='))
-            self.assertEqual(body, {'sub': 'user', 'iat': 1000, 'exp': 1120, 'aud': 'appstoreconnect-v1'})
+            self.assertEqual(body, dict(claims, iat=1000, exp=1120, aud='appstoreconnect-v1'))
             raw = base64.urlsafe_b64decode(signature + '==')
             def integer(value):
                 value = value.lstrip(b'\x00') or b'\x00'
@@ -584,6 +688,17 @@ class TemplateTests(unittest.TestCase):
         self.assertIn('ref: ${{ needs.preflight.outputs.source_sha }}', text)
         self.assertIn('name: ${{ needs.preflight.outputs.environment }}', text)
         self.assertIn('cache: false', text)
+
+    def test_checked_in_configuration_remains_inert_and_unconfigured(self):
+        c = json.loads(gate.CONFIG.read_text())
+        self.assertIs(c['enabled'], False)
+        self.assertIs(c['uploader_access_reviewed'], False)
+        for field in ('environment', 'approved_team_id', 'bundle_id', 'asc_app_id',
+                      'profile_uuid', 'certificate_sha1', 'uploader_key_id', 'uploader_kind',
+                      'uploader_scope', 'uploader_issuer_id', 'build_version', 'build_number'):
+            self.assertIsNone(c[field], field)
+        self.assertFalse((gate.ROOT / '.github/workflows/ios-staging.yml').exists())
+        self.assertEqual(sign.SECRET_NAMES[-1], 'BIRDS_ASC_P8_BASE64')
 
     def test_existing_beta_release_remain_fail_closed(self):
         for name in ('beta.yml', 'release.yml'):

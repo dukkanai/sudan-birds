@@ -8,7 +8,7 @@ from unittest.mock import Mock, patch
 import ios_toolchain_probe as probe
 
 GOOD = ['Xcode 26.3\nBuild version 17C529\n', '26.2\n',
-        '  --api-key-subject <subject>\n  --upload-package <file>\n  --wait\n']
+        '  --api-key <key>\n  --api-issuer <uuid>\n  --api-key-subject <subject>\n  --upload-package <file>\n  --wait\n']
 
 
 class CapabilityTests(unittest.TestCase):
@@ -45,10 +45,16 @@ class CapabilityTests(unittest.TestCase):
 
     def test_each_missing_capability_blocks(self):
         for field, flag in [('api_key_subject', '--api-key-subject'),
+                            ('api_key', '--api-key'), ('api_issuer', '--api-issuer'),
                             ('upload_package', '--upload-package'), ('wait', '--wait')]:
             result = self.run_probe([*GOOD[:2], GOOD[2].replace(flag, flag + '-other')])
             self.assertFalse(result[field])
             self.assertEqual(result['status'], 'signing_preparation_blocked')
+
+    def test_legacy_issuer_spelling_is_not_modern_capability_evidence(self):
+        result = self.run_probe([*GOOD[:2], GOOD[2].replace('--api-issuer', '--apiIssuer')])
+        self.assertFalse(result['api_issuer'])
+        self.assertEqual(result['status'], 'signing_preparation_blocked')
 
     def test_untrusted_versions_and_exception_text_not_emitted(self):
         result = self.run_probe(['SECRET invalid output', 'SECRET', GOOD[2]])

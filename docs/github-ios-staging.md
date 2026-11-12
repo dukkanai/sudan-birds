@@ -77,15 +77,24 @@ These are future actions, **not approvals or claims that setup is complete**.
    A distribution certificate is a team signing credential, not an app-scoped key;
    the profile and checks constrain this workflow, not the certificate's inherent
    authority. No automatic provisioning or account-credential fallback is present.
-3. Prefer an **individual API key belonging to a Developer user whose app access
-   is restricted to this one staging app**. Verify the actual user's role, app
-   selection and key ownership in App Store Connect. An Account Holder's individual
-   key is not narrow merely because it is individual. Apple **team keys apply across
-   apps and cannot be app-limited**. This adapter rejects a team-key configuration.
-   A broader key requires a separately reviewed design and specific approval.
-   `uploader_access_reviewed` records this required human review, not an API proof.
-   At runtime an unfiltered Apple app listing must return exactly this app with no
-   next page. That read does **not** independently prove the user's Developer role.
+3. Review one explicit Developer uploader credential path. Neither is configured
+   by this example; `uploader_access_reviewed` is a human review record, not API
+   proof of role or ownership:
+   - `uploader_kind: individual`, `uploader_scope: single_app`, and
+     `uploader_issuer_id: null`: the individual key belongs to a Developer user
+     whose app access is restricted to this staging app. An Account Holder's
+     individual key is not narrow merely because it is individual. At runtime
+     an unfiltered app listing must return exactly this app, with no next page.
+     Its JWT has `sub: user` and no issuer.
+   - `uploader_kind: team`, `uploader_scope: all_apps`, and a reviewed nonzero
+     issuer UUID: separately approve the Team Developer key's authority across
+     **all apps in the Apple organization**, its issuer/key ownership, and its
+     protected GitHub destination. Team keys cannot be app-limited. Runtime reads
+     address `/v1/apps/{approved_app_id}` and verify its ID and bundle ID. This
+     restricts the workflow destination, **not the key's authority**. The exported
+     IPA and upload arguments must still match the approved app/version/build.
+     Its JWT has `iss` and no `sub`; the uploader uses `--api-issuer`, never
+     `--api-key-subject user`. There is no fallback between credential types.
 4. Approve the protected environment name and self-review decision. Configure its
    only required reviewer as the owner `dukkanai`, disable administrator bypass,
    and select custom branch policies with exactly **`refs/pull/1/merge`**, type
@@ -97,9 +106,11 @@ These are future actions, **not approvals or claims that setup is complete**.
    a checked-in screenshot/boolean is not an automatic substitute.
 5. After the credential/storage approval, populate only these environment secrets:
    `BIRDS_DISTRIBUTION_P12_BASE64`, `BIRDS_P12_PASSWORD`,
-   `BIRDS_APP_PROFILE_BASE64`, `BIRDS_ASC_INDIVIDUAL_P8_BASE64`.
+   `BIRDS_APP_PROFILE_BASE64`, `BIRDS_ASC_P8_BASE64`.
    Do not put values in source, shell history, public logs, artifacts or chat.
-   The uploader key is materialized only after building and verifying the IPA.
+   The one neutral P8 secret holds only the reviewed credential kind, with no
+   individual/team duplicate or fallback. The uploader key is materialized only
+   after building and verifying the IPA.
 6. Set the nonsecret staging publishable key as environment variable
    `BIRDS_STAGING_PUBLISHABLE_KEY`. Only the modern `sb_publishable_` form is
    accepted; service credentials are forbidden. Confirm the existing staging URL
@@ -112,10 +123,20 @@ These are future actions, **not approvals or claims that setup is complete**.
 7. Complete nonsecret macOS preparation and inspect the installed uploader's
    supported authentication before approving real credentials. The proposed tuple
    is **macos-15, Xcode 26.3 / 17C529, iOS SDK 26.2**, listed in GitHub's official
-   runner inventory, **not tested by this work**. Runtime checks require the exact
-   tuple and modern `altool --api-key-subject user` support. Xcode may download a
-   newer altool. The installed tool's actual individual-key behavior must be
-   confirmed; old uploader support is not assumed and there is no team-key fallback.
+   runner inventory. On 2026-11-12, the nonsecret probe at source
+   `6981015304351a46633e69f653a536b83dac3d46` confirmed that tuple and the
+   individual subject/upload/wait help flags in
+   [native run 43120062309, ios-simulator job 130857965633](https://github.com/dukkanai/sudan-birds/actions/runs/43120062309/job/130857965633).
+   This was capability evidence, not real credential compatibility. The newly
+   added exact `--api-key` and `--api-issuer` checks still need CI evidence for
+   the new source. Runtime checks require the exact tuple and modern flags for
+   the selected credential path:
+   `--api-key` plus `--api-key-subject` (individual) or `--api-issuer` (team),
+   along with `--upload-package` and `--wait`. Xcode may download a newer altool.
+   Apple's online altool guide documents legacy `--apiKey` / `--apiIssuer`;
+   the modern man-page mirror documents hyphenated spellings. Neither replaces
+   the installed help check or actual credential compatibility verification.
+   No legacy spelling or credential fallback is attempted.
    Missing Xcode, profile incompatibility, CocoaPods/manual-signing incompatibility,
    unrecognized entitlements or unsupported IPA layout must stop the run.
 8. Only after reviewing the complete activation, configure the manifest, explicitly
@@ -194,11 +215,13 @@ uploader help. It does not sign, authenticate to Apple, or upload anything. A
 missing toolchain or uploader option fails the job as a signing-preparation
 blocker, without reclassifying the earlier functional steps. Its fixed JSON
 report is capability evidence only; an accepted help flag does not establish
-successful individual-key authentication or TestFlight delivery.
+successful authentication of either key type or TestFlight delivery. The probe
+requires both modern authentication flag sets, including `--api-key` and
+`--api-issuer`, while still executing only the same three fixed help/version queries.
 
 Local validation is Linux-only. The nonsecret CI probe does not establish real
 environment API visibility, certificate/profile import, manual archive/export,
-codesign checks, individual-key authentication or TestFlight processing/delivery.
+codesign checks, individual/team-key authentication or TestFlight processing/delivery.
 Those credential-bearing stages remain unexecuted by this implementation work.
 Keep activation blocked until those relevant setup/verification steps are actually
 possible and approved. Do not replace an inaccessible verification with `true`.
@@ -209,6 +232,7 @@ possible and approved. Do not replace an inaccessible verification with `true`.
 - [GitHub environments and PR ref rules](https://docs.github.com/en/actions/reference/workflows-and-actions/deployments-and-environments).
 - [Environment REST reads](https://docs.github.com/en/rest/deployments/environments) and [branch-policy reads](https://docs.github.com/en/rest/deployments/branch-policies).
 - [Apple API key types and app-access limits](https://developer.apple.com/help/app-store-connect/get-started/app-store-connect-api/).
-- [Apple individual-key JWT format](https://developer.apple.com/documentation/AppStoreConnectAPI/generating-tokens-for-api-requests).
+- [Apple JWT formats](https://developer.apple.com/documentation/AppStoreConnectAPI/generating-tokens-for-api-requests).
 - [Apple build uploads](https://developer.apple.com/help/app-store-connect/manage-builds/upload-builds).
+- [Apple online altool guide](https://help.apple.com/asc/appsaltool/en.lproj/static.html), consulted 2026-11-12; documents legacy argument spellings.
 - [Published Xcode altool man-page mirror](https://keith.github.io/xcode-man-pages/altool.1.html), contextual reference only; installed-tool checks and real compatibility verification remain required.

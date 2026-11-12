@@ -40,6 +40,22 @@ def full(value, pattern):
     return isinstance(value, str) and re.fullmatch(pattern, value) is not None
 
 
+def validate_uploader(c):
+    require(c.get('uploader_role') == 'DEVELOPER' and c.get('uploader_access_reviewed') is True,
+            'Developer uploader role, ownership and scope must be reviewed.')
+    kind = c.get('uploader_kind')
+    require(kind in ('individual', 'team'), 'Uploader credential kind is unsupported.')
+    if kind == 'individual':
+        require(c.get('uploader_scope') == 'single_app' and 'uploader_issuer_id' in c
+                and c['uploader_issuer_id'] is None,
+                'Individual uploader needs reviewed single-app access and no issuer.')
+    else:
+        require(c.get('uploader_scope') == 'all_apps'
+                and full(c.get('uploader_issuer_id'), r'[A-Fa-f0-9]{8}(?:-[A-Fa-f0-9]{4}){3}-[A-Fa-f0-9]{12}')
+                and c['uploader_issuer_id'] != '00000000-0000-0000-0000-000000000000',
+                'Team uploader needs explicitly reviewed all-app authority and a nonzero issuer UUID.')
+
+
 def validate_config(c):
     require(c.get('schema_version') == 1 and c.get('enabled') is True,
             'Template is disabled or schema is unsupported.')
@@ -58,8 +74,7 @@ def validate_config(c):
         require(full(c.get(key), pattern), 'Approved signing/app/build configuration is incomplete.')
     require(c['bundle_id'] not in {'dev.sudanbirds.sudanBirds', 'dev.sudanbirds.sudan_birds'},
             'Temporary source app identifiers are not approved signing identifiers.')
-    require(c.get('uploader_kind') == 'individual' and c.get('uploader_role') == 'DEVELOPER'
-            and c.get('uploader_access_reviewed') is True, 'Verified individual Developer uploader is required.')
+    validate_uploader(c)
     require(c.get('staging_limitations_acknowledged') is True,
             'Staging limitations and intended synthetic-only use must be reviewed.')
     require((c.get('runner'), c.get('xcode_version'), c.get('xcode_build'), c.get('ios_sdk')) ==

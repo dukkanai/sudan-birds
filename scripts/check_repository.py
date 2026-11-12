@@ -5,6 +5,7 @@ import re
 import hashlib
 import sys
 import tomllib
+from workflow_permissions import has_no_token_permissions
 
 ROOT = Path(__file__).resolve().parents[1]
 failures = []
@@ -35,14 +36,16 @@ if ("distributionUrl=https\\://downloads.gradle.org/distributions/gradle-8.14-al
     failures.append("Gradle wrapper: reviewed official distribution and checksum pin required")
 workflows = ROOT / ".github" / "workflows"
 for path in workflows.glob("*.yml"):
-    content = path.read_text()
+    content = path.read_bytes().decode('utf-8')
     if re.search(r"^\s*pull_request_target\s*:", content, re.M):
         failures.append(f"{path.name}: privileged PR trigger forbidden")
     for use in re.findall(r"uses:\s*([^\s]+)", content):
         if not use.startswith("./") and not re.fullmatch(r"[\w./-]+@[a-f0-9]{40}", use):
             failures.append(f"{path.name}: action must be pinned to full SHA")
-    if "contents: read" not in content:
-        failures.append(f"{path.name}: explicit read-only token required")
+    # Explicit zero privileges are narrower than read-only. Reject job-level
+    # permission overrides on this path rather than granting an unused token.
+    if "contents: read" not in content and not has_no_token_permissions(content):
+        failures.append(f"{path.name}: explicit read-only or zero-token permissions required")
 
 migrations = ROOT / "supabase/migrations"
 # These files have been applied remotely. Destructive feature removal must be a

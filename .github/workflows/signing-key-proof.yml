@@ -1,0 +1,231 @@
+# Disabled unless exact source/run gates and owner environment review are satisfied.
+# This workflow only proves recovery of the approved encrypted signing key.
+name: Owner-reviewed signing key persistence proof
+on:
+  pull_request:
+    branches: [main]
+    types: [labeled]
+permissions: {}
+concurrency:
+  group: sudan-birds-key-persistence-proof
+  cancel-in-progress: false
+jobs:
+  key-proof:
+    if: >-
+      vars.BIRDS_ENABLE_KEY_PROOF == 'true' &&
+      github.repository == 'dukkanai/sudan-birds' &&
+      github.event.pull_request.number == 1 &&
+      github.event.pull_request.head.repo.full_name == 'dukkanai/sudan-birds' &&
+      github.event.pull_request.head.repo.fork == false &&
+      github.event.pull_request.head.ref == 'build/foundation' &&
+      github.event.pull_request.base.ref == 'main' &&
+      github.actor == 'dukkanai' && github.run_attempt == 1
+    environment: sudan-birds-ios-staging
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    steps:
+      - name: Prove encrypted key can be recovered without exporting it
+        shell: bash --noprofile --norc -e -o pipefail {0}
+        env:
+          BIRDS_ENABLE_KEY_PROOF: ${{ vars.BIRDS_ENABLE_KEY_PROOF }}
+          BIRDS_KEY_PROOF_HEAD_SHA: ${{ vars.BIRDS_KEY_PROOF_HEAD_SHA }}
+          BIRDS_KEY_PROOF_WORKFLOW_SHA: ${{ vars.BIRDS_KEY_PROOF_WORKFLOW_SHA }}
+          BIRDS_KEY_PROOF_RUN_ID: ${{ vars.BIRDS_KEY_PROOF_RUN_ID }}
+          BIRDS_DISTRIBUTION_KEY_PEM: ${{ secrets.BIRDS_DISTRIBUTION_KEY_PEM }}
+          BIRDS_P12_PASSWORD: ${{ secrets.BIRDS_P12_PASSWORD }}
+        run: |
+          /usr/bin/python3 -I - <<'PYPROOF'
+          import hashlib
+          import hmac
+          import json
+          import os
+          from pathlib import Path
+          import re
+          import shutil
+          import signal
+          import subprocess
+          import sys
+          import tempfile
+          import time
+
+          # Public SPKI digest supplied after the single replacement key/CSR match.
+          EXPECTED_SPKI_SHA256 = 'dd7b9f6a5d8c3fe69f2bab9c28cffc2dc86bcbf6d7861e8b940be68bdd5a6f87'
+          SECRET_NAMES = ('BIRDS_DISTRIBUTION_KEY_PEM', 'BIRDS_P12_PASSWORD')
+
+
+          class GroupCleanupFailure(Exception):
+              pass
+
+
+          def unique_object(pairs):
+              result = {}
+              for key, value in pairs:
+                  if key in result:
+                      raise ValueError()
+                  result[key] = value
+              return result
+
+
+          def context_valid(env):
+              if not re.fullmatch(r'[0-9a-f]{64}', EXPECTED_SPKI_SHA256):
+                  return False
+              expected = {
+                  'GITHUB_ACTIONS': 'true',
+                  'GITHUB_REPOSITORY': 'dukkanai/sudan-birds',
+                  'GITHUB_EVENT_NAME': 'pull_request',
+                  'GITHUB_REF': 'refs/pull/1/merge',
+                  'GITHUB_RUN_ATTEMPT': '1',
+                  'GITHUB_ACTOR': 'dukkanai',
+                  'GITHUB_TRIGGERING_ACTOR': 'dukkanai',
+                  'RUNNER_ENVIRONMENT': 'github-hosted',
+                  'BIRDS_ENABLE_KEY_PROOF': 'true',
+              }
+              if any(env.get(key) != value for key, value in expected.items()):
+                  return False
+              run_id = env.get('GITHUB_RUN_ID', '')
+              head = env.get('BIRDS_KEY_PROOF_HEAD_SHA', '')
+              workflow = env.get('BIRDS_KEY_PROOF_WORKFLOW_SHA', '')
+              if (not re.fullmatch(r'[1-9][0-9]{0,19}', run_id) or
+                      env.get('BIRDS_KEY_PROOF_RUN_ID') != run_id or
+                      not re.fullmatch(r'[0-9a-f]{40}', head) or
+                      not re.fullmatch(r'[0-9a-f]{40}', workflow) or
+                      env.get('GITHUB_SHA') != workflow):
+                  return False
+              event_path = Path(env['GITHUB_EVENT_PATH'])
+              if event_path.is_symlink() or not event_path.is_file() or event_path.stat().st_size > 2_000_000:
+                  return False
+              event = json.loads(event_path.read_text(), object_pairs_hook=unique_object)
+              pr = event['pull_request']
+              return (type(pr['number']) is int and pr['number'] == 1 and
+                      event['repository']['full_name'] == 'dukkanai/sudan-birds' and
+                      pr['head']['repo']['full_name'] == 'dukkanai/sudan-birds' and
+                      pr['head']['repo']['fork'] is False and
+                      pr['head']['ref'] == 'build/foundation' and pr['head']['sha'] == head and
+                      pr['base']['ref'] == 'main' and pr['state'] == 'open')
+
+
+          def write_private(path, content):
+              fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+              with os.fdopen(fd, 'wb') as stream:
+                  stream.write(content)
+
+
+          def stop_owned_group(process):
+              # Only this invocation's Popen(start_new_session=True) group is touched.
+              for sig, delay in ((signal.SIGTERM, 0.25), (signal.SIGKILL, 2.0)):
+                  try:
+                      os.killpg(process.pid, sig)
+                  except ProcessLookupError:
+                      process.wait(timeout=2)
+                      return
+                  deadline = time.monotonic() + delay
+                  while time.monotonic() < deadline:
+                      process.poll()  # Reap the leader so it cannot keep a dead group visible.
+                      try:
+                          os.killpg(process.pid, 0)
+                      except ProcessLookupError:
+                          return
+                      time.sleep(0.02)
+              raise RuntimeError()
+
+
+          def derive_public(directory):
+              base = ['/usr/bin/openssl', 'pkey', '-in', str(directory / 'key.pem'),
+                      '-passin', 'file:' + str(directory / 'password')]
+              # A separate check avoids mixing OpenSSL's validation text into the DER file.
+              commands = [base + ['-check', '-noout'],
+                          base + ['-pubout', '-outform', 'DER', '-out', str(directory / 'public.der')]]
+              for command in commands:
+                  process = subprocess.Popen(
+                      command, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                      env={'PATH': '/usr/bin:/bin', 'LC_ALL': 'C'}, start_new_session=True,
+                  )
+                  result = False
+                  handlers = {sig: signal.getsignal(sig) for sig in (signal.SIGTERM, signal.SIGINT)}
+                  try:
+                      result = process.wait(timeout=15) == 0
+                  finally:
+                      # Do not let a second cancellation interrupt cleanup of our own group.
+                      for sig in handlers:
+                          signal.signal(sig, signal.SIG_IGN)
+                      try:
+                          stop_owned_group(process)
+                      except BaseException:
+                          raise GroupCleanupFailure() from None
+                      finally:
+                          for sig, handler in handlers.items():
+                              signal.signal(sig, handler)
+                  if not result:
+                      return False
+              return True
+
+
+          def interrupted(_signum, _frame):
+              raise InterruptedError()
+
+
+          def main():
+              stage, proof, cleanup = 'context', 'failed', 'not_needed'
+              directory = None
+              group_cleanup_failed = False
+              # Pop both values immediately. Child processes receive a minimal environment.
+              # Python immutable strings and the process's initial environment cannot be
+              # claimed securely erased. Use only a fresh GitHub-hosted ephemeral runner.
+              key = os.environ.pop(SECRET_NAMES[0], '')
+              password = os.environ.pop(SECRET_NAMES[1], '')
+              old_handlers = {sig: signal.getsignal(sig) for sig in (signal.SIGTERM, signal.SIGINT)}
+              try:
+                  for sig in old_handlers:
+                      signal.signal(sig, interrupted)
+                  if not context_valid(os.environ):
+                      raise ValueError()
+                  stage = 'input'
+                  if (not 512 <= len(key) <= 16384 or
+                          not re.fullmatch(re.escape('-----BEGIN ' + 'ENCRYPTED PRIVATE KEY-----') +
+                                              r'\n[A-Za-z0-9+/=\n]+\n' +
+                                              re.escape('-----END ' + 'ENCRYPTED PRIVATE KEY-----') + r'\n?', key) or
+                          not re.fullmatch(r'[\x21-\x7e]{32,128}', password)):
+                      raise ValueError()
+                  directory = Path(tempfile.mkdtemp(prefix='birds-key-proof-'))
+                  os.chmod(directory, 0o700)
+                  cleanup = 'failed'
+                  write_private(directory / 'key.pem', key.encode('ascii'))
+                  write_private(directory / 'password', password.encode('ascii'))
+                  key = password = ''
+                  stage = 'derive'
+                  if not derive_public(directory):
+                      raise ValueError()
+                  stage = 'match'
+                  public = directory / 'public.der'
+                  if public.is_symlink() or not public.is_file() or not 64 <= public.stat().st_size <= 4096:
+                      raise ValueError()
+                  digest = hashlib.sha256(public.read_bytes()).hexdigest()
+                  if not hmac.compare_digest(digest, EXPECTED_SPKI_SHA256):
+                      raise ValueError()
+                  stage, proof = 'complete', 'passed'
+              except GroupCleanupFailure:
+                  group_cleanup_failed = True
+              except BaseException:
+                  # Never interpolate exceptions, file paths, tool output or secret data.
+                  pass
+              finally:
+                  for sig in old_handlers:
+                      signal.signal(sig, signal.SIG_IGN)
+                  key = password = ''
+                  if directory is not None:
+                      try:
+                          shutil.rmtree(directory)
+                          cleanup = 'passed' if not directory.exists() else 'failed'
+                      except BaseException:
+                          cleanup = 'failed'
+                  if group_cleanup_failed:
+                      cleanup = 'failed'
+                  for sig, handler in old_handlers.items():
+                      signal.signal(sig, handler)
+              print(json.dumps({'key_proof': proof, 'stage': stage, 'cleanup': cleanup}, sort_keys=True))
+              return 0 if proof == 'passed' and cleanup == 'passed' else 1
+
+
+          if __name__ == '__main__':
+              sys.exit(main())
+          PYPROOF

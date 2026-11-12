@@ -388,7 +388,7 @@ void main() {
                   .widget<OutlinedButton>(
                     find.widgetWithText(
                       OutlinedButton,
-                      'الدخول باستخدام Google',
+                      'الدخول بالبريد وكلمة المرور',
                     ),
                   )
                   .onPressed!;

@@ -134,7 +134,7 @@ class AuthRepository extends PreviewRepository {
   int attempts = 0;
   final pending = Completer<Result<bool>>();
   @override
-  Future<Result<bool>> signIn(String provider) {
+  Future<Result<bool>> signInWithPassword(String email, String password) {
     attempts++;
     return pending.future;
   }
@@ -639,11 +639,21 @@ void main() {
       await tester.pumpAndSettle();
       final signIn = tester
           .widget<OutlinedButton>(
-            find.widgetWithText(OutlinedButton, 'الدخول باستخدام Google'),
+            find.widgetWithText(OutlinedButton, 'الدخول بالبريد وكلمة المرور'),
           )
           .onPressed!;
       signIn();
       signIn();
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byKey(const ValueKey('trial-email')),
+        'trial@example.test',
+      );
+      await tester.enterText(
+        find.byKey(const ValueKey('trial-password')),
+        'synthetic-password',
+      );
+      await tester.tap(find.widgetWithText(FilledButton, 'تسجيل الدخول'));
       await tester.pumpAndSettle();
       expect(repo.attempts, 1);
       open();
@@ -653,6 +663,8 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.textContaining('تعذر إتمام العملية'), findsOneWidget);
       expect(find.textContaining('private'), findsNothing);
+      await tester.tap(find.widgetWithText(TextButton, 'إلغاء'));
+      await tester.pumpAndSettle();
       open();
       await tester.pumpAndSettle();
       expect(find.byType(BottomSheet), findsOneWidget);

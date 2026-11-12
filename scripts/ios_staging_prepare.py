@@ -6,13 +6,13 @@ from pathlib import Path
 import re
 import subprocess
 import sys
-from ios_staging_guard import Blocked, CONFIG, ROOT, require, validate_config
+from ios_staging_guard import Blocked, CONFIG, ROOT, require, runtime_config, validate_config
 from ios_staging_sign import child_environment
 
 
 def main():
     try:
-        c = json.loads(CONFIG.read_text())
+        c = runtime_config(json.loads(CONFIG.read_text()), os.environ)
         validate_config(c)
         require(sys.platform == 'darwin', 'Native configuration needs macOS.')
         project = (ROOT / 'app/ios/Runner.xcodeproj/project.pbxproj').read_text()

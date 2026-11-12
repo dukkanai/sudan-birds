@@ -23,6 +23,7 @@ import zipfile
 
 import ios_staging_guard as gate
 import ios_staging_sign as sign
+import ios_staging_prepare as prepare
 
 SHA = 'a' * 40
 MERGE = 'b' * 40
@@ -58,13 +59,14 @@ def pull():
 
 
 def event():
-    return {'action': 'labeled', 'repository': repository(), 'pull_request': pull(), 'sender': {'login': 'dukkanai'}}
+    return {'action': 'labeled', 'label': {'name': 'birds-testflight-trial'}, 'repository': repository(), 'pull_request': pull(), 'sender': {'login': 'dukkanai'}}
 
 
 def env():
     return {'GITHUB_ACTIONS': 'true', 'GITHUB_EVENT_NAME': 'pull_request', 'GITHUB_REPOSITORY': gate.REPO,
             'GITHUB_REF': 'refs/pull/1/merge', 'GITHUB_ACTOR': 'dukkanai', 'GITHUB_TRIGGERING_ACTOR': 'dukkanai',
-            'BIRDS_APPROVED_HEAD_SHA': SHA, 'GITHUB_RUN_ATTEMPT': '1'}
+            'BIRDS_APPROVED_HEAD_SHA': SHA, 'GITHUB_RUN_ATTEMPT': '1',
+            'BIRDS_ENABLE_IOS_STAGING': 'true', 'BIRDS_TRIAL_LIMITATIONS_HEAD_SHA': SHA}
 
 
 def environment():
@@ -541,7 +543,7 @@ class SigningTests(unittest.TestCase):
             invocation = mock.Mock(status='upload_outcome_uncertain', digest='f' * 64)
             invocation.execute.side_effect = gate.Blocked('fixture primary failure')
             invocation.cleanup.return_value = ['temporary-keychain']
-            runtime = {'RUNNER_ENVIRONMENT': 'github-hosted', 'GITHUB_RUN_ID': '123',
+            runtime = {**env(), 'RUNNER_ENVIRONMENT': 'github-hosted', 'GITHUB_RUN_ID': '123',
                        'BIRDS_APPROVED_UPLOAD_RUN_ID': '123', 'GITHUB_EVENT_PATH': str(e),
                        **{name: 'fixture' for name in sign.SECRET_NAMES}}
             with mock.patch.dict(os.environ, runtime, clear=True), mock.patch.object(sign.sys, 'platform', 'darwin'), \
@@ -564,7 +566,7 @@ class SigningTests(unittest.TestCase):
             invocation = mock.Mock(status='not_uploaded', digest=None)
             invocation.execute.side_effect = gate.Blocked('primary operation failed')
             invocation.cleanup.return_value = []
-            runtime = {'RUNNER_ENVIRONMENT': 'github-hosted', 'GITHUB_RUN_ID': '123',
+            runtime = {**env(), 'RUNNER_ENVIRONMENT': 'github-hosted', 'GITHUB_RUN_ID': '123',
                        'BIRDS_APPROVED_UPLOAD_RUN_ID': '123', 'GITHUB_EVENT_PATH': str(e),
                        'GITHUB_STEP_SUMMARY': str(Path(folder) / 'absent' / 'summary'),
                        **{name: 'fixture' for name in sign.SECRET_NAMES}}
@@ -712,16 +714,66 @@ class TemplateTests(unittest.TestCase):
         self.assertEqual(project.count('PRODUCT_BUNDLE_IDENTIFIER = com.nextaura.sudanbirds.RunnerTests;'), 3)
         self.assertNotIn('dev.sudanbirds.sudanBirds', project)
 
-    def test_checked_in_configuration_remains_inert_and_unconfigured(self):
+    def test_registered_trial_is_disabled_until_runtime_approval(self):
         c = json.loads(gate.CONFIG.read_text())
         self.assertIs(c['enabled'], False)
-        self.assertIs(c['uploader_access_reviewed'], False)
-        for field in ('environment', 'approved_team_id', 'bundle_id', 'asc_app_id',
-                      'profile_uuid', 'certificate_sha1', 'uploader_key_id', 'uploader_kind',
-                      'uploader_scope', 'uploader_issuer_id', 'build_version', 'build_number'):
-            self.assertIsNone(c[field], field)
-        self.assertFalse((gate.ROOT / '.github/workflows/ios-staging.yml').exists())
+        self.assertIs(c['staging_limitations_acknowledged'], False)
+        self.assertEqual(c['environment'], 'sudan-birds-ios-staging')
+        self.assertEqual(c['bundle_id'], 'com.nextaura.sudanbirds')
+        self.assertEqual(c['uploader_kind'], 'team')
+        gate.validate_config(gate.runtime_config(c, env()))
+        self.assertIs(c['enabled'], False)  # no mutation of static acknowledgement
+        self.assertIs(c['staging_limitations_acknowledged'], False)
+        workflow = (gate.ROOT / '.github/workflows/ios-staging.yml').read_text()
+        self.assertIn("vars.BIRDS_ENABLE_IOS_STAGING == 'true'", workflow)
+        self.assertIn("github.event.label.name == 'birds-testflight-trial'", workflow)
+        self.assertIn('types: [labeled]', workflow)
+        self.assertNotIn('synchronize', workflow)
+        self.assertNotIn('workflow_dispatch', workflow)
+        self.assertIn('BIRDS_TRIAL_LIMITATIONS_HEAD_SHA:', workflow)
+        example = (gate.ROOT / 'docs/examples/ios-staging/workflow.yml.example').read_text()
+        self.assertEqual(workflow.split('name: Owner-approved', 1)[1],
+                         example.split('name: Owner-approved', 1)[1])
         self.assertEqual(sign.SECRET_NAMES[-1], 'BIRDS_ASC_P8_BASE64')
+
+    def test_runtime_off_and_stale_acknowledgement_fail_closed(self):
+        for key, value in [('BIRDS_ENABLE_IOS_STAGING', None),
+                           ('BIRDS_ENABLE_IOS_STAGING', 'false'),
+                           ('BIRDS_ENABLE_IOS_STAGING', 'TRUE'),
+                           ('BIRDS_TRIAL_LIMITATIONS_HEAD_SHA', None),
+                           ('BIRDS_TRIAL_LIMITATIONS_HEAD_SHA', MERGE),
+                           ('BIRDS_APPROVED_HEAD_SHA', '')]:
+            runtime = env()
+            if value is None: runtime.pop(key)
+            else: runtime[key] = value
+            with self.subTest(key=key, value=value), self.assertRaises(gate.Blocked):
+                gate.runtime_config(config(), runtime)
+
+    def test_disabled_signer_does_not_construct_invocation_or_contact_api(self):
+        with mock.patch.dict(os.environ, {}, clear=True), \
+                mock.patch.object(sign, 'GitHub') as api, \
+                mock.patch.object(sign, 'Invocation') as invocation, \
+                contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+            self.assertEqual(sign.main(), 1)
+            api.assert_not_called()
+            invocation.assert_not_called()
+
+    def test_disabled_preparation_starts_no_subprocess(self):
+        with mock.patch.dict(os.environ, {}, clear=True), \
+                mock.patch.object(prepare.subprocess, 'run') as run, \
+                contextlib.redirect_stderr(io.StringIO()):
+            self.assertEqual(prepare.main(), 1)
+            run.assert_not_called()
+
+    def test_non_deliberate_events_cannot_upload(self):
+        for action, label in [('synchronize', 'birds-testflight-trial'),
+                              ('reopened', 'birds-testflight-trial'),
+                              ('labeled', 'other'), ('unlabeled', 'birds-testflight-trial')]:
+            e = event()
+            e['action'] = action
+            e['label']['name'] = label
+            with self.subTest(action=action, label=label), self.assertRaises(gate.Blocked):
+                gate.validate_event(config(), e, env())
 
     def test_existing_beta_release_remain_fail_closed(self):
         for name in ('beta.yml', 'release.yml'):

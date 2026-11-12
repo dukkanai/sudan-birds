@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'domain.dart';
 import 'account_session.dart';
+import 'password_sign_in.dart';
 import 'screens.dart';
 import 'moderation_screens.dart';
 export 'screens.dart' show PublicationPage, DetailPage;
@@ -287,30 +288,36 @@ class _HomePageState extends State<HomePage> {
                         const Text(
                           'التصفح متاح للجميع. النشر والإبلاغ يتطلب تسجيل الدخول.',
                         ),
-                        for (final provider in ['google', 'apple'])
-                          Padding(
-                            padding: const EdgeInsets.only(top: 12),
-                            child: OutlinedButton(
-                              onPressed: () async {
-                                if (authBusy || !sameAccount()) return;
-                                authBusy = true;
-                                final result = await guardResult(() {
-                                  Navigator.pop(context);
-                                  return widget.repository.signIn(provider);
-                                });
-                                authBusy = false;
-                                message(
-                                  result.failure?.message ??
-                                      'أكمل تسجيل الدخول في المتصفح، ثم ارجع للتطبيق.',
+                        Padding(
+                          padding: const EdgeInsets.only(top: 12),
+                          child: OutlinedButton(
+                            onPressed: () async {
+                              if (authBusy ||
+                                  !sameAccount() ||
+                                  !context.mounted ||
+                                  ModalRoute.of(context)?.isCurrent != true) {
+                                return;
+                              }
+                              authBusy = true;
+                              final opened = await protect(() {
+                                Navigator.pop(context);
+                                return Navigator.of(this.context).push<bool>(
+                                  MaterialPageRoute(
+                                    builder: (_) => PasswordSignInPage(
+                                      repository: widget.repository,
+                                    ),
+                                  ),
                                 );
-                              },
-                              child: Text(
-                                provider == 'google'
-                                    ? 'الدخول باستخدام Google'
-                                    : 'الدخول باستخدام Apple',
-                              ),
-                            ),
+                              }, timeout: null);
+                              authBusy = false;
+                              if (mounted) setState(() {});
+                              if (opened.failure != null) {
+                                message(opened.failure!.message);
+                              }
+                            },
+                            child: const Text('الدخول بالبريد وكلمة المرور'),
                           ),
+                        ),
                       ] else
                         FilledButton(
                           onPressed: () async {

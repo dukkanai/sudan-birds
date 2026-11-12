@@ -72,6 +72,7 @@ class Harness {
       authRedirect: stagingAuthRedirect,
       authStorage: storage,
       oauth: oauth,
+      oauthEnabled: true,
     );
   }
   final memory = MemoryCredentials();

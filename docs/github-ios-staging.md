@@ -1,28 +1,33 @@
-# GitHub iOS staging: inert implementation, not a delivered build
+# GitHub iOS staging: disabled-by-default TestFlight trial
 
-**No application signing or upload workflow is active.** The example is outside
-`.github/workflows`, `config.json` has `enabled: false`, identity/credential inputs
-are unconfigured in that example, and `beta.yml` / `release.yml` still fail closed.
-External signing assets are prepared separately under owner approval. Their
-presence is not proof of a successful archive or upload. The guarded key-recovery
-proof and read-only capability probe do not sign an app or produce a TestFlight build.
-Do not merge PR #1 or change `main` to activate a staging experiment.
+The workflow definition is registered, but **no application signing or upload has
+been executed**. The repository enable flag is absent/off by default; the checked-in
+configuration retains `enabled: false` and `staging_limitations_acknowledged: false`.
+The runtime requires explicit enabling plus a limitations acknowledgement bound to
+the exact approved source head. These settings do not replace the existing protected
+owner review, all eight exact-source CI checks or the single approved upload run ID.
+Existing `beta.yml` / `release.yml` remain fail closed. Do not merge PR #1 or change
+`main` for this trial.
 
-## November 12 identity preparation
+The prepared identity is `com.nextaura.sudanbirds`, NEXTAURA team `9G7GPBG7FB`,
+App Store Connect app `6833994816`, version `0.1.0`, build `1`. The owner approved
+creation and protected GitHub storage of the Team Developer uploader and distribution
+materials. The nonsecret configuration pins those existing assets; it neither creates
+credentials nor proves they can sign/export/upload an app. Actual signing remains
+unverified until the protected run completes.
 
-Runner and RunnerTests now use the registered `com.nextaura.sudanbirds` identity
-in the reviewed source. This does not activate signing. The example configuration
-remains disabled and incomplete, and no staging-upload workflow is registered.
-The archive verifier now rejects noncanonical and filesystem-colliding ZIP paths
-and revalidates the extracted app manifest. Its regression tests use synthetic
-archives, not a real signed IPA. A separate disabled-by-default
-[read-only access probe](staging-access-probe.md) can verify whether the restricted
-workflow token can read required environment-policy and CI-log evidence.
+This trial uses [existing email/password accounts](email-password-trial.md).
+Google and Apple OAuth are disabled; photos remain disabled at the hosted gate.
+No password is compiled into the app. A bounded hosted synthetic-account login check
+has passed separately, not as proof of on-device login or this final build. The trial
+is not a public release and must not use real customer content. No Android APK delivery,
+external beta invitations, automatic group distribution or store submission is enabled.
 
 ## Files and trust boundary
 
-- `docs/examples/ios-staging/workflow.yml.example`: proposed `pull_request` workflow.
-- `docs/examples/ios-staging/config.json`: nonsecret configuration, deliberately incomplete.
+- `.github/workflows/ios-staging.yml`: disabled-by-default, deliberate-label workflow.
+- `docs/examples/ios-staging/workflow.yml.example`: matching reference definition.
+- `docs/examples/ios-staging/config.json`: nonsecret approved-asset configuration; static runtime-consent flags remain false.
 - `scripts/ios_staging_guard.py`: read-only, fail-closed GitHub evidence validation.
 - `scripts/ios_staging_prepare.py`: nonsecret Flutter native preparation.
 - `scripts/ios_staging_sign.py`: **unexecuted macOS adapter** for manual signing,
@@ -73,101 +78,53 @@ The gate rechecks the live PR and environment after reading CI evidence, and run
 again in the signing job. This cannot eliminate every concurrent administrator
 change, nor replace real hosted OAuth, R2, device or release security gates.
 
-## Decisions and setup required before any activation
+## Exact activation procedure
 
-These are future actions, **not approvals or claims that setup is complete**.
+1. Review the final source, locked dependencies, native build phases, signing scripts,
+   trial account behavior and limitations. Verify the prepared certificate/profile and
+   uploader are still the intended assets. Version/build `0.1.0 (1)` must not already
+   exist in Apple; uncertain prior outcomes require reconciliation, never a blind retry.
+2. Complete all eight jobs for the final head. Set repository variables
+   `BIRDS_APPROVED_HEAD_SHA` and `BIRDS_CI_RUNS_JSON` to that exact source and the three
+   run IDs/attempts. Every job's actual checkout tree must equal the approved full tree.
+   Native and codec workflows also watch staging definitions so signing-only changes
+   cannot inherit old test evidence.
+3. After the owner reviews the limitations above, set
+   `BIRDS_TRIAL_LIMITATIONS_HEAD_SHA` to that same head and
+   `BIRDS_ENABLE_IOS_STAGING` to the exact string `true` as repository variables.
+   These are nonsecret action gates, not substitutes for consent. Absent/false enable,
+   absent/mismatched acknowledgement or a newer source fails closed. Static JSON is
+   never rewritten to claim that review occurred.
+4. Apply the deliberate `birds-testflight-trial` PR label. No synchronize, reopened,
+   push, dispatch or arbitrary-label event can initiate this workflow. The workflow
+   is read-only and does not create the label or change source. Remove/reapply only
+   after reconciling any previous invocation; attempts above 1 are rejected.
+5. Preflight verifies the existing `sudan-birds-ios-staging` environment: only reviewer
+   `dukkanai`, administrator bypass disabled, `prevent_self_review: false`, and exactly
+   `refs/pull/1/merge` branch policy. Never loosen protections to make the run work.
+6. Before the owner approves the pending protected job, set environment variable
+   `BIRDS_APPROVED_UPLOAD_RUN_ID` to that one numeric run ID. The owner reviews the
+   exact source, evidence, app/version/build and limitations before releasing credentials.
+   Environment variables may further restrict the enable/acknowledgement values, but
+   no environment change or repository setting bypasses the owner approval gate.
+7. Existing protected secrets only: `BIRDS_DISTRIBUTION_P12_BASE64`,
+   `BIRDS_P12_PASSWORD`, `BIRDS_APP_PROFILE_BASE64`, `BIRDS_ASC_P8_BASE64`.
+   Existing nonsecret environment variable `BIRDS_STAGING_PUBLISHABLE_KEY` must contain
+   the project's modern publishable key. Never embed an account password, secret key,
+   admin token or legacy service credential. No repository/organization secret copies.
+8. Nonsecret preparation checks exact toolchain `macos-15`, Xcode `26.3 / 17C529`,
+   iOS SDK `26.2`, locked Flutter `3.38.5`, source identity and installed modern altool
+   support. Signing revalidates all evidence and one-run approval before writing secrets.
+   Manual provisioning only; no credential, account, legacy CLI or provisioning fallback.
+9. Reconcile Apple processing after an accepted upload. Turn the enable flag off after
+   the invocation. A successful upload is not installed-device validation. No invitation,
+   public release, store review, automatic retry or further build is implied.
 
-1. Approve a distinct real staging bundle ID, app name/SKU, Apple App Store record
-   and build version/number. Replace the temporary identifier in all Runner source
-   configurations and review that commit. The adapter refuses the current temporary
-   IDs and does not silently rewrite them during a build. Confirm the Apple team;
-   NEXTAURA LLC / `9G7GPBG7FB` was previously identified but the config remains blank.
-2. Approve the exact Apple credential batch and GitHub environment destination.
-   Manually pre-provision an Apple Distribution certificate **with its private
-   key** in a password-protected P12, and a matching App Store distribution profile
-   for this exact bundle/team. Record the certificate fingerprint and profile UUID.
-   A distribution certificate is a team signing credential, not an app-scoped key;
-   the profile and checks constrain this workflow, not the certificate's inherent
-   authority. No automatic provisioning or account-credential fallback is present.
-3. Review one explicit Developer uploader credential path. Neither is configured
-   by this example; `uploader_access_reviewed` is a human review record, not API
-   proof of role or ownership:
-   - `uploader_kind: individual`, `uploader_scope: single_app`, and
-     `uploader_issuer_id: null`: the individual key belongs to a Developer user
-     whose app access is restricted to this staging app. An Account Holder's
-     individual key is not narrow merely because it is individual. At runtime
-     an unfiltered app listing must return exactly this app, with no next page.
-     Its JWT has `sub: user` and no issuer.
-   - `uploader_kind: team`, `uploader_scope: all_apps`, and a reviewed nonzero
-     issuer UUID: separately approve the Team Developer key's authority across
-     **all apps in the Apple organization**, its issuer/key ownership, and its
-     protected GitHub destination. Team keys cannot be app-limited. Runtime reads
-     address `/v1/apps/{approved_app_id}` and verify its ID and bundle ID. This
-     restricts the workflow destination, **not the key's authority**. The exported
-     IPA and upload arguments must still match the approved app/version/build.
-     Its JWT has `iss` and no `sub`; the uploader uses `--api-issuer`, never
-     `--api-key-subject user`. There is no fallback between credential types.
-4. Approve the protected environment name and self-review decision. Configure its
-   only required reviewer as the owner `dukkanai`, disable administrator bypass,
-   and select custom branch policies with exactly **`refs/pull/1/merge`**, type
-   branch. Do not use `build/foundation`, `main` or a wildcard for this PR workflow.
-   If preventing self-review is enabled, the owner cannot approve a run they
-   initiated; arrange a separately authorized initiator rather than weaken/bypass
-   the gate. Unknown/missing `can_admins_bypass` or branch-policy fields block the
-   runtime verifier. The built-in read-only API must actually expose these fields;
-   a checked-in screenshot/boolean is not an automatic substitute.
-5. After the credential/storage approval, populate only these environment secrets:
-   `BIRDS_DISTRIBUTION_P12_BASE64`, `BIRDS_P12_PASSWORD`,
-   `BIRDS_APP_PROFILE_BASE64`, `BIRDS_ASC_P8_BASE64`.
-   Do not put values in source, shell history, public logs, artifacts or chat.
-   The one neutral P8 secret holds only the reviewed credential kind, with no
-   individual/team duplicate or fallback. The uploader key is materialized only
-   after building and verifying the IPA.
-6. Set the nonsecret staging publishable key as environment variable
-   `BIRDS_STAGING_PUBLISHABLE_KEY`. Only the modern `sb_publishable_` form is
-   accepted; service credentials are forbidden. Confirm the existing staging URL
-   and `dev.sudanbirds.staging://auth/callback`, and acknowledge the current known
-   limitations. Google/Apple OAuth remain disabled. A synthetic-only staging upload
-   does not prove sign-in, hosted RLS/session behavior, R2 or real-device readiness.
-   Keep upload/media gates closed. Do not invite external testers or imply release
-   readiness. Disable automatic TestFlight group distribution until separately
-   approved; this adapter neither adds testers nor submits for store/beta review.
-7. Complete nonsecret macOS preparation and inspect the installed uploader's
-   supported authentication before approving real credentials. The proposed tuple
-   is **macos-15, Xcode 26.3 / 17C529, iOS SDK 26.2**, listed in GitHub's official
-   runner inventory. On 2026-11-12, the nonsecret probe at source
-   `6981015304351a46633e69f653a536b83dac3d46` confirmed that tuple and the
-   individual subject/upload/wait help flags in
-   [native run 43120062309, ios-simulator job 130857965633](https://github.com/dukkanai/sudan-birds/actions/runs/43120062309/job/130857965633).
-   This was capability evidence, not real credential compatibility. The newly
-   added exact `--api-key` and `--api-issuer` checks still need CI evidence for
-   the new source. Runtime checks require the exact tuple and modern flags for
-   the selected credential path:
-   `--api-key` plus `--api-key-subject` (individual) or `--api-issuer` (team),
-   along with `--upload-package` and `--wait`. Xcode may download a newer altool.
-   Apple's online altool guide documents legacy `--apiKey` / `--apiIssuer`;
-   the modern man-page mirror documents hyphenated spellings. Neither replaces
-   the installed help check or actual credential compatibility verification.
-   No legacy spelling or credential fallback is attempted.
-   Missing Xcode, profile incompatibility, CocoaPods/manual-signing incompatibility,
-   unrecognized entitlements or unsupported IPA layout must stop the run.
-8. Only after reviewing the complete activation, configure the manifest, explicitly
-   enable it, and place the example at `.github/workflows/ios-staging.yml` on the
-   development PR, **not by merging main**. Existing beta/release blockers remain.
-   `pull_request` can run a workflow introduced on the PR when GitHub admits the
-   PR event. A new `workflow_dispatch` is **not assumed available before the workflow
-   exists on the default branch**. GitHub's own run-approval controls still apply.
-9. After the final commit, approve its exact head in repository variable
-   `BIRDS_APPROVED_HEAD_SHA`. Set repository variable `BIRDS_CI_RUNS_JSON` to an
-   object mapping each of the three full workflow paths to positive `id` and
-   `attempt` integers, after all eight jobs on that source succeed. Obtain fresh
-   evidence; do not reuse historical run IDs for a newer head. Trigger a PR label,
-   reopen or synchronization event as authorized. The preflight must succeed.
-10. Before approving the pending protected-environment job, set environment variable
-    `BIRDS_APPROVED_UPLOAD_RUN_ID` to that one workflow run's numeric ID. The owner
-    reviews the exact source, build number, evidence and upload destination, then
-    approves the job. A stale/unavailable variable blocks, rather than uploads.
-    No new run or rerun is authorized merely because a prior upload timed out.
+The existing uploader is a Team Developer key with authority across NEXTAURA apps,
+not an app-scoped key. That authority was disclosed and approved separately. Runtime
+Apple reads, exported bundle identity and upload arguments constrain this workflow to
+this app, not the key's inherent authority. The distribution key is likewise a team
+credential; the profile and signature checks constrain this workflow only.
 
 ## Private signing and outcome handling
 

@@ -48,6 +48,7 @@ class MobileOAuthCoordinator {
   StreamSubscription<Uri>? _links;
   bool _starting = false, _closing = false;
   int _installations = 0;
+  bool _cancelCleanupRequired = false;
   bool _disposed = false;
 
   static Future<bool> _launch(
@@ -139,6 +140,124 @@ class MobileOAuthCoordinator {
       rethrow;
     } finally {
       _starting = false;
+    }
+  }
+
+  Future<void> cancelSignIn() async {
+    if (_flow == null &&
+        !_starting &&
+        !_cancelCleanupRequired &&
+        !storage.failed) {
+      return;
+    }
+    try {
+      await signOut();
+      _cancelCleanupRequired = false;
+    } catch (_) {
+      _cancelCleanupRequired = true;
+      rethrow;
+    }
+  }
+
+  Future<bool> signInWithPassword(String email, String password) async {
+    storage.requireAvailable();
+    final normalized = email.trim();
+    if (normalized.isEmpty ||
+        normalized.length > 254 ||
+        !RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$').hasMatch(normalized) ||
+        password.isEmpty ||
+        password.length > 4096) {
+      throw const AppFailure('أدخل بريداً إلكترونياً صحيحاً وكلمة المرور.');
+    }
+    if (_disposed ||
+        _starting ||
+        _installations != 0 ||
+        _closing ||
+        mainAuth.currentSession != null) {
+      throw const AppFailure(
+        'انتظر انتهاء إجراء الحساب الحالي ثم حاول مجدداً.',
+      );
+    }
+    _starting = true;
+    final previous = _flow;
+    _flow = null;
+    previous?.retire();
+    _OAuthFlow? flow;
+    var installing = false;
+    try {
+      final generation = await storage.prepareSignIn();
+      storage.requireGeneration(generation);
+      flow = _OAuthFlow(generation, createClient(storage.pkceFor(generation)));
+      flow.exchanging =
+          true; // Browser callbacks must not enter this password flow.
+      flow.launched.complete(false);
+      _flow = flow;
+      flow.networkPending = true;
+      final active = flow;
+      final response = await active.client
+          .signInWithPassword(email: normalized, password: password)
+          .whenComplete(() {
+            active.networkPending = false;
+            active.finishRetirement();
+          })
+          .timeout(exchangeTimeout);
+      if (!_current(active)) throw const ObsoleteAuthFlow();
+      final session = response.session;
+      if (session == null ||
+          session.isExpired ||
+          session.refreshToken == null) {
+        throw const AppFailure('لم تكتمل جلسة الدخول. أعد المحاولة.');
+      }
+      final encoded = sanitizedSessionJson(jsonEncode(session.toJson()));
+      installing = true;
+      _installations++;
+      await _exclusive(() async {
+        if (!_current(active)) throw const ObsoleteAuthFlow();
+        await storage.persistCandidate(active.generation, encoded);
+        if (!_current(active)) throw const ObsoleteAuthFlow();
+        await install(encoded);
+        if (!_current(active)) throw const ObsoleteAuthFlow();
+        storage.acceptCandidate(active.generation);
+        _flow = null;
+      });
+      return true;
+    } catch (error) {
+      var cleanupFailed = false;
+      if (flow != null && _current(flow)) {
+        try {
+          await signOut();
+        } catch (_) {
+          cleanupFailed = true;
+          localDiagnostics.record(
+            FailureBoundary.oauthCleanup,
+            FailureCode.unexpected,
+            outcomeUnknown: true,
+          );
+        }
+      }
+      if (storage.failed) throw const SecureStorageFailure();
+      if (cleanupFailed) {
+        throw const AppFailure(
+          'لم يكتمل الدخول وتعذر تأكيد إنهاء الجلسة لدى الخدمة. لم نؤكد إبطال جلسة الخادم.',
+          outcomeUnknown: true,
+        );
+      }
+      if (error is ObsoleteAuthFlow) {
+        throw const AppFailure('أُلغي تسجيل الدخول.');
+      }
+      if (error is AuthException && error.statusCode == '400') {
+        throw const AppFailure(
+          'تعذر تسجيل الدخول. تحقق من البريد وكلمة المرور وتفعيل الحساب.',
+        );
+      }
+      if (error is AppFailure) rethrow;
+      throw const AppFailure(
+        'لم يكتمل تسجيل الدخول. تحقق من الاتصال ثم أعد المحاولة.',
+      );
+    } finally {
+      if (installing) _installations--;
+      _starting = false;
+      flow?.retire();
     }
   }
 

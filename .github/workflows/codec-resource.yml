@@ -2,6 +2,9 @@ name: Local codec resource experiment
 on:
   pull_request:
     paths:
+      - '.github/workflows/ios-staging.yml'
+      - 'scripts/ios_staging*'
+      - 'docs/examples/ios-staging/**'
       - 'supabase/functions/codec-diagnostic/**'
       - 'supabase/functions/_shared/images*'
       - 'supabase/functions/_shared/codec_capacity*'

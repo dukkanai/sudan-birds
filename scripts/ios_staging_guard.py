@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Fail-closed, read-only gate for the INERT iOS staging example.
+"""Fail-closed, read-only gate for the disabled-by-default iOS staging trial.
 
 Remote evidence is fetched live; a JSON file/boolean is not environment proof.
 No signing, credentials provisioning, writes to GitHub, or Apple requests here.
@@ -38,6 +38,20 @@ def require(condition, message):
 
 def full(value, pattern):
     return isinstance(value, str) and re.fullmatch(pattern, value) is not None
+
+
+def runtime_config(c, env):
+    """Explicit, head-bound runtime approval; never rewrite checked-in consent."""
+    require(env.get('BIRDS_ENABLE_IOS_STAGING') == 'true',
+            'iOS trial upload is disabled by default.')
+    approved = env.get('BIRDS_APPROVED_HEAD_SHA', '')
+    require(full(approved, SHA.pattern)
+            and env.get('BIRDS_TRIAL_LIMITATIONS_HEAD_SHA') == approved,
+            'Trial limitations must be acknowledged for this exact source head.')
+    result = dict(c)
+    result['enabled'] = True
+    result['staging_limitations_acknowledged'] = True
+    return result
 
 
 def validate_uploader(c):
@@ -100,7 +114,10 @@ def validate_event(c, event, env):
             'Unexpected repository.')
     require(env.get('GITHUB_REF') == 'refs/pull/1/merge' and pr.get('number') == 1,
             'Unexpected PR number/ref.')
-    require(event.get('action') in {'labeled', 'synchronize', 'reopened'}, 'Unsupported PR action.')
+    require(event.get('action') == 'labeled'
+            and event.get('label', {}).get('name') == 'birds-testflight-trial',
+            'Only the deliberate birds-testflight-trial label event is allowed.')
+    runtime_config(c, env)
     for login in [env.get('GITHUB_ACTOR', ''), env.get('GITHUB_TRIGGERING_ACTOR', ''),
                   pr.get('user', {}).get('login', ''), event.get('sender', {}).get('login', '')]:
         require(login and not login.endswith('[bot]') and 'dependabot' not in login.lower(),
@@ -282,7 +299,7 @@ def live_gate(c, event, env, api):
 
 def main():
     try:
-        c = json.loads(CONFIG.read_text())
+        c = runtime_config(json.loads(CONFIG.read_text()), os.environ)
         # Disabled config must fail before any network call or secret operation.
         validate_config(c)
         event = json.loads(Path(os.environ['GITHUB_EVENT_PATH']).read_text())

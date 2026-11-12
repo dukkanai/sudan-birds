@@ -27,7 +27,7 @@ import urllib.request
 import zipfile
 
 from ios_staging_guard import (Blocked, CONFIG, ROOT, GitHub, NoRedirect, full,
-                               live_gate, require, validate_config, validate_uploader)
+                               live_gate, require, runtime_config, validate_config, validate_uploader)
 
 SECRET_NAMES = ('BIRDS_DISTRIBUTION_P12_BASE64', 'BIRDS_P12_PASSWORD',
                 'BIRDS_APP_PROFILE_BASE64', 'BIRDS_ASC_P8_BASE64')
@@ -486,7 +486,7 @@ def main():
     sha = None
     try:
         os.umask(0o077)
-        c = json.loads(CONFIG.read_text())
+        c = runtime_config(json.loads(CONFIG.read_text()), os.environ)
         validate_config(c)
         require(sys.platform == 'darwin' and os.environ.get('RUNNER_ENVIRONMENT') == 'github-hosted',
                 'Signing is restricted to ephemeral GitHub-hosted macOS.')

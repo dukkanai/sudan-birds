@@ -84,7 +84,9 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('إضافة طلب'));
     await tester.pumpAndSettle();
-    expect(find.text('الدخول باستخدام Google'), findsOneWidget);
+    expect(find.text('الدخول بالبريد وكلمة المرور'), findsOneWidget);
+    expect(find.text('الدخول باستخدام Google'), findsNothing);
+    expect(find.text('الدخول باستخدام Apple'), findsNothing);
     expect(find.byType(PublicationPage), findsNothing);
   });
   testWidgets('feed failure presents working retry', (tester) async {

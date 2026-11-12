@@ -4,6 +4,9 @@ on:
   workflow_dispatch:
   pull_request:
     paths:
+      - '.github/workflows/ios-staging.yml'
+      - 'scripts/ios_staging*'
+      - 'docs/examples/ios-staging/**'
       - 'app/**'
       - 'scripts/flutter_plugin_repositories_test.py'
       - 'scripts/*native_dependency_evidence*'

@@ -14,11 +14,13 @@ class SupabaseBirdsRepository implements BirdsRepository {
     required this.authRedirect,
     this.authStorage,
     this.oauth,
+    this.oauthEnabled = false,
   });
   final SupabaseClient client;
   final String authRedirect;
   final SecureAuthStorage? authStorage;
   final MobileOAuthCoordinator? oauth;
+  final bool oauthEnabled;
 
   void _requireStorage() {
     authStorage?.requireAvailable();
@@ -568,6 +570,11 @@ class SupabaseBirdsRepository implements BirdsRepository {
     if (provider != 'google' && provider != 'apple') {
       throw const AppFailure('موفر تسجيل الدخول غير مدعوم.');
     }
+    if (!oauthEnabled) {
+      throw const AppFailure(
+        'دخول Google وApple غير متاح في نسخة التجربة الحالية. استخدم البريد وكلمة المرور.',
+      );
+    }
     if (authRedirect.isEmpty) {
       throw const AppFailure('لم يُضبط رابط العودة الآمن لتسجيل الدخول بعد.');
     }
@@ -590,6 +597,26 @@ class SupabaseBirdsRepository implements BirdsRepository {
     }
     return true;
   });
+  @override
+  Future<Result<bool>> signInWithPassword(String email, String password) =>
+      protect(() async {
+        validateAuthRedirect(
+          authRedirect,
+        ); // This path is restricted to the staging identity.
+        if (authStorage == null || oauth == null) {
+          throw const SecureStorageFailure();
+        }
+        authStorage!.requireAvailable();
+        if (sessionCleanupRequired) throw const SecureStorageFailure();
+        return oauth!.signInWithPassword(email, password);
+      }, timeout: null);
+
+  @override
+  Future<Result<bool>> cancelSignIn() => protect(() async {
+    await oauth?.cancelSignIn();
+    return true;
+  }, timeout: null);
+
   @override
   Future<Result<bool>> signOut() => protect(() async {
     if (oauth != null) {

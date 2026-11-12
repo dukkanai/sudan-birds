@@ -309,6 +309,8 @@ abstract interface class BirdsRepository {
   Future<Result<bool>> block(String userId, bool blocked);
   Future<Result<List<FeedEntry>>> feed(FeedKind kind, FeedFilter filter);
   Future<Result<bool>> signIn(String provider);
+  Future<Result<bool>> signInWithPassword(String email, String password);
+  Future<Result<bool>> cancelSignIn();
   Future<Result<bool>> signOut();
   Future<Result<bool>> publish(Publication publication);
   Future<Result<bool>> report(FeedEntry entry, String reason);
@@ -418,6 +420,13 @@ class PreviewRepository implements BirdsRepository {
   ) async => const Result.success([]);
   @override
   Future<Result<bool>> signIn(String provider) async => _unavailable;
+  @override
+  Future<Result<bool>> signInWithPassword(
+    String email,
+    String password,
+  ) async => _unavailable;
+  @override
+  Future<Result<bool>> cancelSignIn() async => const Result.success(true);
   @override
   Future<Result<bool>> signOut() async => _unavailable;
   @override

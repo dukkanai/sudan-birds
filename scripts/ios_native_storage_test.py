@@ -585,15 +585,41 @@ class ProgressGuards(unittest.TestCase):
             smoke.os.fstat(pipe.reader)
 
     def test_exact_pinned_tool_messages_only_fixed_observations(self):
-        parser = progress.MachineProgress()
+        parser = progress.MachineProgress(clock=Mock(side_effect=[10.0, 11.25]))
         parser.feed(b'Running pod install...          85ms\n')
         parser.feed(b'Running Xcode build...          \n')
         parser.feed(b'Xcode build done.               12.3s\n')
         self.assertEqual(parser.tool_summary(),
                          'TOOL_PROGRESS: pod_start=observed xcode_start=observed '
-                         'xcode_return=observed input_limit=no line_limit=no partial_line=no')
+                         'xcode_return=observed input_limit=no line_limit=no partial_line=no xcode_return_elapsed_ms=1250')
         self.assertNotIn('12.3', parser.tool_summary())
         self.assertIn('storage_test=unknown', parser.summary())
+
+    def test_return_timing_valid_edges_and_unavailable_reader(self):
+        for end, expected in [(5.0, 0), (5.125, 125), (605.0, 600000)]:
+            parser = progress.MachineProgress(clock=Mock(side_effect=[5.0, end]))
+            parser.feed(b'Xcode build done. 999s\n')
+            self.assertIn(f'xcode_return_elapsed_ms={expected}', parser.tool_summary())
+            self.assertIn('xcode_return_elapsed_ms=unknown', parser.tool_summary(unavailable=True))
+
+    def test_invalid_return_clocks_only_hide_timing(self):
+        for start, end in [(5, 4), (5, 606), (-1, 5), (True, 5), (5, False),
+                           ('SECRET', 5), (5, 'SECRET'), (float('nan'), 5),
+                           (5, float('inf')), (10**1000, 5), (5, 10**1000),
+                           (RuntimeError('SECRET'), 5), (5, RuntimeError('SECRET'))]:
+            parser = progress.MachineProgress(clock=Mock(side_effect=[start, end]))
+            parser.feed(b'Xcode build done. 2s\n')
+            self.assertIn('xcode_return=observed', parser.tool_summary())
+            self.assertIn('xcode_return_elapsed_ms=unknown', parser.tool_summary())
+            self.assertNotIn('SECRET', parser.tool_summary())
+
+    def test_repeated_return_markers_make_timing_unknown(self):
+        parser = progress.MachineProgress(clock=Mock(side_effect=[0, 1, 2, 3]))
+        parser.feed(b'Xcode build done. 1s\n')
+        self.assertIn('xcode_return_elapsed_ms=1000', parser.tool_summary())
+        for _ in range(2):
+            parser.feed(b'Xcode build done. 1s\n')
+            self.assertIn('xcode_return_elapsed_ms=unknown', parser.tool_summary())
 
     def test_tool_return_does_not_claim_success_or_process_start(self):
         parser = progress.MachineProgress()
@@ -658,7 +684,7 @@ class ProgressGuards(unittest.TestCase):
         parser.feed(b'Running Xcode build...\n')
         self.assertEqual(parser.tool_summary(unavailable=True),
                          'TOOL_PROGRESS: pod_start=unknown xcode_start=unknown '
-                         'xcode_return=unknown input_limit=unknown line_limit=unknown partial_line=unknown')
+                         'xcode_return=unknown input_limit=unknown line_limit=unknown partial_line=unknown xcode_return_elapsed_ms=unknown')
 
     def test_real_timeout_keeps_unterminated_tool_start_without_raw_text(self):
         output = io.StringIO()

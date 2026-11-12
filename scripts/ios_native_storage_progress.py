@@ -1,9 +1,11 @@
 """Bounded diagnostic-only Flutter machine progress; never retain raw output."""
 import json
+import math
 import os
 import re
 import select
 import threading
+import time
 
 TEST_NAME = 'real native storage and restore fence smoke'
 MAX_LINE = 8192
@@ -35,7 +37,10 @@ class MachineProgress:
     native tool messages yield fixed observations. Raw output, URIs, errors
     and arbitrary test names are discarded.
     """
-    def __init__(self):
+    def __init__(self, clock=None):
+        self.clock = clock if clock is not None else time.monotonic
+        self.started = self.read_clock()
+        self.xcode_return_elapsed_ms = None
         self.buffer = bytearray()
         self.total = 0
         self.dropping = False
@@ -50,6 +55,15 @@ class MachineProgress:
         self.pod_started = False
         self.xcode_started = False
         self.xcode_returned = False
+
+    def read_clock(self):
+        try:
+            value = self.clock()
+            if type(value) in (int, float) and math.isfinite(value) and value >= 0:
+                return value
+        except Exception:
+            pass  # Diagnostic failure never replaces the native test outcome.
+        return None
 
     def feed(self, chunk):
         self.total = min(MAX_INPUT + 1, self.total + len(chunk))
@@ -125,6 +139,15 @@ class MachineProgress:
                 rb'Xcode build done\.' + TOOL_PADDING + TOOL_DURATION, raw):
             # Flutter emits this before checking buildResult.success. Never
             # describe this as build success, installation or test execution.
+            now = self.read_clock()
+            elapsed = None if now is None or self.started is None else now - self.started
+            # Receipt time, not Flutter's reported build duration or success.
+            # Repeated markers are ambiguous; never replace the first with a later time.
+            if (not self.xcode_returned and elapsed is not None
+                    and math.isfinite(elapsed) and 0 <= elapsed <= 600):
+                self.xcode_return_elapsed_ms = int(elapsed * 1000)
+            else:
+                self.xcode_return_elapsed_ms = None
             self.xcode_returned = True
 
     def finish(self):
@@ -145,7 +168,9 @@ class MachineProgress:
                 + ' xcode_return=' + observed(self.xcode_returned)
                 + ' input_limit=' + limit(self.input_limit)
                 + ' line_limit=' + limit(self.line_limit)
-                + ' partial_line=' + limit(self.partial_line))
+                + ' partial_line=' + limit(self.partial_line)
+                + ' xcode_return_elapsed_ms=' + (str(self.xcode_return_elapsed_ms)
+                    if not unavailable and self.xcode_return_elapsed_ms is not None else 'unknown'))
 
     def summary(self, unavailable=False):
         device = 'observed' if self.device and not unavailable else 'unknown'

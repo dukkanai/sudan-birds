@@ -43,6 +43,22 @@ remain unknown. Fixed `input_limit`, `line_limit` and `partial_line` flags expla
 why the stream was incomplete. Any parser-budget exhaustion already changed the
 old summary to `stream=incomplete`; `stream=bounded` never meant exhaustion.
 
+`xcode_return_elapsed_ms` records the first exact return message's receipt time
+relative to parser initialization immediately before the child starts. Only an
+integer from 0 through 600000 is emitted. This is not Flutter's reported build
+duration or proof of build success. Invalid or failing clocks, backward or
+out-of-window times, repeated return messages and an unavailable reader leave
+the timing `unknown`; they cannot replace the original test failure. No raw
+clock values, native messages or paths are retained. The existing command
+deadline remains 600 seconds.
+
+This receipt time can distinguish a late return from substantial remaining time
+afterward. It cannot distinguish the subsequent waits: pinned Flutter's
+[simulator startup](https://github.com/flutter/flutter/blob/3.38.5/packages/flutter_tools/lib/src/ios/simulators.dart)
+still checks the build result, installs/launches the application and discovers
+its VM service. [Integration startup](https://github.com/flutter/flutter/blob/3.38.5/packages/flutter_tools/lib/src/test/integration_test_device.dart)
+also starts DDS before exposing the URI used by the observed process event.
+
 Observations do not control cleanup, process exit status, CI success or signing
 readiness. No verbose mode, raw artifact or extra native command is introduced.
 Build/install/launch/VM discovery remain indistinguishable when no corresponding
@@ -80,3 +96,16 @@ Local tests use synthetic machine events, real local child pipes, output floods,
 timeout/reader faults and retained pipe handles. They do not run an iOS simulator
 or establish machine-event compatibility on GitHub. Fresh CI on the resulting
 source is required; signing remains blocked until all required checks pass.
+
+At `175241b34cc9adde8ad76981903cc6b7f6133aa5`,
+[job 131426406256](https://github.com/dukkanai/sudan-birds/actions/runs/43287999430/job/131426406256)
+passed the storage command in 348290 ms and verified simulator deletion. Its
+parser observed both the device process and the fixture finish. Source
+`8b73608d7a4f0cbc15aebdc27b52a49e535fcd62` changed only signing diagnostics and
+documentation. Native [run 43299013193](https://github.com/dukkanai/sudan-birds/actions/runs/43299013193)
+attempts 1 and 2 timed out at 600565 and 600731 ms, respectively. Both observed
+Xcode return but neither established the device process or fixture completion;
+neither exhausted parser limits. Both verified deletion of the owned simulator.
+Other seven required checks passed, not the all-eight gate. Prior success does
+not establish this source's runtime pass. The return timestamp was absent from
+those runs, so this new diagnostic cannot reconstruct their wait durations.

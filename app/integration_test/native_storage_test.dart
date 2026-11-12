@@ -12,8 +12,9 @@ import '../test/support/native_storage_checks.dart';
 const _scope = 'native-storage-smoke.invalid';
 const _otherScope = 'native-storage-other.invalid';
 const _missingScope = 'native-storage-missing.invalid';
-const _fixture = 'SYNTHETIC-NON-LOGIN-STORAGE-FIXTURE';
-const _updatedFixture = 'SYNTHETIC-NON-LOGIN-UPDATED-FIXTURE';
+const _fixture = '{"access_token":"SYNTHETIC-NON-LOGIN-STORAGE-FIXTURE"}';
+const _updatedFixture =
+    '{"access_token":"SYNTHETIC-NON-LOGIN-UPDATED-FIXTURE"}';
 const _verifier = 'SYNTHETIC-NON-PKCE-FIXTURE';
 
 // Attempt every exact-key cleanup even after an earlier failure. Never deleteAll

@@ -90,6 +90,8 @@ jobs:
           cache: true
       - run: cd app && flutter pub get --enforce-lockfile
       - run: cd app && flutter build ios --simulator --debug --no-codesign
+      - name: Reject tracked native source drift after CocoaPods integration
+        run: git diff --quiet HEAD -- app/ios
       - name: Capture unsigned iOS simulator dependency evidence
         run: bash scripts/capture_native_dependency_evidence.sh ios
       - name: Validate and scan iOS evidence before upload

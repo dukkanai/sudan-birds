@@ -5,6 +5,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'domain.dart';
 import 'local_diagnostics.dart';
+import 'session_serialization.dart';
 
 const secureStorageMessage =
     'تعذر تأكيد حفظ أو مسح بيانات الدخول في التخزين الآمن. أُوقفت إجراءات الحساب. افتح قفل الجهاز وأعد مسح الجلسة من زر الحساب قبل تسجيل الدخول مجدداً.';
@@ -162,26 +163,52 @@ class SecureAuthStorage {
   }
 
   Future<void> initialize() async {
+    final generation = _generation;
     // Must precede ANY secret read or SDK restore, including after reinstall.
     final allowed = await _run(fence.mayRestore);
+    requireGeneration(generation);
     if (!allowed) {
       await clearAfterSignOut();
     } else {
-      await _run(() => store.read(sessionKey));
+      await _readSession();
+      requireGeneration(generation);
       // A verifier cannot be resumed without its live, isolated flow client.
       await _remove(pkceKey);
+      requireGeneration(generation);
       acceptsSessions = true;
     }
   }
 
-  Future<String?> _read(String key) => _run(() => store.read(key));
+  Future<String?> _readSession() {
+    final generation = _generation;
+    return _run(() async {
+      requireGeneration(generation);
+      final value = await store.read(sessionKey);
+      requireGeneration(generation);
+      if (value == null) return null;
+      final sanitized = sanitizedSessionJson(value);
+      if (sanitized != value) {
+        requireGeneration(generation);
+        await store.write(sessionKey, sanitized);
+        requireGeneration(generation);
+        final persisted = await store.read(sessionKey);
+        requireGeneration(generation);
+        if (persisted != sanitized) {
+          throw const SecureStorageFailure();
+        }
+      }
+      requireGeneration(generation);
+      return sanitized;
+    });
+  }
 
   Future<void> _writeSession(String value) {
     final generation = _generation;
     return _run(() async {
       if (!acceptsSessions || generation != _generation) return;
-      await store.write(sessionKey, value);
-      if (await store.read(sessionKey) != value) {
+      final sanitized = sanitizedSessionJson(value);
+      await store.write(sessionKey, sanitized);
+      if (await store.read(sessionKey) != sanitized) {
         throw const SecureStorageFailure();
       }
     });
@@ -228,9 +255,10 @@ class SecureAuthStorage {
   /// Generic SDK events cannot reopen the durable restore fence.
   Future<void> persistCandidate(int generation, String value) => _run(() async {
     requireGeneration(generation);
-    await store.write(sessionKey, value);
+    final sanitized = sanitizedSessionJson(value);
+    await store.write(sessionKey, sanitized);
     requireGeneration(generation);
-    if (await store.read(sessionKey) != value) {
+    if (await store.read(sessionKey) != sanitized) {
       throw const SecureStorageFailure();
     }
     requireGeneration(generation);
@@ -260,7 +288,7 @@ class _SecureSessionStorage extends LocalStorage {
   Future<bool> hasAccessToken() async => await accessToken() != null;
   @override
   Future<String?> accessToken() async =>
-      owner.acceptsSessions ? owner._read(SecureAuthStorage.sessionKey) : null;
+      owner.acceptsSessions ? owner._readSession() : null;
   @override
   Future<void> persistSession(String value) => owner._writeSession(value);
   @override

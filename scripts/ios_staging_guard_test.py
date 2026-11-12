@@ -355,6 +355,20 @@ class SigningTests(unittest.TestCase):
             with self.assertRaises(gate.Blocked):
                 sign.validate_apps({'data': wrong}, c)
 
+    def test_uploader_filename_is_kind_specific_and_fails_closed(self):
+        for factory, prefix in ((config, 'ApiKey_'), (team_config, 'AuthKey_')):
+            c = factory()
+            self.assertEqual(sign.uploader_key_filename(c), prefix + 'ABC1234567.p8')
+            for key_id in (None, '', '../ABC1234', 'ABC1234567/other', 'ABC1234567\n',
+                           'abc1234567', 'ＡBC1234567', 'ABC1234567.p8', 'ABC12345678'):
+                with self.subTest(kind=c['uploader_kind'], key_id=key_id):
+                    with self.assertRaises(gate.Blocked):
+                        sign.uploader_key_filename(dict(c, uploader_key_id=key_id))
+            for mutation in ({'uploader_kind': 'unknown'}, {'uploader_access_reviewed': False},
+                             {'uploader_scope': 'unknown'}, {'uploader_role': 'ADMIN'}):
+                with self.assertRaises(gate.Blocked):
+                    sign.uploader_key_filename(dict(c, **mutation))
+
     def test_auth_flags_are_explicit_and_help_is_exact(self):
         for c in (config(), team_config()):
             auth = sign.uploader_auth(c)
@@ -394,6 +408,9 @@ class SigningTests(unittest.TestCase):
                         else:
                             with self.assertRaises((gate.Blocked, subprocess.TimeoutExpired)):
                                 invocation.upload_verified_ipa(private, Path(folder) / 'verified.ipa')
+                    invocation.write.assert_called_once_with(
+                        ('AuthKey_' if c['uploader_kind'] == 'team' else 'ApiKey_') + c['uploader_key_id'] + '.p8',
+                        b'synthetic')
                     self.assertEqual(read.call_args_list[0].args[0], sign.apps_path(c))
                     if scenario in ('wrong_app', 'existing', 'paged'):
                         invocation.run.assert_not_called()

@@ -6,6 +6,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'auth_config.dart';
 import 'domain.dart';
 import 'secure_auth_storage.dart';
+import 'session_serialization.dart';
 
 typedef OAuthClientFactory = GoTrueClient Function(GotrueAsyncStorage storage);
 typedef OAuthLauncher =
@@ -170,7 +171,7 @@ class MobileOAuthCoordinator {
       if (session.isExpired || session.refreshToken == null) {
         throw const AppFailure(oauthRetryMessage);
       }
-      final encoded = jsonEncode(session.toJson());
+      final encoded = sanitizedSessionJson(jsonEncode(session.toJson()));
       installing = true;
       _installations++;
       await _exclusive(() async {

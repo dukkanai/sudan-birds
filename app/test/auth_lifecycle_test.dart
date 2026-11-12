@@ -92,7 +92,11 @@ class Harness {
   void complete(String code, String account) {
     requests[code]!.complete(
       http.Response(
-        jsonEncode(session(account)),
+        jsonEncode({
+          ...session(account),
+          'provider_token': 'synthetic-provider-access',
+          'provider_refresh_token': 'synthetic-provider-refresh',
+        }),
         200,
         headers: {'content-type': 'application/json'},
       ),
@@ -108,6 +112,35 @@ class Harness {
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  test(
+    'winning OAuth strips provider credentials before install and storage',
+    () async {
+      String? installed;
+      final h = Harness(
+        install: (value) async {
+          installed = value;
+        },
+      );
+      addTearDown(h.dispose);
+      await h.start();
+      final callback = h.callback('provider-hygiene');
+      await until(() => h.requests.containsKey('provider-hygiene'));
+      h.complete('provider-hygiene', a);
+      await callback;
+      final saved = h.memory.values[SecureAuthStorage.sessionKey];
+      expect(saved, isNotNull);
+      expect(installed, saved);
+      final data = jsonDecode(saved!) as Map;
+      expect(data.containsKey('provider_token'), false);
+      expect(data.containsKey('provider_refresh_token'), false);
+      final restored = Session.fromJson(Map<String, dynamic>.from(data));
+      expect(restored, isNotNull);
+      expect(restored!.user.id, a);
+      expect(restored.accessToken, isNotEmpty);
+      expect(data['refresh_token'], session(a)['refresh_token']);
+    },
+  );
 
   test('failed secret deletion stays blocked across process restart', () async {
     final memory = MemoryCredentials();

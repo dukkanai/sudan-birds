@@ -101,14 +101,19 @@ void main() {
     addTearDown(storage.dispose);
     await storage.session.initialize();
     expect(await storage.session.hasAccessToken(), false);
-    await storage.session.persistSession('synthetic-session');
+    await storage.session.persistSession(
+      '{"access_token":"synthetic-session"}',
+    );
     await storage
         .pkceFor(storage.generation)
         .setItem(
           key: SecureAuthStorage.sdkPkceKey,
           value: 'synthetic-verifier',
         );
-    expect(await storage.session.accessToken(), 'synthetic-session');
+    expect(
+      await storage.session.accessToken(),
+      '{"access_token":"synthetic-session"}',
+    );
     expect(await storage.session.hasAccessToken(), true);
     expect(
       await storage
@@ -139,7 +144,9 @@ void main() {
         addTearDown(subscription.cancel);
         final Future<dynamic> attempt = switch (operation) {
           'read' => storage.initialize(),
-          'write' => storage.session.persistSession('synthetic-session'),
+          'write' => storage.session.persistSession(
+            '{"access_token":"synthetic-session"}',
+          ),
           _ => storage.session.removePersistedSession(),
         };
         await expectLater(attempt, throwsA(safeStorageFailure));
@@ -166,7 +173,7 @@ void main() {
       addTearDown(storage.dispose);
       await expectLater(
         write
-            ? storage.session.persistSession('new-session')
+            ? storage.session.persistSession('{"access_token":"new-session"}')
             : storage.session.removePersistedSession(),
         throwsA(safeStorageFailure),
       );
@@ -199,9 +206,15 @@ void main() {
       await storage.session.persistSession('stale-auth-event');
       expect(memory.values, {'unrelated': 'preserve'});
       final generation = await storage.prepareSignIn();
-      await storage.persistCandidate(generation, 'explicit-new-login');
+      await storage.persistCandidate(
+        generation,
+        '{"access_token":"explicit-new-login"}',
+      );
       storage.acceptCandidate(generation);
-      expect(memory.values[SecureAuthStorage.sessionKey], 'explicit-new-login');
+      expect(
+        memory.values[SecureAuthStorage.sessionKey],
+        '{"access_token":"explicit-new-login"}',
+      );
     },
   );
 
@@ -212,7 +225,9 @@ void main() {
       final storage = activeStorage(memory);
       addTearDown(storage.dispose);
       final writing = expectLater(
-        storage.session.persistSession('late-synthetic-session'),
+        storage.session.persistSession(
+          '{"access_token":"late-synthetic-session"}',
+        ),
         throwsA(safeStorageFailure),
       );
       await tester.pump();
@@ -427,7 +442,8 @@ void main() {
       final memory = MemoryCredentials()..fail = 'remove';
       final storage = activeStorage(memory);
       addTearDown(storage.dispose);
-      memory.values[SecureAuthStorage.sessionKey] = 'synthetic-session';
+      memory.values[SecureAuthStorage.sessionKey] =
+          '{"access_token":"synthetic-session"}';
       final client = SupabaseClient(
         'https://example.test',
         'public-test-key',

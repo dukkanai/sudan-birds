@@ -129,6 +129,14 @@ def apps_path(c):
     return '/v1/apps/' + c['asc_app_id'] if c['uploader_kind'] == 'team' else '/v1/apps?limit=200'
 
 
+def uploader_key_filename(c):
+    """Match altool's credential-kind lookup without a filename/auth fallback."""
+    validate_uploader(c)
+    require(full(c.get('uploader_key_id'), r'[A-Z0-9]{10}'), 'Uploader key identifier rejected.')
+    prefix = 'AuthKey_' if c['uploader_kind'] == 'team' else 'ApiKey_'
+    return prefix + c['uploader_key_id'] + '.p8'
+
+
 def uploader_auth(c):
     validate_uploader(c)
     auth = ['--api-key', c['uploader_key_id']]
@@ -445,7 +453,7 @@ class Invocation:
         # Called only after exported identity/version/signature/profile checks.
         c = self.c
         # Uploader key is materialized only after all project build commands finish.
-        key = self.write('ApiKey_' + c['uploader_key_id'] + '.p8', decode_secret(private['BIRDS_ASC_P8_BASE64']))
+        key = self.write(uploader_key_filename(c), decode_secret(private['BIRDS_ASC_P8_BASE64']))
         token = make_uploader_jwt(c, key, self.run, time.time())
         validate_apps(apple_get(apps_path(c), token), c)
         query = urllib.parse.urlencode({'filter[app]': c['asc_app_id'], 'filter[version]': c['build_number'], 'limit': '2'})

@@ -96,6 +96,8 @@ class TransportTests(unittest.TestCase):
         self.assertNotIn('shell', kwargs)
         self.assertEqual(set(kwargs['env']), {'PATH', 'DEVELOPER_DIR', 'LC_ALL'})
         self.assertEqual(kwargs['stdin'], subprocess.DEVNULL)
+        self.assertEqual(kwargs['stdout'], subprocess.PIPE)
+        self.assertEqual(kwargs['stderr'], subprocess.STDOUT)
         self.assertGreater(self.child.wait.call_args_list[0].kwargs['timeout'], 0)
         self.assertLessEqual(self.child.wait.call_args_list[0].kwargs['timeout'], probe.TIMEOUT)
 

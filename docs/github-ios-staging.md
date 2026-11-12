@@ -162,6 +162,26 @@ as upload accepted with processing unverified until a read observes `VALID`.
 That still does not prove testers received or installed it. No automatic retry,
 external distribution, production promotion or main merge exists here.
 
+## First protected invocation (2026-11-12)
+
+Run [43284533641](https://github.com/dukkanai/sudan-birds/actions/runs/43284533641)
+used source `f2afc1f`, after all eight exact-source checks and explicit owner
+approval. Its live preflight passed. The signing adapter stopped at the uploader
+capability check, before writing credential files, importing a keychain, creating
+an IPA or calling Apple. Its sanitized result was `not_uploaded`,
+`cleanup_complete: true`, with no IPA digest. This is not an uncertain upload or
+an Apple authentication rejection. No upload retry was attempted.
+
+The CI probe combined the help command's stdout/stderr, but the original signing
+adapter inspected stdout alone. That code-path difference is verified; the exact
+suppressed help output from the failed runner was not retained, so a stderr-only
+response is a supported explanation rather than a directly observed fact. The
+adapter now reuses the same fixed, bounded, credential-free query as the CI probe.
+Exact required options, source/run/environment checks, and all signing/upload
+boundaries remain unchanged. Raw signing diagnostics still stay private. New
+source requires fresh checks and its own protected invocation; old green checks
+are not evidence for the correction.
+
 ## Local validation and remaining blockers
 
 From repository root:

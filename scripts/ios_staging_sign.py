@@ -26,6 +26,7 @@ import urllib.parse
 import urllib.request
 import zipfile
 
+import ios_toolchain_probe as toolchain_probe
 from ios_staging_guard import (Blocked, CONFIG, ROOT, GitHub, NoRedirect, full,
                                live_gate, require, runtime_config, validate_config, validate_uploader)
 
@@ -149,6 +150,16 @@ def validate_uploader_help(help_text, c):
     options = uploader_auth(c)[::2] + ['--upload-package', '--wait']
     require(all(re.search(r'(?<![\w-])' + re.escape(flag) + r'(?![\w-])', help_text) for flag in options),
             'Installed altool lacks the exact reviewed upload/authentication flags; no credential fallback.')
+
+
+def check_uploader_capability(c):
+    # Reuse the exact credential-free CI query: altool may write help to stderr.
+    # Never merge or expose diagnostic streams from actual signing/upload commands.
+    try:
+        help_text = toolchain_probe.query(toolchain_probe.COMMANDS[2])
+    except toolchain_probe.ProbeFailure:
+        raise Blocked('Bounded nonsecret uploader capability query failed; no credential fallback.') from None
+    validate_uploader_help(help_text, c)
 
 
 
@@ -378,8 +389,8 @@ class Invocation:
         require(xcode == 'Xcode ' + c['xcode_version'] + '\nBuild version ' + c['xcode_build'], 'Exact Xcode build unavailable.')
         require(self.run(['/usr/bin/xcrun', '--sdk', 'iphoneos', '--show-sdk-version'], 'sdk').decode().strip() == c['ios_sdk'],
                 'Exact iOS SDK unavailable.')
-        help_text = self.run(['/usr/bin/xcrun', 'altool', '--help'], 'uploader-capability').decode()
-        validate_uploader_help(help_text, c)
+        self.stage = 'uploader-capability'
+        check_uploader_capability(c)
         # Secrets live only in this private temp directory; no source or cache destinations.
         p12 = self.write('certificate.p12', decode_secret(private['BIRDS_DISTRIBUTION_P12_BASE64']))
         profile_file = self.write('profile.mobileprovision', decode_secret(private['BIRDS_APP_PROFILE_BASE64']))

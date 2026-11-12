@@ -34,6 +34,34 @@ SECRET_NAMES = ('BIRDS_DISTRIBUTION_P12_BASE64', 'BIRDS_P12_PASSWORD',
                 'BIRDS_APP_PROFILE_BASE64', 'BIRDS_ASC_P8_BASE64')
 GROUP_TERM_SECONDS = 2.0
 GROUP_KILL_SECONDS = 2.0
+IMPORT_DIAGNOSTIC_LIMIT = 4096
+
+
+def private_failure_message(stage, diagnostic=b''):
+    """Return fixed import categories only, never tool text, paths or credentials."""
+    message = 'Private tool failed at ' + stage
+    if stage == 'certificate-import':
+        category = 'unclassified'
+        if isinstance(diagnostic, bytes) and len(diagnostic) <= IMPORT_DIAGNOSTIC_LIMIT:
+            # These are diagnostic labels, not proof of a particular root cause.
+            # For example, MAC verification failure does not establish a wrong password.
+            try:
+                text = diagnostic.decode('utf-8', errors='strict').lower()
+            except UnicodeError:
+                text = ''
+            patterns = {
+                'pkcs12_mac_verification_failed': 'mac verification failed',
+                'format_not_recognized': 'unknown format',
+                'interaction_not_allowed': 'user interaction is not allowed',
+                'parameters_rejected': 'one or more parameters passed to a function were not valid',
+                'invalid_data': 'cssmerr_csp_invalid_data',
+                'duplicate_item': 'the specified item already exists in the keychain',
+            }
+            matches = [code for code, pattern in patterns.items() if pattern in text]
+            if len(matches) == 1:
+                category = matches[0]
+        message += ' (' + category + ')'
+    return message + '; raw output was suppressed.'
 
 
 def terminate_process_group(process):
@@ -346,7 +374,15 @@ class Invocation:
             stopped = terminate_process_group(process)
             if not stopped:
                 self.unconfirmed_process_groups.add(process.pid)
-            require(process.returncode == 0, 'Private tool failed at ' + stage + '; raw output was suppressed.')
+            if process.returncode != 0:
+                diagnostic = b''
+                if stage == 'certificate-import':
+                    try:
+                        stderr.seek(0)
+                        diagnostic = stderr.read(IMPORT_DIAGNOSTIC_LIMIT + 1)
+                    except OSError:
+                        pass  # Retain the primary import failure, without guessing a category.
+                raise Blocked(private_failure_message(stage, diagnostic))
             require(stopped, 'Private process-group termination could not be verified at ' + stage + '.')
             stdout.seek(0)
             data = stdout.read(4000001)

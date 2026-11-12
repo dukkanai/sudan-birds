@@ -182,6 +182,25 @@ boundaries remain unchanged. Raw signing diagnostics still stay private. New
 source requires fresh checks and its own protected invocation; old green checks
 are not evidence for the correction.
 
+## Certificate import stop (2026-11-12)
+
+The corrected source `175241b` passed all eight exact-source checks and protected
+preflight. Run [43296727830](https://github.com/dukkanai/sudan-birds/actions/runs/43296727830)
+passed the uploader capability check, then stopped at `certificate-import`.
+The fixed outcome again reported `not_uploaded`, `cleanup_complete: true`, and
+no IPA digest. The enable flag was subsequently verified false. The underlying
+P12/import cause was not captured; neither a bad password nor an incompatible
+algorithm is established, and no certificate was replaced.
+
+A bounded diagnostic classifier now maps only known import-error phrases to
+fixed labels. It never prints or persists the original stderr, credentials or
+paths, and it never changes import behavior or retries. Unknown, ambiguous,
+malformed, unreadable or oversized diagnostics remain `unclassified`. A MAC
+verification label alone must not be described as proof of an incorrect password.
+This diagnostic change needs its own exact-source checks before another protected
+invocation. No algorithm downgrade, secret replacement or credential fallback is
+part of it.
+
 ## Local validation and remaining blockers
 
 From repository root:

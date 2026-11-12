@@ -1,11 +1,23 @@
 # GitHub iOS staging: inert implementation, not a delivered build
 
-**Nothing in this package currently signs or uploads.** The example is outside
+**No application signing or upload workflow is active.** The example is outside
 `.github/workflows`, `config.json` has `enabled: false`, identity/credential inputs
-are unconfigured, and `beta.yml` / `release.yml` still fail closed. The only active
-CI addition runs offline guard tests. No environment, signing secret, App ID, App
-Store record, provisioning asset or TestFlight build was created by this work.
+are unconfigured in that example, and `beta.yml` / `release.yml` still fail closed.
+External signing assets are prepared separately under owner approval. Their
+presence is not proof of a successful archive or upload. The guarded key-recovery
+proof and read-only capability probe do not sign an app or produce a TestFlight build.
 Do not merge PR #1 or change `main` to activate a staging experiment.
+
+## November 12 identity preparation
+
+Runner and RunnerTests now use the registered `com.nextaura.sudanbirds` identity
+in the reviewed source. This does not activate signing. The example configuration
+remains disabled and incomplete, and no staging-upload workflow is registered.
+The archive verifier now rejects noncanonical and filesystem-colliding ZIP paths
+and revalidates the extracted app manifest. Its regression tests use synthetic
+archives, not a real signed IPA. A separate disabled-by-default
+[read-only access probe](staging-access-probe.md) can verify whether the restricted
+workflow token can read required environment-policy and CI-log evidence.
 
 ## Files and trust boundary
 

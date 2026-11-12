@@ -689,6 +689,12 @@ class TemplateTests(unittest.TestCase):
         self.assertIn('name: ${{ needs.preflight.outputs.environment }}', text)
         self.assertIn('cache: false', text)
 
+    def test_registered_runner_identity_is_reviewed_source(self):
+        project = (gate.ROOT / 'app/ios/Runner.xcodeproj/project.pbxproj').read_text()
+        self.assertEqual(project.count('PRODUCT_BUNDLE_IDENTIFIER = com.nextaura.sudanbirds;'), 3)
+        self.assertEqual(project.count('PRODUCT_BUNDLE_IDENTIFIER = com.nextaura.sudanbirds.RunnerTests;'), 3)
+        self.assertNotIn('dev.sudanbirds.sudanBirds', project)
+
     def test_checked_in_configuration_remains_inert_and_unconfigured(self):
         c = json.loads(gate.CONFIG.read_text())
         self.assertIs(c['enabled'], False)
@@ -716,6 +722,144 @@ class TemplateTests(unittest.TestCase):
         self.assertIn("'destination': 'export'", source)
         self.assertNotIn('upload_to_app_store', source)
         self.assertNotIn('shell=True', source)
+
+
+class IpaPathRegressionTests(unittest.TestCase):
+    def members(self, names):
+        return [zipfile.ZipInfo(name) for name in names]
+
+    def test_noncanonical_dot_separator_absolute_and_truncated_names(self):
+        for name in ['', '.', '..', '/', '/absolute', '//absolute', '../escape',
+                     'Payload/../escape', 'Payload/./Runner.app/Info.plist',
+                     'Payload//Runner.app/Info.plist', 'Payload/Runner.app//',
+                     'Payload/Runner.app/back\\slash', 'Payload/Runner.app/Info.plist\x00suffix']:
+            with self.subTest(name=name), self.assertRaises(gate.Blocked):
+                sign.validate_zip_members(self.members([name]))
+        member = zipfile.ZipInfo('Payload/Runner.app/Info.plist')
+        member.orig_filename += 'different-original'
+        with self.assertRaises(gate.Blocked):
+            sign.validate_zip_members([member])
+
+    def test_mac_normalization_collisions_include_all_directory_prefixes(self):
+        pairs = [
+            ('Payload/Runner.app/Info.plist', 'Payload/Runner.app/info.plist'),
+            ('Payload/Runner.app/Foo/a', 'Payload/Runner.app/foo/b'),
+            ('Payload/Runner.app/Caf\u00e9/a', 'Payload/Runner.app/Cafe\u0301/b'),
+            ('Payload/Runner.app/Stra\u00dfe/a', 'Payload/Runner.app/STRASSE/b'),
+            ('Payload/Runner.app/a', 'payload/Runner.app/b'),
+        ]
+        for pair in pairs:
+            for order in (pair, pair[::-1]):
+                with self.subTest(order=order), self.assertRaises(gate.Blocked):
+                    sign.validate_zip_members(self.members(order))
+
+    def test_file_directory_conflicts_and_duplicate_directories_rejected(self):
+        for names in [('Payload/a', 'Payload/a/b'), ('Payload/a/b', 'Payload/a'),
+                      ('Payload/a', 'Payload/a/'), ('Payload/a/', 'Payload/a'),
+                      ('Payload/', 'Payload/')]:
+            with self.subTest(names=names), self.assertRaises(gate.Blocked):
+                sign.validate_zip_members(self.members(names))
+
+    def test_symlinks_special_types_and_directory_type_mismatches_rejected(self):
+        for name, mode in [('Payload/link', 0o120777), ('Payload/fifo', 0o010600),
+                           ('Payload/not-directory', 0o040755), ('Payload/not-file/', 0o100600)]:
+            member = zipfile.ZipInfo(name)
+            member.external_attr = mode << 16
+            with self.subTest(name=name), self.assertRaises(gate.Blocked):
+                sign.validate_zip_members([member])
+
+    def test_safe_unicode_and_explicit_or_implicit_directories_remain_valid(self):
+        for names in [
+            ['Payload/', 'Payload/Runner.app/', 'Payload/Runner.app/Info.plist',
+             'Payload/Runner.app/assets/Caf\u00e9.txt', 'Payload/Runner.app/assets/طيور.txt'],
+            ['Payload/Runner.app/assets/Cafe\u0301.txt', 'Payload/Runner.app/assets/'],
+        ]:
+            sign.validate_zip_members(self.members(names))
+
+    def test_path_complexity_is_bounded_before_prefix_expansion(self):
+        for name in ['a' * 4097, '/'.join(['a'] * 129)]:
+            with self.subTest(name_length=len(name)), self.assertRaises(gate.Blocked):
+                sign.validate_zip_members(self.members([name]))
+
+    def test_negative_and_oversized_declared_expansion_rejected(self):
+        for size in [-1, 2 * 1024**3 + 1]:
+            member = zipfile.ZipInfo('Payload/file')
+            member.file_size = size
+            with self.assertRaises(gate.Blocked):
+                sign.validate_zip_members([member])
+
+    def make_ipa(self, root, extra=None):
+        c = config()
+        info = {'CFBundleIdentifier': c['bundle_id'], 'CFBundleVersion': c['build_number'],
+                'CFBundleShortVersionString': c['build_version'], 'DTXcodeBuild': c['xcode_build'],
+                'DTSDKName': 'iphoneos' + c['ios_sdk']}
+        ipa = root / 'test.ipa'
+        with zipfile.ZipFile(ipa, 'w') as package:
+            package.writestr('Payload/Runner.app/Info.plist', sign.plistlib.dumps(info))
+            binary = zipfile.ZipInfo('Payload/Runner.app/Runner')
+            binary.external_attr = 0o100755 << 16
+            package.writestr(binary, b'synthetic non-executable fixture')
+            if extra:
+                package.writestr(*extra)
+        return c, ipa
+
+    def test_real_archive_validates_both_pre_and_post_extraction(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            c, ipa = self.make_ipa(root)
+            with mock.patch.object(sign, 'validate_archive_info', wraps=sign.validate_archive_info) as validate:
+                app = sign.extract_verified_ipa(ipa, root / 'out', c)
+            self.assertEqual(validate.call_count, 2)
+            self.assertEqual(app, root / 'out/Payload/Runner.app')
+            self.assertEqual((app / 'Runner').stat().st_mode & 0o777, 0o755)
+
+    def test_demonstrated_alias_is_rejected_before_any_extraction(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            c, ipa = self.make_ipa(root, ('Payload/./Runner.app/Info.plist', b'overwritten'))
+            with mock.patch.object(zipfile.ZipFile, 'extractall') as extract:
+                with self.assertRaises(gate.Blocked):
+                    sign.extract_verified_ipa(ipa, root / 'out', c)
+                extract.assert_not_called()
+            self.assertFalse((root / 'out').exists())
+
+    def test_post_extraction_manifest_replacement_is_rejected(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            c, ipa = self.make_ipa(root)
+            original = zipfile.ZipFile.extractall
+            def replace_manifest(package, destination):
+                original(package, destination)
+                target = destination / 'Payload/Runner.app/Info.plist'
+                info = sign.plistlib.loads(target.read_bytes())
+                info['CFBundleVersion'] = 'unexpected'
+                target.write_bytes(sign.plistlib.dumps(info))
+            with mock.patch.object(zipfile.ZipFile, 'extractall', replace_manifest):
+                with self.assertRaisesRegex(gate.Blocked, 'differs from the checked'):
+                    sign.extract_verified_ipa(ipa, root / 'out', c)
+
+    def test_existing_destination_is_not_overwritten(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            c, ipa = self.make_ipa(root)
+            out = root / 'out'
+            out.mkdir()
+            marker = out / 'preserve'
+            marker.write_text('untouched')
+            with self.assertRaises(gate.Blocked):
+                sign.extract_verified_ipa(ipa, out, c)
+            self.assertEqual(marker.read_text(), 'untouched')
+
+    def test_oversized_manifest_blocks_before_plist_read(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            ipa = root / 'test.ipa'
+            with zipfile.ZipFile(ipa, 'w') as package:
+                package.writestr('Payload/Runner.app/Info.plist', b'x' * (1024 * 1024 + 1))
+            with mock.patch.object(sign.plistlib, 'loads') as parse:
+                with self.assertRaises(gate.Blocked):
+                    sign.extract_verified_ipa(ipa, root / 'out', config())
+                parse.assert_not_called()
 
 
 if __name__ == '__main__':

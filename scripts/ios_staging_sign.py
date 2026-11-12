@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 import hashlib
 import json
 import os
-from pathlib import Path, PurePosixPath
+from pathlib import Path
 import plistlib
 import re
 import secrets
@@ -21,6 +21,7 @@ import subprocess
 import sys
 import tempfile
 import time
+import unicodedata
 import urllib.parse
 import urllib.request
 import zipfile
@@ -222,14 +223,65 @@ def validate_signed_entitlements(entitlements, c):
 def validate_zip_members(members):
     names = [member.filename for member in members]
     require(len(set(names)) == len(names) and len(names) <= 50000, 'IPA paths are duplicated or excessive.')
-    require(sum(member.file_size for member in members) <= 2 * 1024**3, 'IPA expansion exceeds safe bound.')
+    require(all(type(member.file_size) is int and member.file_size >= 0 for member in members)
+            and sum(member.file_size for member in members) <= 2 * 1024**3,
+            'IPA expansion exceeds safe bound.')
+    # Include implicit directory prefixes: Foo/a and foo/b can collide on macOS
+    # even though the two complete filenames differ. Conservative NFC/casefold
+    # equivalence rejects aliases without depending on the host filesystem.
+    nodes = {}
     for member in members:
-        path = PurePosixPath(member.filename)
+        name = member.filename
+        directory = name.endswith('/')
+        parts = tuple((name[:-1] if directory else name).split('/'))
         mode = member.external_attr >> 16
-        require(not path.is_absolute() and '..' not in path.parts and '\\' not in member.filename
-                and not stat.S_ISLNK(mode), 'Unsafe or unsupported IPA archive entry.')
-        require(not stat.S_IFMT(mode) or stat.S_ISDIR(mode) or stat.S_ISREG(mode),
-                'Unsupported special entry in IPA.')
+        require(len(name) <= 4096 and len(parts) <= 128, 'IPA path complexity exceeds safe limit.')
+        require(name == member.orig_filename and '\x00' not in name and '\\' not in name
+                and all(part not in {'', '.', '..'} for part in parts),
+                'Noncanonical or truncated IPA path rejected.')
+        kind = stat.S_IFMT(mode)
+        require(not stat.S_ISLNK(mode)
+                and (kind == 0 or (stat.S_ISDIR(mode) if directory else stat.S_ISREG(mode))),
+                'Unsafe or unsupported IPA archive entry.')
+        normalized = tuple(unicodedata.normalize('NFC', unicodedata.normalize('NFC', part).casefold())
+                           for part in parts)
+        for depth in range(1, len(parts) + 1):
+            prefix = normalized[:depth]
+            node = (parts[:depth], 'directory' if depth < len(parts) or directory else 'file')
+            require(prefix not in nodes or nodes[prefix] == node,
+                    'IPA paths collide after filesystem normalization.')
+            require(prefix in nodes or len(nodes) < 200000, 'IPA path index exceeds safe limit.')
+            nodes[prefix] = node
+
+
+def extract_verified_ipa(ipa, destination, c):
+    # Destination is an absent child of this invocation's mode-0700 workspace.
+    require(not destination.exists() and not destination.is_symlink(),
+            'IPA extraction destination already exists.')
+    with zipfile.ZipFile(ipa) as package:
+        members = package.infolist()
+        validate_zip_members(members)
+        names = [m.filename for m in members if re.fullmatch(r'Payload/[^/]+\.app/Info.plist', m.filename)]
+        require(len(names) == 1, 'IPA app manifest is ambiguous.')
+        manifest = package.getinfo(names[0])
+        require(0 < manifest.file_size <= 1024 * 1024, 'IPA app manifest exceeds safe limit.')
+        original = package.read(manifest)
+        validate_archive_info(plistlib.loads(original), c)
+        destination.mkdir(mode=0o700)
+        package.extractall(destination)
+        # zipfile does not retain executable bits; restore only safe mode bits.
+        for member in members:
+            if not member.is_dir():
+                mode = (member.external_attr >> 16) & 0o777
+                (destination / member.filename).chmod(mode or 0o600)
+    extracted = destination / names[0]
+    require(not extracted.is_symlink() and extracted.is_file()
+            and 0 < extracted.stat().st_size <= 1024 * 1024,
+            'Extracted app manifest is unsafe or oversized.')
+    actual = extracted.read_bytes()
+    require(actual == original, 'Extracted app manifest differs from the checked archive entry.')
+    validate_archive_info(plistlib.loads(actual), c)
+    return extracted.parent
 
 
 def summarize(sha, digest, status):
@@ -372,18 +424,7 @@ class Invocation:
         require(len(ipas) == 1, 'Expected exactly one exported IPA.')
         ipa = ipas[0]
         verified_dir = self.path / 'verify-export'
-        with zipfile.ZipFile(ipa) as package:
-            validate_zip_members(package.infolist())
-            names = [n for n in package.namelist() if re.fullmatch(r'Payload/[^/]+\.app/Info.plist', n)]
-            require(len(names) == 1, 'IPA app manifest is ambiguous.')
-            validate_archive_info(plistlib.loads(package.read(names[0])), c)
-            package.extractall(verified_dir)
-            # zipfile does not retain executable bits; restore only safe mode bits after path validation.
-            for member in package.infolist():
-                if not member.is_dir():
-                    mode = (member.external_attr >> 16) & 0o777
-                    (verified_dir / member.filename).chmod(mode or 0o600)
-        exported_app = verified_dir / Path(names[0]).parent
+        exported_app = extract_verified_ipa(ipa, verified_dir, c)
         self.run(['/usr/bin/codesign', '--verify', '--deep', '--strict', str(exported_app)], 'verify-export-signature')
         signed_entitlements = plistlib.loads(self.run(['/usr/bin/codesign', '-d', '--entitlements', ':-',
                                                       str(exported_app)], 'verify-export-entitlements'))

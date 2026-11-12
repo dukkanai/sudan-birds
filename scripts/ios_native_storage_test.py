@@ -7,6 +7,7 @@ import unittest
 from unittest.mock import Mock, patch
 
 import ios_native_storage as smoke
+import ios_native_storage_progress as progress
 
 RUNTIME = 'com.apple.CoreSimulator.SimRuntime.iOS-18-0'
 TYPE = 'com.apple.CoreSimulator.SimDeviceType.iPhone-16'
@@ -143,7 +144,7 @@ class Guards(unittest.TestCase):
                               {'stage': 'inventory-pre-test'}])
             commands = [call.args[0] for call in run.call_args_list]
             self.assertEqual(commands[0], ['xcrun', 'simctl', 'create', NAME, TYPE, RUNTIME])
-            self.assertEqual(commands[-1], ['flutter', '--no-version-check', 'test', '--no-pub', 'integration_test/native_storage_test.dart', '-d', UUID, '--dart-define=NATIVE_STORAGE_SMOKE=true', '--reporter', 'expanded'])
+            self.assertEqual(commands[-1], ['flutter', '--no-version-check', 'test', '--no-pub', 'integration_test/native_storage_test.dart', '-d', UUID, '--dart-define=NATIVE_STORAGE_SMOKE=true', '--machine'])
             self.assertEqual([call.kwargs['seconds'] for call in run.call_args_list], [60, 30, 180, 600])
             self.assertEqual(smoke.load(path / 'owned.json'), STATE)
             self.assertFalse((path / 'creation-attempted').exists())
@@ -396,6 +397,192 @@ class Guards(unittest.TestCase):
         self.assertIsNone(smoke.run(['python3', '-c', "print('SYNTHETIC')"], seconds=5, stage='test'))
         with self.assertRaises(smoke.Failure):
             smoke.run(['python3', '-c', 'import time; time.sleep(5)'], seconds=0.02, stage='test')
+
+
+class ProgressGuards(unittest.TestCase):
+    @staticmethod
+    def emit(parser, event):
+        parser.feed(json.dumps(event).encode() + b'\n')
+
+    @staticmethod
+    def start(name=progress.TEST_NAME, identifier=7):
+        return {'type': 'testStart', 'test': {'name': name, 'id': identifier}}
+
+    @staticmethod
+    def done(**overrides):
+        return {'type': 'testDone', 'testID': 7, 'result': 'success',
+                'skipped': False, 'hidden': False, **overrides}
+
+    def test_supported_events_emit_only_fixed_labels(self):
+        parser = progress.MachineProgress()
+        self.emit(parser, [{'event': 'test.startedProcess',
+                            'params': {'vmServiceUri': 'http://SECRET/'}}])
+        self.emit(parser, self.start())
+        self.emit(parser, self.done())
+        self.assertEqual(parser.summary(),
+                         'PROGRESS: device_process=observed storage_test=finish-observed stream=bounded')
+
+    def test_start_is_observation_not_success(self):
+        parser = progress.MachineProgress()
+        self.emit(parser, self.start())
+        self.assertIn('storage_test=start-observed', parser.summary())
+        self.assertIn('device_process=unknown', parser.summary())
+
+    def test_loading_other_names_prints_remain_unknown(self):
+        parser = progress.MachineProgress()
+        self.emit(parser, self.start('loading integration_test/native_storage_test.dart'))
+        self.emit(parser, {'type': 'print', 'message': progress.TEST_NAME})
+        self.emit(parser, self.done())
+        self.assertEqual(parser.summary(),
+                         'PROGRESS: device_process=unknown storage_test=unknown stream=bounded')
+
+    def test_every_byte_chunk_boundary(self):
+        raw = json.dumps(self.start()).encode() + b'\n'
+        for split in range(len(raw) + 1):
+            parser = progress.MachineProgress()
+            parser.feed(raw[:split])
+            parser.feed(raw[split:])
+            self.assertIn('storage_test=start-observed', parser.summary())
+
+    def test_malformed_ansi_utf8_duplicate_partial_ignored(self):
+        raw = json.dumps(self.start()).encode()
+        for malformed in [b'\x1b[31m' + raw + b'\n', b'prefix ' + raw + b'\n',
+                          b'\xff' + raw + b'\n', raw,
+                          b'{"type":"testStart","type":"SECRET"}\n',
+                          b'[' * 1500 + b']' * 1500 + b'\n']:
+            parser = progress.MachineProgress()
+            parser.feed(malformed)
+            self.assertIn('storage_test=unknown', parser.summary())
+
+    def test_oversize_line_dropped_not_reparsed(self):
+        parser = progress.MachineProgress()
+        parser.feed(b'X' * (progress.MAX_LINE + 1))
+        self.assertLessEqual(len(parser.buffer), progress.MAX_LINE)
+        self.emit(parser, self.start())
+        self.assertIn('storage_test=unknown', parser.summary())
+        self.emit(parser, self.start())
+        self.assertIn('storage_test=start-observed', parser.summary())
+        self.assertIn('stream=incomplete', parser.summary())
+
+    def test_total_budget_discards_further_bytes(self):
+        parser = progress.MachineProgress()
+        for _ in range(progress.MAX_INPUT // 8192 + 2):
+            parser.feed(b'X' * 8192)
+        self.emit(parser, self.start())
+        self.assertEqual(parser.total, progress.MAX_INPUT + 1)
+        self.assertEqual(parser.buffer, bytearray())
+        self.assertIn('storage_test=unknown stream=incomplete', parser.summary())
+
+    def test_duplicate_fixture_is_ambiguous(self):
+        for identifier in [7, 8]:
+            parser = progress.MachineProgress()
+            self.emit(parser, self.start())
+            self.emit(parser, self.start(identifier=identifier))
+            self.emit(parser, self.done())
+            self.assertIn('storage_test=unknown', parser.summary())
+
+    def test_skipped_hidden_retried_malformed_done_unknown(self):
+        for overrides in [{'skipped': True}, {'hidden': True}, {'retried': True},
+                          {'result': []}, {'result': 'SECRET'}, {'skipped': 0}]:
+            parser = progress.MachineProgress()
+            self.emit(parser, self.start())
+            self.emit(parser, self.done(**overrides))
+            self.assertIn('storage_test=unknown', parser.summary())
+
+    def test_failed_test_finish_not_a_pass(self):
+        parser = progress.MachineProgress()
+        self.emit(parser, self.start())
+        self.emit(parser, self.done(result='failure'))
+        self.assertIn('storage_test=finish-observed', parser.summary())
+        self.assertNotIn('success', parser.summary())
+
+    def test_bad_ids_unmatched_done_do_not_advance(self):
+        for identifier in [True, -1, 2**31, '7', None]:
+            parser = progress.MachineProgress()
+            self.emit(parser, self.start(identifier=identifier))
+            self.assertIn('storage_test=unknown', parser.summary())
+        parser = progress.MachineProgress()
+        self.emit(parser, self.start())
+        for identifier in [True, 8, '7']:
+            self.emit(parser, self.done(testID=identifier))
+        self.assertIn('storage_test=start-observed', parser.summary())
+
+    def test_duplicate_done_ambiguous(self):
+        parser = progress.MachineProgress()
+        self.emit(parser, self.start())
+        self.emit(parser, self.done())
+        self.emit(parser, self.done())
+        self.assertIn('storage_test=unknown', parser.summary())
+
+    def test_bad_process_event_unknown(self):
+        for value in [None, '', True, {}, []]:
+            parser = progress.MachineProgress()
+            self.emit(parser, [{'event': 'test.startedProcess', 'params': {'vmServiceUri': value}}])
+            self.assertIn('device_process=unknown', parser.summary())
+
+    def test_reader_unavailable_erases_confidence(self):
+        parser = progress.MachineProgress()
+        self.emit(parser, self.start())
+        self.assertEqual(parser.summary(unavailable=True),
+                         'PROGRESS: device_process=unknown storage_test=unknown stream=incomplete')
+
+    def test_real_child_stream_without_raw_output(self):
+        output = io.StringIO()
+        code = "import sys; print(" + repr(json.dumps(self.start())) + "); print('SECRET'); print('SECRET', file=sys.stderr)"
+        with contextlib.redirect_stdout(output):
+            smoke.run(['python3', '-c', code], seconds=5, stage='test')
+        self.assertIn('storage_test=start-observed', output.getvalue())
+        self.assertNotIn('SECRET', output.getvalue())
+
+    def test_real_child_flood_drained_not_retained(self):
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
+            smoke.run(['python3', '-c', "import os; os.write(1, b'SECRET' * 500000)"], seconds=5, stage='test')
+        self.assertIn('stream=incomplete', output.getvalue())
+        self.assertNotIn('SECRET', output.getvalue())
+
+    def test_real_timeout_preserves_original_failure(self):
+        output = io.StringIO()
+        code = "import time; print(" + repr(json.dumps(self.start())) + ", flush=True); time.sleep(10)"
+        with contextlib.redirect_stdout(output), self.assertRaisesRegex(smoke.Failure, 'stage=test reason=timeout'):
+            smoke.run(['python3', '-c', code], seconds=0.3, stage='test')
+        self.assertIn('storage_test=start-observed', output.getvalue())
+
+    def test_reader_failure_does_not_mask_command(self):
+        output = io.StringIO()
+        process = Mock(pid=12345)
+        process.wait.return_value = 7
+        with patch.object(smoke.subprocess, 'Popen', return_value=process), patch.object(
+                smoke, 'terminate_owned_group'), patch.object(
+                progress.select, 'select', side_effect=OSError('SECRET')), contextlib.redirect_stdout(output):
+            with self.assertRaisesRegex(smoke.Failure, 'stage=test reason=exit exit=7'):
+                smoke.run(['SECRET'], stage='test')
+        self.assertIn('storage_test=unknown stream=incomplete', output.getvalue())
+        self.assertNotIn('SECRET', output.getvalue())
+
+    def test_retained_writer_bounded_teardown(self):
+        output = io.StringIO()
+        retained = None
+        started = smoke.time.monotonic()
+        try:
+            with contextlib.redirect_stdout(output), progress.ProgressPipe() as pipe:
+                retained = smoke.os.dup(pipe.writer.fileno())
+                pipe.close_writer()
+            self.assertLess(smoke.time.monotonic() - started, 1.5)
+            self.assertFalse(pipe.thread.is_alive())
+            self.assertIn('stream=incomplete', output.getvalue())
+        finally:
+            if retained is not None:
+                smoke.os.close(retained)
+
+    def test_reader_start_failure_closes_descriptors(self):
+        pipe = progress.ProgressPipe()
+        with patch.object(pipe.thread, 'start', side_effect=RuntimeError('SECRET')):
+            with self.assertRaisesRegex(RuntimeError, '^Progress reader unavailable$'):
+                pipe.__enter__()
+        self.assertTrue(pipe.writer.closed)
+        with self.assertRaises(OSError):
+            smoke.os.fstat(pipe.reader)
 
 
 if __name__ == '__main__':

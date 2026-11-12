@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Disposable, installed-runtime-only iOS storage smoke. Never retain tool output."""
 import argparse
+from contextlib import ExitStack
 import json
 import os
 from pathlib import Path
@@ -11,6 +12,8 @@ import subprocess
 import tempfile
 import time
 import uuid
+
+from ios_native_storage_progress import ProgressPipe
 
 
 class Failure(Exception):
@@ -74,18 +77,22 @@ def run(args, seconds=10, capture=False, *, stage):
         # Bounded duration includes owned-process cleanup on failure. Never log
         # command arguments, inventory contents, exception text, or native logs.
         elapsed_ms = min(86_400_000, max(0, int((time.monotonic() - started) * 1000)))
-        print(f'TIMING: stage={stage} elapsed_ms={elapsed_ms}')
+        print(f'TIMING: stage={stage} elapsed_ms={elapsed_ms}', flush=True)
 
 
 def _run(args, seconds, capture, *, stage):
     # No native/plugin logs reach CI or survive this invocation. JSON inventories
     # are bounded and returned only for validation, never printed.
-    with tempfile.TemporaryFile() as output:
+    with ExitStack() as resources:
+        progress = resources.enter_context(ProgressPipe()) if stage == 'test' else None
+        output = progress.writer if progress else resources.enter_context(tempfile.TemporaryFile())
         try:
             process = subprocess.Popen(args, stdout=output, stderr=subprocess.DEVNULL,
                                        start_new_session=True)
         except Exception:
             raise command_failure(stage, 'launch') from None
+        if progress:
+            progress.close_writer()
         try:
             code = process.wait(timeout=seconds)
         except BaseException as error:
@@ -249,7 +256,7 @@ def execute(directory):
         raise Failure('Owned simulator did not boot')
     run(['flutter', '--no-version-check', 'test', '--no-pub',
          'integration_test/native_storage_test.dart', '-d', state['uuid'],
-         '--dart-define=NATIVE_STORAGE_SMOKE=true', '--reporter', 'expanded'], seconds=600, stage='test')
+         '--dart-define=NATIVE_STORAGE_SMOKE=true', '--machine'], seconds=600, stage='test')
     print('PASS: native storage smoke on owned disposable iOS simulator')
 
 

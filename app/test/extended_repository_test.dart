@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
@@ -8,7 +9,7 @@ import 'package:sudan_birds/repository.dart';
 
 const userId = '00000000-0000-4000-8000-000000000001';
 Future<SupabaseClient> authenticated(
-  http.Response Function(http.Request) handler,
+  FutureOr<http.Response> Function(http.Request) handler,
 ) async {
   final token =
       '${base64Url.encode(utf8.encode('{"alg":"HS256","typ":"JWT"}'))}.${base64Url.encode(utf8.encode(jsonEncode({'sub': userId, 'exp': DateTime.now().millisecondsSinceEpoch ~/ 1000 + 3600})))}.test';
@@ -48,7 +49,7 @@ Future<SupabaseClient> authenticated(
   return client;
 }
 
-http.Response jsonResponse(http.Request r, Object body, [int status = 200]) =>
+http.Response jsonResponse(http.Request r, Object? body, [int status = 200]) =>
     http.Response(
       jsonEncode(body),
       status,

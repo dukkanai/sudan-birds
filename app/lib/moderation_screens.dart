@@ -353,7 +353,10 @@ class _ReviewReportPageState extends State<ReviewReportPage>
 
   final reason = TextEditingController();
   ModerationTarget? target;
-  bool loading = true, busy = false, confirming = false;
+  bool loading = true,
+      busy = false,
+      confirming = false,
+      uncertainAction = false;
   String? error, notice;
   late String reportState = widget.report.state;
   @override
@@ -388,7 +391,7 @@ class _ReviewReportPageState extends State<ReviewReportPage>
 
   Future<void> act({bool? hidden, String? state}) async {
     if (!isAccountCurrent) return;
-    if (busy || confirming || loading) return;
+    if (busy || confirming || loading || uncertainAction) return;
     if (reason.text.trim().length < 5) {
       setState(() => error = 'اكتب سبب الإجراء في خمسة أحرف على الأقل.');
       return;
@@ -426,11 +429,11 @@ class _ReviewReportPageState extends State<ReviewReportPage>
       notice = null;
     });
     final result = hidden != null
-        ? await guardResult(
+        ? await guardMutation(
             () =>
                 widget.repository.moderate(widget.report, hidden, reason.text),
           )
-        : await guardResult(
+        : await guardMutation(
             () => widget.repository.resolveReport(
               widget.report.id,
               state!,
@@ -441,6 +444,7 @@ class _ReviewReportPageState extends State<ReviewReportPage>
     setState(() {
       busy = false;
       error = result.failure?.message;
+      uncertainAction = result.failure?.outcomeUnknown == true;
       if (result.isSuccess) {
         notice = 'أكد الخادم تنفيذ الإجراء وتسجيله.';
         if (state != null) reportState = state;
@@ -480,7 +484,7 @@ class _ReviewReportPageState extends State<ReviewReportPage>
             ),
             if (target != null && widget.report.kind != ReportKind.account)
               OutlinedButton(
-                onPressed: busy || confirming || loading
+                onPressed: busy || confirming || loading || uncertainAction
                     ? null
                     : () => act(hidden: !target!.hidden),
                 child: Text(
@@ -493,7 +497,12 @@ class _ReviewReportPageState extends State<ReviewReportPage>
               ),
             for (final s in ['reviewing', 'resolved', 'dismissed'])
               TextButton(
-                onPressed: busy || confirming || loading || reportState == s
+                onPressed:
+                    busy ||
+                        confirming ||
+                        loading ||
+                        uncertainAction ||
+                        reportState == s
                     ? null
                     : () => act(state: s),
                 child: Text('تعيين الحالة: ${reportStateLabel(s)}'),
@@ -505,6 +514,13 @@ class _ReviewReportPageState extends State<ReviewReportPage>
                 child: const Text('إعادة تحميل الهدف'),
               ),
             ],
+            if (uncertainAction)
+              Semantics(
+                liveRegion: true,
+                child: const Text(
+                  'أُوقف تكرار إجراء الإشراف لأن نتيجته غير مؤكدة. راجع حالة البلاغ وسجل الإشراف قبل أي إجراء جديد. إعادة تحميل الهدف لا تعني إلغاء الطلب السابق.',
+                ),
+              ),
             if (notice != null)
               Semantics(liveRegion: true, child: Text(notice!)),
           ],

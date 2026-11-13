@@ -22,6 +22,53 @@ class SupabaseBirdsRepository implements BirdsRepository {
   final MobileOAuthCoordinator? oauth;
   final bool oauthEnabled;
 
+  // A timed-out Future does not cancel its HTTP request. Keep ownership of an
+  // affected resource until the outcome is classified; quarantine sent writes
+  // whose result is unknown, even if their response later arrives. Navigation
+  // or another caller of this repository must not reopen the write window.
+  final Map<String, Object> _accountWrites = {};
+
+  Future<Result<bool>> _accountWrite(
+    String resource,
+    Future<bool> Function(_AccountSession session, void Function() beforeSend)
+    action,
+  ) async {
+    String? key;
+    final owner = Object();
+    var owns = false, expired = false, sent = false;
+    final result = await protectMutation(() async {
+      final session = _accountSession();
+      key = '${session.userId}:$resource';
+      if (_accountWrites.containsKey(key)) {
+        throw const AppFailure(
+          'هناك كتابة سابقة لم تتأكد نتيجتها. أُوقف إرسال طلب جديد لحماية البيانات.',
+          outcomeUnknown: true,
+        );
+      }
+      _accountWrites[key!] = owner;
+      owns = true;
+      return action(session, () {
+        if (expired) {
+          throw const AppFailure('انتهت المهلة قبل إرسال التعديل.');
+        }
+        requireSameAccount(session.userId);
+        sent = true;
+      });
+    });
+    expired = true;
+    if (owns && identical(_accountWrites[key], owner)) {
+      if (result.failure?.outcomeUnknown != true || !sent) {
+        _accountWrites.remove(key);
+      }
+      if (result.failure?.outcomeUnknown == true && !sent) {
+        return const Result.failure(
+          AppFailure('تعذر إكمال التحقق قبل الحفظ. لم يُرسل تعديل جديد.'),
+        );
+      }
+    }
+    return result;
+  }
+
   void _requireStorage() {
     authStorage?.requireAvailable();
     if (authStorage?.acceptsSessions == false &&
@@ -180,14 +227,17 @@ class SupabaseBirdsRepository implements BirdsRepository {
     ModerationReport report,
     bool hidden,
     String reason,
-  ) => protect(() async {
-    final session = _accountSession();
+  ) => _accountWrite('moderation:${report.targetId}', (
+    session,
+    beforeSend,
+  ) async {
     final accountId = session.userId;
     await _requireModerator(session);
     requireSameAccount(accountId);
     if (report.kind == ReportKind.account || reason.trim().length < 5) {
       throw const AppFailure('هذا الإجراء يتطلب محتوى محدداً وسبباً واضحاً.');
     }
+    beforeSend();
     await client
         .rpc(
           'moderate_content',
@@ -206,8 +256,7 @@ class SupabaseBirdsRepository implements BirdsRepository {
     String reportId,
     String state,
     String reason,
-  ) => protect(() async {
-    final session = _accountSession();
+  ) => _accountWrite('report:$reportId', (session, beforeSend) async {
     final accountId = session.userId;
     await _requireModerator(session);
     requireSameAccount(accountId);
@@ -215,6 +264,7 @@ class SupabaseBirdsRepository implements BirdsRepository {
         reason.trim().length < 5) {
       throw const AppFailure('اختر حالة مراجعة واكتب سبباً واضحاً.');
     }
+    beforeSend();
     await client
         .rpc(
           'resolve_report',
@@ -648,14 +698,7 @@ class SupabaseBirdsRepository implements BirdsRepository {
 
   @override
   Future<Result<bool>> report(FeedEntry entry, String reason) =>
-      protectMutation(() async {
-        final session = _accountSession();
-        await client
-            .from('reports')
-            .setHeader('Authorization', session.authorization)
-            .insert({'listing_id': entry.id, 'reason': reason});
-        return true;
-      });
+      reportTarget(ReportKind.listing, entry.id, reason);
   @override
   Future<Result<Taxonomy>> taxonomy() => protect(() async {
     _requireStorage();
@@ -698,8 +741,7 @@ class SupabaseBirdsRepository implements BirdsRepository {
   });
   @override
   Future<Result<bool>> saveProfile(String name, bool accepted) =>
-      protect(() async {
-        final session = _accountSession();
+      _accountWrite('profile', (session, beforeSend) async {
         final accountId = session.userId;
         if (name.trim().length < 2 || name.trim().length > 80 || !accepted) {
           throw const AppFailure(
@@ -717,17 +759,27 @@ class SupabaseBirdsRepository implements BirdsRepository {
           'display_name': name.trim(),
           'accepted_terms_at': DateTime.now().toUtc().toIso8601String(),
         };
+        beforeSend();
+        final List<Map<String, dynamic>> rows;
         if (existing == null) {
-          await client
+          rows = await client
               .from('profiles')
               .setHeader('Authorization', session.authorization)
-              .insert({'id': accountId, ...values});
+              .insert({'id': accountId, ...values})
+              .select('id');
         } else {
-          await client
+          rows = await client
               .from('profiles')
               .setHeader('Authorization', session.authorization)
               .update(values)
-              .eq('id', accountId);
+              .eq('id', accountId)
+              .select('id');
+        }
+        if (rows.length != 1 || rows.single['id'] != accountId) {
+          throw const AppFailure(
+            'لم نؤكد حفظ الملف الشخصي. تحقق من الحالة قبل طلب جديد.',
+            outcomeUnknown: true,
+          );
         }
         return true;
       });
@@ -749,41 +801,51 @@ class SupabaseBirdsRepository implements BirdsRepository {
           );
   });
   @override
-  Future<Result<bool>> saveContact(ContactData contact) => protect(() async {
-    final session = _accountSession();
-    final accountId = session.userId;
-    if (contact.value.trim().length < 3 || contact.value.length > 160) {
-      throw const AppFailure('أدخل وسيلة تواصل صحيحة من ٣ إلى ١٦٠ حرفاً.');
-    }
-    final old = await client
-        .from('profile_contacts')
-        .setHeader('Authorization', session.authorization)
-        .select('owner_id')
-        .eq('owner_id', accountId)
-        .maybeSingle();
-    requireSameAccount(accountId);
-    final values = {
-      'contact_kind': contact.kind,
-      'contact_value': contact.value.trim(),
-      'reveal_consent': contact.consent,
-      'consent_at': contact.consent
-          ? DateTime.now().toUtc().toIso8601String()
-          : null,
-    };
-    if (old == null) {
-      await client
-          .from('profile_contacts')
-          .setHeader('Authorization', session.authorization)
-          .insert({'owner_id': accountId, ...values});
-    } else {
-      await client
-          .from('profile_contacts')
-          .setHeader('Authorization', session.authorization)
-          .update(values)
-          .eq('owner_id', accountId);
-    }
-    return true;
-  });
+  Future<Result<bool>> saveContact(ContactData contact) =>
+      _accountWrite('contact', (session, beforeSend) async {
+        final accountId = session.userId;
+        if (contact.value.trim().length < 3 || contact.value.length > 160) {
+          throw const AppFailure('أدخل وسيلة تواصل صحيحة من ٣ إلى ١٦٠ حرفاً.');
+        }
+        final old = await client
+            .from('profile_contacts')
+            .setHeader('Authorization', session.authorization)
+            .select('owner_id')
+            .eq('owner_id', accountId)
+            .maybeSingle();
+        requireSameAccount(accountId);
+        final values = {
+          'contact_kind': contact.kind,
+          'contact_value': contact.value.trim(),
+          'reveal_consent': contact.consent,
+          'consent_at': contact.consent
+              ? DateTime.now().toUtc().toIso8601String()
+              : null,
+        };
+        beforeSend();
+        final List<Map<String, dynamic>> rows;
+        if (old == null) {
+          rows = await client
+              .from('profile_contacts')
+              .setHeader('Authorization', session.authorization)
+              .insert({'owner_id': accountId, ...values})
+              .select('owner_id');
+        } else {
+          rows = await client
+              .from('profile_contacts')
+              .setHeader('Authorization', session.authorization)
+              .update(values)
+              .eq('owner_id', accountId)
+              .select('owner_id');
+        }
+        if (rows.length != 1 || rows.single['owner_id'] != accountId) {
+          throw const AppFailure(
+            'لم نؤكد حفظ تفضيل التواصل. تحقق من الحالة قبل طلب جديد.',
+            outcomeUnknown: true,
+          );
+        }
+        return true;
+      });
   @override
   Future<Result<ContactData?>> revealContact(
     String listingId,

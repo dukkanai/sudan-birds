@@ -34,7 +34,8 @@ class _ProfilePageState extends State<ProfilePage>
       loading = true,
       busy = false,
       deletionPending = false,
-      loadFailed = false;
+      loadFailed = false,
+      uncertainSave = false;
   String contactKind = 'phone';
   String? error, notice;
   @override
@@ -90,25 +91,28 @@ class _ProfilePageState extends State<ProfilePage>
 
   Future<void> save({bool contact = false}) async {
     if (!isAccountCurrent) return;
-    if (busy || loading || loadFailed || deletionPending) return;
+    if (busy || loading || loadFailed || deletionPending || uncertainSave) {
+      return;
+    }
     setState(() {
       busy = true;
       error = null;
       notice = null;
     });
     final result = contact
-        ? await guardResult(
+        ? await guardMutation(
             () => widget.repository.saveContact(
               ContactData(contactKind, contactValue.text, consent),
             ),
           )
-        : await guardResult(
+        : await guardMutation(
             () => widget.repository.saveProfile(name.text, accepted),
           );
     if (mounted && isAccountCurrent) {
       setState(() {
         busy = false;
         error = result.failure?.message;
+        uncertainSave = result.failure?.outcomeUnknown == true;
         notice = result.isSuccess
             ? (contact
                   ? 'تم حفظ تفضيل مشاركة التواصل.'
@@ -168,7 +172,7 @@ class _ProfilePageState extends State<ProfilePage>
                     title: const Text(draftRules),
                   ),
                   FilledButton(
-                    onPressed: busy ? null : () => save(),
+                    onPressed: busy || uncertainSave ? null : () => save(),
                     child: const Text('حفظ الملف والإقرار'),
                   ),
                   const Divider(height: 32),
@@ -215,7 +219,9 @@ class _ProfilePageState extends State<ProfilePage>
                     ),
                   ),
                   OutlinedButton(
-                    onPressed: busy ? null : () => save(contact: true),
+                    onPressed: busy || uncertainSave
+                        ? null
+                        : () => save(contact: true),
                     child: const Text('حفظ تفضيل مشاركة التواصل'),
                   ),
                   if (error != null) ...[
@@ -239,6 +245,13 @@ class _ProfilePageState extends State<ProfilePage>
                           ),
                     child: const Text('حذف الحساب نهائياً'),
                   ),
+                  if (uncertainSave)
+                    Semantics(
+                      liveRegion: true,
+                      child: const Text(
+                        'أُوقف تكرار الحفظ لأن نتيجته غير مؤكدة. تحقق من حالة البيانات لدى الخدمة؛ إعادة التحميل لا تلغي الكتابة السابقة ولا تفتح الحفظ تلقائياً.',
+                      ),
+                    ),
                   if (notice != null)
                     Semantics(liveRegion: true, child: Text(notice!)),
                 ],

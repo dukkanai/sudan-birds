@@ -2,6 +2,7 @@ name: Local codec resource experiment
 on:
   pull_request:
     paths:
+      - '.gitleaksignore'
       - '.github/workflows/ios-staging.yml'
       - 'scripts/ios_staging*'
       - 'docs/examples/ios-staging/**'

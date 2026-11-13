@@ -4,3 +4,10 @@
 # Scope is this exact immutable commit, file, rule and line only. No path or
 # general token-pattern allowlist is enabled; default full-history rules remain.
 4e0cf15b0459ecb10fab902f1883835f18fba0d8:docs/evidence/media-bundle-local-2026-11-09.json:generic-api-key:10
+
+# Verified malformed-PEM negative-test fixtures, not keys: the private-key rule
+# joins two adjacent literal BEGIN headers on each line. There is no key body
+# or END block. Scope is the exact introducing commit/file/rule/line only;
+# future commits, other lines and all real-key patterns remain scanned.
+801606c519f855ea0d8cf208ea0e137d1d0f4722:scripts/ios_p12_repack_probe_test.py:private-key:82
+801606c519f855ea0d8cf208ea0e137d1d0f4722:scripts/ios_p12_repack_probe_test.py:private-key:83

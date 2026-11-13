@@ -41,7 +41,7 @@
     },
     {
       "path": ".github/workflows/native-checks.yml",
-      "sha256": "b4dd3ae453da6dc7175c56d46919acebaa7c9b929c63cc29e7fabd45066972bb",
+      "sha256": "faa9918ed0aff1a1fb6e496aea0bf0a72993f3580287b3f3c0c5fa9575062ad2",
       "jobs": [
         "android-debug",
         "ios-simulator",
@@ -50,7 +50,7 @@
     },
     {
       "path": ".github/workflows/codec-resource.yml",
-      "sha256": "e71623b66e479479eb21ce0511d3208eea78ab761da5e9c76058898f672ad4d1",
+      "sha256": "189c5320e84de83dc254fe4c66e5e97048e37c32cf5c3161041660c8bfe521a4",
       "jobs": [
         "local-edge-probe"
       ]

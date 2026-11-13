@@ -4,6 +4,7 @@ on:
   workflow_dispatch:
   pull_request:
     paths:
+      - '.gitleaksignore'
       - '.github/workflows/ios-staging.yml'
       - 'scripts/ios_staging*'
       - 'docs/examples/ios-staging/**'

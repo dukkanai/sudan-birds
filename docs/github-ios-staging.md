@@ -289,6 +289,23 @@ Synthetic success alone does not authorize that action or another upload.
 Official password-input references: [OpenSSL](https://docs.openssl.org/3.4/man1/openssl-passphrase-options/)
 and [LibreSSL](https://man.openbsd.org/openssl).
 
+The temporary rewrap on `801606c` passed on the actual macOS runner in
+[job 131731644830](https://github.com/dukkanai/sudan-birds/actions/runs/43378850280/job/131731644830).
+Certificate equality, private-key-derived public-key equality, final source
+preservation, matching dummy identity and all cleanup fields were true. The
+experiment still proves only one synthetic self-signed identity, not the real
+certificate chain or application signing.
+
+That source's repository-security job correctly blocked completion when its
+full-history secret scan flagged two adjacent malformed PEM header literals in
+the negative tests. Independent inspection against Gitleaks v8.21.2's exact
+`private-key` rule confirmed no key body or END marker in either match. Current
+fixtures now construct their incomplete headers separately. Two historical
+false-positive fingerprints alone are documented in `.gitleaksignore`, scoped
+to the immutable introducing commit, test file, rule and lines 82/83. There is
+no file-wide or rule-wide exclusion, history rewrite or skipped scanner.
+Native and codec checks also trigger on changes to this narrowly scoped file.
+
 ## Local validation and remaining blockers
 
 From repository root:

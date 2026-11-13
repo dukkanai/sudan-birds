@@ -79,12 +79,17 @@ class Tests(unittest.TestCase):
     def test_plaintext_and_ambiguous_pem_rejected(self):
         with tempfile.TemporaryDirectory() as folder:
             path = Path(folder) / 'fixture'
-            for raw in [b'-----BEGIN PRIVATE KEY-----', b'-----BEGIN RSA PRIVATE KEY-----',
-                        b'-----BEGIN ENCRYPTED PRIVATE KEY-----\n-----BEGIN PRIVATE KEY-----', b'x' * 65537]:
+            # These deliberately incomplete headers have no key body. Build
+            # markers separately so secret scanners cannot join adjacent
+            # literals into a fictitious PEM block across Python punctuation.
+            def header(kind):
+                return b'-' * 5 + b'BEGIN ' + kind + b'-' * 5
+            for raw in [header(b'PRIVATE KEY'), header(b'RSA PRIVATE KEY'),
+                        header(b'ENCRYPTED PRIVATE KEY') + b'\n' + header(b'PRIVATE KEY'), b'x' * 65537]:
                 path.write_bytes(raw)
                 with self.assertRaises(p.Failure):
                     p.private_encrypted_pem(path)
-            path.write_bytes(b'-----BEGIN ENCRYPTED PRIVATE KEY-----')
+            path.write_bytes(header(b'ENCRYPTED PRIVATE KEY'))
             p.private_encrypted_pem(path)
             self.assertEqual(path.stat().st_mode & 0o777, 0o600)
 

@@ -37,6 +37,29 @@ GROUP_KILL_SECONDS = 2.0
 IMPORT_DIAGNOSTIC_LIMIT = 4096
 
 
+def p12_mac_presence(diagnostic):
+    """Classify only fixed metadata from a successful private OpenSSL read."""
+    if not isinstance(diagnostic, bytes) or len(diagnostic) > IMPORT_DIAGNOSTIC_LIMIT:
+        return 'unknown'
+    try:
+        lines = diagnostic.decode('ascii', errors='strict').splitlines()
+    except UnicodeError:
+        return 'unknown'
+    # OpenSSL and LibreSSL use different headers. Do not emit headers, salts,
+    # attributes, paths or algorithm descriptions. Ambiguity is not evidence.
+    present = [line for line in lines if re.fullmatch(
+        r'MAC(?:: (?:sha1|sha224|sha256|sha384|sha512), Iteration | Iteration )[1-9][0-9]{0,8}', line)]
+    absent = [line for line in lines if line == 'Warning: MAC is absent!']
+    headers = [line for line in lines if line.startswith(('MAC:', 'MAC Iteration', 'Warning: MAC'))]
+    if len(headers) != 1:
+        return 'unknown'
+    if len(present) == 1 and not absent:
+        return 'present'
+    if len(absent) == 1 and not present:
+        return 'absent'
+    return 'unknown'
+
+
 def private_failure_message(stage, diagnostic=b''):
     """Return fixed import categories only, never tool text, paths or credentials."""
     message = 'Private tool failed at ' + stage
@@ -387,6 +410,15 @@ class Invocation:
             stdout.seek(0)
             data = stdout.read(4000001)
             require(len(data) <= 4000000, 'Private tool output exceeds safe limit at ' + stage + '.')
+            if stage == 'p12-read-check':
+                try:
+                    stderr.seek(0)
+                    diagnostic = stderr.read(IMPORT_DIAGNOSTIC_LIMIT + 1)
+                except OSError:
+                    diagnostic = None
+                # -info metadata is written on stderr; unexpected stdout cannot
+                # become evidence. Return only a fixed label, never private bytes.
+                return (p12_mac_presence(diagnostic) if not data else 'unknown').encode('ascii')
             return data
 
     def write(self, name, data):
@@ -395,6 +427,40 @@ class Invocation:
             file.write(data)
         path.chmod(0o600)
         return path
+
+    def p12_read_diagnostic(self, p12, password):
+        """Compare readers after a failed import, never repair or authorize upload."""
+        # OpenSSL's stdin password reader is line-oriented. Do not silently
+        # truncate, trim, normalize or reinterpret a secret for this comparison.
+        if (not isinstance(password, str) or not 1 <= len(password) <= 128
+                or any(not 32 <= ord(char) <= 126 for char in password)):
+            return 'not_run_password_format'
+        try:
+            presence = self.run(['/usr/bin/openssl', 'pkcs12', '-in', str(p12),
+                                 '-info', '-noout', '-passin', 'stdin'], 'p12-read-check',
+                                input_bytes=password.encode('ascii') + b'\n', timeout=30)
+            # This means the reader accepted the container, NOT that a MAC was
+            # present or verified. Some readers accept a MAC-less P12 with a warning.
+            label = presence.decode('ascii') if presence in {b'present', b'absent', b'unknown'} else 'unknown'
+            return 'read_check_passed_mac_' + label
+        except Exception:
+            # Keep all command output/private exception data suppressed. The
+            # original import failure remains primary, including on interruption.
+            return 'failed_or_unavailable'
+
+    def import_certificate(self, p12, password):
+        try:
+            self.run(['/usr/bin/security', 'import', str(p12), '-k', str(self.keychain),
+                      '-P', password, '-T', '/usr/bin/codesign', '-T', '/usr/bin/security'],
+                     'certificate-import')
+        except Blocked as error:
+            if str(error) == private_failure_message('certificate-import', b'MAC verification failed'):
+                try:
+                    result = self.p12_read_diagnostic(p12, password)
+                    print('P12 diagnostic: ' + result)
+                except Exception:
+                    pass  # Diagnostic/reporting failure must not replace the import failure.
+            raise  # Diagnostic success must never permit signing or replace the failure.
 
     def cleanup(self):
         failures = ['private-process-group-unconfirmed'] if self.unconfirmed_process_groups else []
@@ -439,8 +505,7 @@ class Invocation:
         self.run(['/usr/bin/security', 'create-keychain', '-p', password, str(self.keychain)], 'keychain-create')
         self.run(['/usr/bin/security', 'set-keychain-settings', '-lut', '3600', str(self.keychain)], 'keychain-settings')
         self.run(['/usr/bin/security', 'unlock-keychain', '-p', password, str(self.keychain)], 'keychain-unlock')
-        self.run(['/usr/bin/security', 'import', str(p12), '-k', str(self.keychain), '-P', private['BIRDS_P12_PASSWORD'],
-                  '-T', '/usr/bin/codesign', '-T', '/usr/bin/security'], 'certificate-import')
+        self.import_certificate(p12, private['BIRDS_P12_PASSWORD'])
         self.run(['/usr/bin/security', 'set-key-partition-list', '-S', 'apple-tool:,apple:,codesign:', '-s', '-k', password,
                   str(self.keychain)], 'key-partitions')
         identity = self.run(['/usr/bin/security', 'find-identity', '-v', '-p', 'codesigning', str(self.keychain)], 'certificate-identity').decode()

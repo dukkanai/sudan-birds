@@ -201,6 +201,38 @@ This diagnostic change needs its own exact-source checks before another protecte
 invocation. No algorithm downgrade, secret replacement or credential fallback is
 part of it.
 
+## Bounded import diagnosis (2026-11-13)
+
+Source `7177d6f` passed all eight exact-source CI checks. Protected upload run
+[43371573079](https://github.com/dukkanai/sudan-birds/actions/runs/43371573079)
+passed preflight and its 103 guard tests, then stopped at certificate import with
+the fixed category `pkcs12_mac_verification_failed`. It reported `not_uploaded`,
+no IPA digest and complete cleanup. The enable flag was verified false afterward.
+Neither a wrong password nor an incompatible P12 algorithm is established by
+that category. No certificate or secret was replaced.
+
+The next diagnostic is failure-only: after that exact import category, one
+30-second `/usr/bin/openssl pkcs12 -info -noout -passin stdin` read uses the same
+owned P12 and existing password. The password never enters this diagnostic's
+command arguments or child environment. Unsupported password framing is not
+trimmed, normalized or retried. Raw output remains private; only a fixed reader
+outcome and strictly allowlisted MAC-presence status can be reported.
+
+`read_check_passed_mac_present` means this reader accepted a container whose
+metadata declared a MAC. An absent/unknown MAC does not establish password
+validity: a synthetic MAC-less P12 can pass `-noout` even with a wrong password.
+Reader differences do not by themselves prove why Apple's importer rejected
+the file. Unknown, conflicting, malformed or oversized diagnostic metadata is
+not promoted to positive MAC evidence. The metadata read is bounded to 4096
+bytes, but the existing private subprocess capture files are not a strict
+output-volume limit.
+
+Every diagnostic outcome preserves the original import failure and prevents
+signing/upload. Even a broken diagnostic output stream must not replace it.
+No key extraction, container conversion, algorithm downgrade, password change,
+credential fallback or upload retry is added. This source needs fresh CI and a
+protected invocation before any actual macOS diagnostic result can be claimed.
+
 ## Local validation and remaining blockers
 
 From repository root:
@@ -230,7 +262,8 @@ requires both modern authentication flag sets, including `--api-key` and
 Local validation is Linux-only. The nonsecret CI probe does not establish real
 environment API visibility, certificate/profile import, manual archive/export,
 codesign checks, individual/team-key authentication or TestFlight processing/delivery.
-Those credential-bearing stages remain unexecuted by this implementation work.
+The dated run records above establish only the stages actually reached; archive,
+export, Apple upload, processing and tester delivery remain unverified.
 Keep activation blocked until those relevant setup/verification steps are actually
 possible and approved. Do not replace an inaccessible verification with `true`.
 

@@ -12,6 +12,7 @@ on:
       - 'scripts/*native_dependency_evidence*'
       - 'scripts/ios_native_storage*'
       - 'scripts/ios_toolchain_probe*'
+      - 'scripts/ios_p12_compatibility_probe*'
       - 'docs/native-dependency-evidence.md'
       - '.github/workflows/native-checks.yml'
       - '.github/workflows/ci.yml'
@@ -81,6 +82,11 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           persist-credentials: false
+      - name: Verify synthetic P12 probe guards (no credentials)
+        run: python3 -m unittest discover -s scripts -p 'ios_p12_compatibility_probe_test.py' -v
+      - name: Compare synthetic P12 imports in owned temporary keychains
+        timeout-minutes: 5
+        run: python3 scripts/ios_p12_compatibility_probe.py
       - name: Prepare Go for evidence secret scan
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:

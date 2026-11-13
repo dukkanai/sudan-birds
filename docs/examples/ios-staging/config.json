@@ -31,7 +31,7 @@
   "ci_workflows": [
     {
       "path": ".github/workflows/ci.yml",
-      "sha256": "a370d72214678d79e170b466e488578ccb464bb859ce86c387133ee357eb66bd",
+      "sha256": "249c424da87a2e9d433ec62167f5c2e993036aed3723fc5784b510b3b7f212c3",
       "jobs": [
         "flutter",
         "database",
@@ -41,7 +41,7 @@
     },
     {
       "path": ".github/workflows/native-checks.yml",
-      "sha256": "616a801718defaeeab0f988f113de38c5de9accc6afe6f1b9b97e935f84711a0",
+      "sha256": "86b4343f73cce6d21db0ad37546fd8b1cac0d9bc37c58c363b9163cc33df0673",
       "jobs": [
         "android-debug",
         "ios-simulator",

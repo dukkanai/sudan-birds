@@ -198,6 +198,7 @@ jobs:
         run: |
           python3 -m unittest discover -s scripts -p 'ios_staging*_test.py' -v
           python3 -m unittest discover -s scripts -p 'ios_toolchain_probe_test.py' -v
+          python3 -m unittest discover -s scripts -p 'ios_p12_compatibility_probe_test.py' -v
       - name: Native evidence boundary tests (offline)
         run: python3 -m unittest discover -s scripts -p 'native_dependency_evidence_test.py'
       - name: Secret scan (redacted, complete Git history)

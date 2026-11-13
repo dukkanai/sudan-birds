@@ -233,6 +233,37 @@ No key extraction, container conversion, algorithm downgrade, password change,
 credential fallback or upload retry is added. This source needs fresh CI and a
 protected invocation before any actual macOS diagnostic result can be claimed.
 
+### Observed reader difference and synthetic next step
+
+Source `db284fe` passed all eight checks. Its explicitly approved one-time run
+[43375564845](https://github.com/dukkanai/sudan-birds/actions/runs/43375564845)
+passed preflight, then again reported `pkcs12_mac_verification_failed` from
+Apple's importer. The private OpenSSL comparison reported
+`read_check_passed_mac_present` for the same P12 and password. This establishes
+a reader difference, not the exact incompatibility or a wrong-password cause.
+The run reported `not_uploaded`, no IPA digest and complete cleanup; the upload
+enable flag was verified false. No real certificate or secret was changed.
+
+The next independent native check uses **only freshly generated synthetic keys,
+certificates and passwords**, with no Apple account, protected environment or
+repository secret access. It compares at most three fixture export profiles:
+platform default, AES-256/SHA-256 and 3DES/SHA-1. The legacy profile is a dummy
+compatibility experiment, not authorization to weaken any real stored material.
+Each import targets its own temporary keychain. The probe must clean up only
+owned resources and verify the original search-list/default-keychain state.
+Creating a keychain may temporarily auto-add it to that runner's search list;
+the probe does not explicitly replace that list or choose a different default.
+
+Fixed results distinguish synthetic reader/import behavior from trusted app
+signing. A self-signed fixture is not a trusted Apple distribution identity.
+Raw child output, dummy private material and paths are not published or uploaded.
+Unknown failures, unbounded child execution and incomplete cleanup are blockers,
+not evidence of a compatible import. The iOS compile job gains this explicit
+nonsecret step; all existing build, storage, scan and upload guards remain.
+Checked-in workflow fingerprints change only to cover these additional checks;
+runtime upload approval stays disabled. No actual Mac result for this probe is
+claimed before its exact-source run completes.
+
 ## Local validation and remaining blockers
 
 From repository root:

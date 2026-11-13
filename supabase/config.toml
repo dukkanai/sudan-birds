@@ -1,0 +1,29 @@
+project_id = "sudan-birds-local"
+[api]
+enabled = true
+schemas = ["public", "graphql_public"]
+extra_search_path = ["public", "extensions"]
+max_rows = 100
+[db]
+major_version = 17
+[functions.media]
+# Modern signing keys: Auth.getUser verifies callers in the handler; queries retain RLS.
+verify_jwt = false
+[functions.contact]
+# Auth.getUser verifies callers before the caller-scoped contact RPC.
+verify_jwt = false
+[db.seed]
+enabled = true
+sql_paths = ["./seed.sql"]
+[functions.account-delete]
+# Auth.getUser and recent-session checks precede owner-bound service operations.
+verify_jwt = false
+[functions.lifecycle]
+# Auth.getUser + caller-RLS admin check, or the separately configured scoped job secret.
+verify_jwt = false
+[functions.codec-diagnostic]
+# Separate expired diagnostic: not approved for deployment or gateway changes.
+verify_jwt = true
+[functions.media-read]
+# Public verified images; handler validates any supplied user JWT independently.
+verify_jwt = false

@@ -1,0 +1,22 @@
+// Flutter is an independent included build: the app's pluginManagement does not
+// configure it. Route only the failing compiler module directly to Maven Central.
+// Keep the SDK immutable and retain the Plugin Portal for all other coordinates.
+def flutterRoot = System.getenv('FLUTTER_ROOT')
+if (!flutterRoot) {
+    throw new GradleException('FLUTTER_ROOT is required for the scoped Flutter repository policy')
+}
+def flutterGradleDir = new File(flutterRoot, 'packages/flutter_tools/gradle').canonicalFile
+
+gradle.beforeSettings { settings ->
+    if (settings.settingsDir.canonicalFile == flutterGradleDir) {
+        settings.pluginManagement.repositories {
+            exclusiveContent {
+                forRepository { mavenCentral() }
+                filter {
+                    includeModule('org.jetbrains.kotlin', 'kotlin-compiler-embeddable')
+                }
+            }
+            gradlePluginPortal()
+        }
+    }
+}

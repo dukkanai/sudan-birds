@@ -1,0 +1,165 @@
+name: Native compile checks
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - '.gitleaksignore'
+      - '.github/workflows/ios-staging.yml'
+      - 'scripts/ios_staging*'
+      - 'docs/examples/ios-staging/**'
+      - 'app/**'
+      - 'scripts/flutter_plugin_repositories_test.py'
+      - 'scripts/*native_dependency_evidence*'
+      - 'scripts/ios_native_storage*'
+      - 'scripts/ios_toolchain_probe*'
+      - 'scripts/ios_p12_compatibility_probe*'
+      - 'scripts/ios_p12_repack_probe*'
+      - 'docs/native-dependency-evidence.md'
+      - '.github/workflows/native-checks.yml'
+      - '.github/workflows/ci.yml'
+
+permissions:
+  contents: read
+concurrency:
+  group: native-${{ github.ref }}
+  cancel-in-progress: true
+env:
+  CI: 'true'
+  BOT: 'true'
+  FLUTTER_SUPPRESS_ANALYTICS: 'true'
+
+jobs:
+  android-debug:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Isolate Android Gradle state
+        run: echo "GRADLE_USER_HOME=$RUNNER_TEMP/birds-gradle" >> "$GITHUB_ENV"
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: subosito/flutter-action@fd55f4c5af5b953cc57a2be44cb082c8f6635e8e
+        with:
+          flutter-version: '3.38.5'
+          channel: stable
+          cache: true
+      - run: cd app && flutter pub get --enforce-lockfile
+      - name: Configure Flutter plugin dependency source
+        run: |
+          mkdir -p "$GRADLE_USER_HOME/init.d"
+          cp app/android/ci/flutter-plugin-repositories.init.gradle "$GRADLE_USER_HOME/init.d/"
+      - run: cd app && flutter build apk --debug
+      - name: Verify scoped repository policy (offline)
+        run: |
+          gradle_bins=("$GRADLE_USER_HOME"/wrapper/dists/gradle-8.14-all/*/gradle-8.14/bin/gradle)
+          test "${#gradle_bins[@]}" -eq 1
+          test -x "${gradle_bins[0]}"
+          GRADLE_TEST_BIN="${gradle_bins[0]}" python3 -m unittest discover -s scripts -p 'flutter_plugin_repositories_test.py' -v
+
+      - name: Capture Android dependency evidence
+        run: bash scripts/capture_native_dependency_evidence.sh android
+      - name: Validate and scan Android evidence before upload
+        run: |
+          python3 scripts/native_dependency_evidence.py validate --platform android --output "$RUNNER_TEMP/native-evidence-android"
+          go run github.com/zricethezav/gitleaks/v8@v8.21.2 dir --redact --no-banner --no-color "$RUNNER_TEMP/native-evidence-android"
+          python3 scripts/native_dependency_evidence.py validate --platform android --output "$RUNNER_TEMP/native-evidence-android"
+      - name: Retain only allowlisted Android evidence
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: native-dependencies-android-debug-${{ github.sha }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/native-evidence-android/pubspec.lock
+            ${{ runner.temp }}/native-evidence-android/manifest.json
+            ${{ runner.temp }}/native-evidence-android/android-debugRuntimeClasspath.txt
+            ${{ runner.temp }}/native-evidence-android/android-tink-insight.txt
+          if-no-files-found: error
+          include-hidden-files: false
+          retention-days: 7
+
+  ios-simulator:
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Verify synthetic P12 probe guards (no credentials)
+        run: python3 -m unittest discover -s scripts -p 'ios_p12_compatibility_probe_test.py' -v
+      - name: Compare synthetic P12 imports in owned temporary keychains
+        timeout-minutes: 5
+        run: python3 scripts/ios_p12_compatibility_probe.py
+      - name: Verify synthetic P12 rewrap guards (no credentials)
+        run: |
+          python3 -m unittest discover -s scripts -p 'ios_staging_p12_rewrap_test.py' -v
+          python3 -m unittest discover -s scripts -p 'ios_p12_repack_probe_test.py' -v
+      - name: Test temporary synthetic P12 rewrap without changing source
+        timeout-minutes: 5
+        run: python3 scripts/ios_p12_repack_probe.py
+      - name: Prepare Go for evidence secret scan
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: '1.27.3'
+          cache: false
+      - uses: subosito/flutter-action@fd55f4c5af5b953cc57a2be44cb082c8f6635e8e
+        with:
+          flutter-version: '3.38.5'
+          channel: stable
+          cache: true
+      - run: cd app && flutter pub get --enforce-lockfile
+      - run: cd app && flutter build ios --simulator --debug --no-codesign
+      - name: Reject tracked native source drift after CocoaPods integration
+        run: git diff --quiet HEAD -- app/ios
+      - name: Capture unsigned iOS simulator dependency evidence
+        run: bash scripts/capture_native_dependency_evidence.sh ios
+      - name: Validate and scan iOS evidence before upload
+        run: |
+          python3 scripts/native_dependency_evidence.py validate --platform ios --output "$RUNNER_TEMP/native-evidence-ios"
+          go run github.com/zricethezav/gitleaks/v8@v8.21.2 dir --redact --no-banner --no-color "$RUNNER_TEMP/native-evidence-ios"
+          python3 scripts/native_dependency_evidence.py validate --platform ios --output "$RUNNER_TEMP/native-evidence-ios"
+      - name: Retain only allowlisted iOS simulator evidence
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: native-dependencies-ios-simulator-${{ github.sha }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/native-evidence-ios/pubspec.lock
+            ${{ runner.temp }}/native-evidence-ios/manifest.json
+            ${{ runner.temp }}/native-evidence-ios/Podfile.lock
+            ${{ runner.temp }}/native-evidence-ios/pod-resolution.json
+            ${{ runner.temp }}/native-evidence-ios/ios-project.pbxproj
+          if-no-files-found: error
+          include-hidden-files: false
+          retention-days: 7
+
+      # This read-only gate is preparation, not an application functional test.
+      - name: Check proposed signing toolchain capabilities (no credentials)
+        run: python3 scripts/ios_toolchain_probe.py
+
+  ios-native-storage:
+    runs-on: macos-15
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: subosito/flutter-action@fd55f4c5af5b953cc57a2be44cb082c8f6635e8e
+        with:
+          flutter-version: '3.38.5'
+          channel: stable
+          cache: true
+      - name: Verify simulator orchestration guards (offline)
+        run: python3 -m unittest discover -s scripts -p 'ios_native_storage_test.py' -v
+      - run: cd app && flutter pub get --enforce-lockfile
+      - name: Allocate private simulator invocation
+        run: |
+          umask 077
+          echo "BIRDS_SIM_STATE=$(mktemp -d "$RUNNER_TEMP/birds-storage.XXXXXXXX")" >> "$GITHUB_ENV"
+      - name: Run real storage smoke on owned installed simulator
+        timeout-minutes: 23
+        run: cd app && python3 ../scripts/ios_native_storage.py run "$BIRDS_SIM_STATE"
+      - name: Clean up only this invocation's simulator
+        if: always() && env.BIRDS_SIM_STATE != ''
+        timeout-minutes: 3
+        run: cd app && python3 ../scripts/ios_native_storage.py cleanup "$BIRDS_SIM_STATE"

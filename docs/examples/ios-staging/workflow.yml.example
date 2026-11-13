@@ -1,0 +1,101 @@
+# INERT: this file is outside .github/workflows and is not executable by Actions.
+# Activation requires docs/github-ios-staging.md and an approved credential batch.
+name: Owner-approved iOS staging upload
+on:
+  pull_request:
+    branches: [main]
+    types: [labeled]
+
+permissions:
+  contents: read
+  actions: read
+  pull-requests: read
+
+concurrency:
+  group: sudan-birds-ios-staging
+  cancel-in-progress: false
+
+env:
+  CI: 'true'
+  BOT: 'true'
+  FLUTTER_SUPPRESS_ANALYTICS: 'true'
+
+jobs:
+  preflight:
+    if: >-
+      vars.BIRDS_ENABLE_IOS_STAGING == 'true' &&
+      github.event.label.name == 'birds-testflight-trial' &&
+      github.repository == 'dukkanai/sudan-birds' &&
+      github.event.pull_request.number == 1 &&
+      github.event.pull_request.head.repo.full_name == 'dukkanai/sudan-birds' &&
+      github.event.pull_request.head.repo.fork == false &&
+      github.event.pull_request.head.ref == 'build/foundation' &&
+      github.event.pull_request.base.ref == 'main' &&
+      github.actor != 'dependabot[bot]' &&
+      github.event.pull_request.user.login != 'dependabot[bot]'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      BIRDS_ENABLE_IOS_STAGING: ${{ vars.BIRDS_ENABLE_IOS_STAGING }}
+      BIRDS_TRIAL_LIMITATIONS_HEAD_SHA: ${{ vars.BIRDS_TRIAL_LIMITATIONS_HEAD_SHA }}
+    outputs:
+      source_sha: ${{ steps.gate.outputs.source_sha }}
+      environment: ${{ steps.gate.outputs.environment }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - name: Offline policy and guard tests
+        run: python3 -m unittest discover -s scripts -p 'ios_staging*_test.py' -v
+      - name: Verify approved source, all eight CI jobs, and existing protection
+        id: gate
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BIRDS_APPROVED_HEAD_SHA: ${{ vars.BIRDS_APPROVED_HEAD_SHA }}
+          BIRDS_CI_RUNS_JSON: ${{ vars.BIRDS_CI_RUNS_JSON }}
+        run: python3 scripts/ios_staging_guard.py --outputs
+
+  sign-upload:
+    needs: preflight
+    if: needs.preflight.result == 'success'
+    # The preflight must verify the environment already exists. Never auto-create it by guessing a name.
+    environment:
+      name: ${{ needs.preflight.outputs.environment }}
+    runs-on: macos-15
+    timeout-minutes: 60
+    env:
+      BIRDS_ENABLE_IOS_STAGING: ${{ vars.BIRDS_ENABLE_IOS_STAGING }}
+      BIRDS_TRIAL_LIMITATIONS_HEAD_SHA: ${{ vars.BIRDS_TRIAL_LIMITATIONS_HEAD_SHA }}
+      BIRDS_APPROVED_HEAD_SHA: ${{ vars.BIRDS_APPROVED_HEAD_SHA }}
+      DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ needs.preflight.outputs.source_sha }}
+          persist-credentials: false
+      - uses: subosito/flutter-action@fd55f4c5af5b953cc57a2be44cb082c8f6635e8e
+        with:
+          flutter-version: '3.38.5'
+          channel: stable
+          cache: false
+      - name: Resolve locked client dependencies before secrets exist
+        run: cd app && flutter pub get --enforce-lockfile
+      - name: Prepare approved staging build without credentials
+        env:
+          BIRDS_STAGING_PUBLISHABLE_KEY: ${{ vars.BIRDS_STAGING_PUBLISHABLE_KEY }}
+        run: python3 scripts/ios_staging_prepare.py
+      - name: Reverify gates, manually sign, export privately, and upload once to Apple
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BIRDS_APPROVED_HEAD_SHA: ${{ vars.BIRDS_APPROVED_HEAD_SHA }}
+          BIRDS_CI_RUNS_JSON: ${{ vars.BIRDS_CI_RUNS_JSON }}
+          # Set this environment variable to the pending run ID, before owner review.
+          BIRDS_APPROVED_UPLOAD_RUN_ID: ${{ vars.BIRDS_APPROVED_UPLOAD_RUN_ID }}
+          BIRDS_DISTRIBUTION_P12_BASE64: ${{ secrets.BIRDS_DISTRIBUTION_P12_BASE64 }}
+          BIRDS_P12_PASSWORD: ${{ secrets.BIRDS_P12_PASSWORD }}
+          BIRDS_APP_PROFILE_BASE64: ${{ secrets.BIRDS_APP_PROFILE_BASE64 }}
+          BIRDS_ASC_P8_BASE64: ${{ secrets.BIRDS_ASC_P8_BASE64 }}
+        # Python owns signal handling, private logs, profile and keychain cleanup in finally.
+        run: python3 scripts/ios_staging_sign.py
+      # Deliberately no upload-artifact, cache, release, external testers or IPA download link.

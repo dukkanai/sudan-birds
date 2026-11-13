@@ -1,0 +1,39 @@
+-- REVIEW/APPROVAL TEMPLATE ONLY. NOT A MIGRATION. DO NOT RUN AS-IS.
+-- Requires explicit approval for creating/using a new persistent job credential,
+-- installing pg_cron/pg_net if absent, and scheduling authenticated service work.
+-- Never paste actual secret values into this file, Git, SQL history or logs.
+--
+-- Preconditions, configured through approved secure operator channels:
+-- 1. A high-entropy base64url job secret (>=43 chars) is provisioned as the Edge
+--    LIFECYCLE_JOB_SECRET and as a Vault secret named birds_lifecycle_job_secret.
+-- 2. Vault secret birds_lifecycle_url contains the exact HTTPS staging function
+--    URL https://<PROJECT_REF>.supabase.co/functions/v1/lifecycle.
+-- 3. Verify lifecycle's approved verify_jwt=false deployment setting, as documented
+--    in ../README.md for all five application functions (hosted change pending).
+--    Its handler STILL requires Auth.getUser + caller-RLS admin authorization, or
+--    the dedicated constant-time scoped job credential. The opaque job header is
+--    not a user JWT. Diagnostic gateway settings stay unchanged. Disabling the
+--    legacy gateway alone never configures or authorizes scheduled work.
+-- 4. Confirm pg_cron and pg_net already exist; extension installation is separate.
+-- 5. Run a signed synthetic job and prove retry/cleanup behavior before scheduling.
+--
+-- After these preconditions and explicit approval, operator may adapt:
+-- select cron.schedule('birds-lifecycle-staging', '* * * * *', $job$
+--   select net.http_post(
+--     url := (select decrypted_secret from vault.decrypted_secrets where name='birds_lifecycle_url'),
+--     headers := jsonb_build_object(
+--       'Content-Type','application/json',
+--       'x-lifecycle-job-secret',(select decrypted_secret from vault.decrypted_secrets where name='birds_lifecycle_job_secret')
+--     ),
+--     body := '{"action":"scheduled"}'::jsonb,
+--     timeout_milliseconds := 100000
+--   );
+-- $job$);
+--
+-- Reconcile existing jobs by name before creating; never create duplicate schedules.
+-- Observe pg_net response status only, not request headers/secret values. The JSON
+-- scheduled payload is constant. One run claims at most one account job (lease2min),
+-- or cleans at most3 eligible orphan objects. Failed claims expire and retry.
+-- Verify job completion even after the user closes the app. Alert an operator on
+-- repeated failures, stuck leases, or oldest pending job age; no alert is wired here.
+-- Disable/revoke through reviewed operator steps, not a committed automatic action.

@@ -1,0 +1,57 @@
+name: Local codec resource experiment
+on:
+  pull_request:
+    paths:
+      - '.gitleaksignore'
+      - '.github/workflows/ios-staging.yml'
+      - 'scripts/ios_staging*'
+      - 'docs/examples/ios-staging/**'
+      - 'supabase/functions/codec-diagnostic/**'
+      - 'supabase/functions/_shared/images*'
+      - 'supabase/functions/_shared/codec_capacity*'
+      - 'supabase/functions/_shared/http.ts'
+      - 'supabase/functions/_shared/auth.ts'
+      - 'supabase/functions/_shared/r2.ts'
+      - 'supabase/functions/_shared/presign.ts'
+      - 'supabase/functions/_shared/image_stream.ts'
+      - 'supabase/functions/deno.*'
+      - 'supabase/functions/package*.json'
+      - 'supabase/config.toml'
+      - 'scripts/codec_resource*'
+      - 'scripts/install_supabase*'
+      - '.github/workflows/codec-resource.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: codec-resource-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  local-edge-probe:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Test harness boundaries
+        run: python3 -m unittest discover -s scripts -p 'codec_resource_test.py'
+      - name: CLI installer boundary tests (offline)
+        run: python3 -m unittest discover -s scripts -p 'install_supabase_test.py'
+      - name: Install pinned official CLI
+        run: python3 scripts/install_supabase.py
+      - name: Create disposable source snapshot
+        run: |
+          umask 077
+          mkdir "$RUNNER_TEMP/birds-codec-copy"
+          git archive HEAD | tar -x -C "$RUNNER_TEMP/birds-codec-copy"
+      - name: Run bounded local Edge experiment
+        run: python3 scripts/codec_resource.py "$RUNNER_TEMP/birds-cli/node_modules/.bin/supabase" "$RUNNER_TEMP/birds-codec-copy"
+      - name: Always stop local services and remove snapshot
+        if: always()
+        run: |
+          if [ -d "$RUNNER_TEMP/birds-codec-copy" ] && [ -x "$RUNNER_TEMP/birds-cli/node_modules/.bin/supabase" ]; then
+            cd "$RUNNER_TEMP/birds-codec-copy"
+            "$RUNNER_TEMP/birds-cli/node_modules/.bin/supabase" stop --no-backup > /dev/null 2>&1 || true
+          fi
+          rm -rf "$RUNNER_TEMP/birds-codec-copy"

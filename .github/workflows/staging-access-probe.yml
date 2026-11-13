@@ -1,0 +1,42 @@
+# Disabled unless explicitly enabled for one approved head; never accesses signing secrets.
+name: Read-only staging API capability probe
+on:
+  pull_request:
+    branches: [main]
+    types: [labeled]
+permissions:
+  contents: read
+  actions: read
+  pull-requests: read
+concurrency:
+  group: sudan-birds-staging-access-probe
+  cancel-in-progress: false
+jobs:
+  access-probe:
+    if: >-
+      vars.BIRDS_ENABLE_ACCESS_PROBE == 'true' &&
+      github.event.label.name == 'question' &&
+      github.repository == 'dukkanai/sudan-birds' &&
+      github.event.pull_request.number == 1 &&
+      github.event.pull_request.head.repo.full_name == 'dukkanai/sudan-birds' &&
+      github.event.pull_request.head.repo.fork == false &&
+      github.event.pull_request.head.ref == 'build/foundation' &&
+      github.event.pull_request.base.ref == 'main' &&
+      github.event.pull_request.head.sha == vars.BIRDS_ACCESS_PROBE_HEAD_SHA &&
+      github.actor == 'dukkanai' && github.triggering_actor == 'dukkanai' &&
+      github.run_attempt == 1
+    runs-on: ubuntu-24.04
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - name: Offline capability probe tests
+        run: python3 -m unittest discover -s scripts -p 'ios_staging_access_probe_test.py' -v
+      - name: Read environment policy and one known CI log
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BIRDS_ENABLE_ACCESS_PROBE: ${{ vars.BIRDS_ENABLE_ACCESS_PROBE }}
+          BIRDS_ACCESS_PROBE_HEAD_SHA: ${{ vars.BIRDS_ACCESS_PROBE_HEAD_SHA }}
+        run: python3 scripts/ios_staging_access_probe.py

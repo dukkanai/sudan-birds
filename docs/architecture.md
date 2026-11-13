@@ -1,0 +1,35 @@
+# Architecture and error boundaries
+
+## Boundaries
+
+Flutter calls Supabase with the current user session. PostgreSQL RLS, constraints and explicit column grants decide access. Profiles and contact information are separate. An authenticated viewer may reveal contact details only if the owner consented and block checks pass. Report details never become public.
+
+Listings model both requests and offers. An offer requires a numeric price, currency and unit. Requests may use an optional budget. Currency is part of any price comparison. The application has exactly two tabs, requests and offers. Images belong to listings; reports target a listing or an account. No payment or social-engagement tables are part of this version.
+
+Cloudflare R2 is private object storage. A server may issue short-lived, object-specific upload permissions after verifying session, ownership and quota. A completed upload is not automatically publishable. The trusted verifier must decode bytes, reject malformed images and excessive dimensions, remove metadata, and write a verified canonical object. The pipeline stays disabled until hosted resource and real-storage integration checks pass.
+
+## The requested try/catch envelope
+
+Try/catch wraps meaningful asynchronous and external boundaries: application startup, repository requests, parsing, form actions and server handlers. Typed failures propagate to an accessible error state with retry when safe. Unexpected errors must not be silently converted into successful operations or empty results.
+
+Flutter error hooks catch framework and asynchronous failures as a final safety net. These are not substitutes for local error handling. A class declaration cannot be wrapped in a Dart try statement; its fallible operations are wrapped instead. Pure getters and invariant-preserving constructors need validation rather than redundant empty catches.
+
+Error reporting must use a fixed event identifier and safe category. Do not log exception strings, request bodies, URLs containing tokens, sessions, user contacts or secrets. Add a production observability provider only after its data-sharing and privacy settings are approved.
+
+## Account identity and interrupted writes
+
+Private screens, confirmations and deferred navigation belong to the account that started them. Identity changes invalidate their data and actions, including owner-visible hidden listings and moderator report details. Repository requests pin an in-memory authorization snapshot per call; they never change shared client headers or silently use a subsequently signed-in account. Prerequisite reads are followed by identity checks before writes.
+
+An uncertain non-idempotent mutation is not a safe retry. Publication, report and image-reservation flows disable same-screen resubmission after uncertain transport or response outcomes and direct the user to verify server state. Timeouts do not cancel server work. This does not provide exactly-once recovery across app restarts; that would require persisted operation IDs and a server replay contract. Stable media completion and deletion jobs use their existing replay-safe server identifiers.
+
+## Environment separation
+
+The staged R2 bucket is private and empty. No production bucket or Supabase production project is configured in this code. Staging and production must have separate projects, sessions, secrets, storage and build identifiers. Public source code contains only example configuration.
+
+## Deferred gates
+
+See `verification.md` for executed checks and `release-runbook.md` for blocked deployment gates. Do not infer that a class, endpoint or screen is operational merely because it compiles.
+
+## Schema evolution
+
+The first two migrations are immutable because they were already applied and recorded on staging. A new forward migration removes the retired feature from the live schema and rewrites shared policies and RPCs for listings only. Its preflight guards reject any remaining affected user content instead of silently deleting it. Historical SQL is an audit trail, not an active application capability. Never modify an applied migration or use broad cascading drops to bypass dependencies.

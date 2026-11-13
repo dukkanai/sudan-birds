@@ -1,0 +1,206 @@
+name: Required checks
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+  workflow_call:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CI: 'true'
+  BOT: 'true'
+  FLUTTER_SUPPRESS_ANALYTICS: 'true'
+
+jobs:
+  flutter:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: subosito/flutter-action@fd55f4c5af5b953cc57a2be44cb082c8f6635e8e
+        with:
+          flutter-version: '3.38.5'
+          channel: stable
+          cache: true
+      - run: flutter pub get --enforce-lockfile
+      - run: dart format --output=none --set-exit-if-changed lib test
+      - run: flutter analyze
+      - run: flutter test --coverage
+
+  database:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Platform RLS helper and PostgreSQL regression checks
+        run: |
+          npm install --prefix "$RUNNER_TEMP/birds-pg" --ignore-scripts --no-audit --no-fund embedded-postgres@17.6.0-beta.15
+          (cd "$RUNNER_TEMP/birds-pg/node_modules/@embedded-postgres/linux-x64" && node scripts/hydrate-symlinks.js)
+          export LD_LIBRARY_PATH="$RUNNER_TEMP/birds-pg/node_modules/@embedded-postgres/linux-x64/native/lib"
+          export EMBEDDED_POSTGRES_MODULE="$RUNNER_TEMP/birds-pg/node_modules/embedded-postgres/dist/index.js"
+          node supabase/tests/rls_auto_enable_security.mjs
+          node supabase/tests/embedded_security.mjs
+      - name: Local API harness boundary tests
+        run: python3 -m unittest discover -s scripts -p 'api_smoke_test.py'
+      - name: Local Auth lifecycle harness boundary tests
+        run: python3 -m unittest discover -s scripts -p 'auth_lifecycle_test.py'
+      - name: CLI installer boundary tests (offline)
+        run: python3 -m unittest discover -s scripts -p 'install_supabase_test.py'
+      - name: Install pinned Supabase CLI
+        run: python3 scripts/install_supabase.py
+      - name: Start isolated synthetic Supabase
+        run: |
+          umask 077
+          trap 'rm -f "$RUNNER_TEMP/birds-start.log"' EXIT
+          # CLI startup prints local test credentials. Keep them out of public CI logs.
+          if ! "$RUNNER_TEMP/birds-cli/node_modules/.bin/supabase" start -x studio,imgproxy,inbucket,logflare,vector,supavisor > "$RUNNER_TEMP/birds-start.log" 2>&1; then
+            echo 'Isolated Supabase startup failed. Raw output was suppressed because it can contain local credentials.'
+            exit 1
+          fi
+      - name: Apply migrations
+        run: >-
+          "$RUNNER_TEMP/birds-cli/node_modules/.bin/supabase" db reset --local
+      - name: Database and RLS negative tests
+        run: >-
+          "$RUNNER_TEMP/birds-cli/node_modules/.bin/supabase" test db
+      - name: PostgREST API regression checks
+        run: |
+          umask 077
+          trap 'rm -f "$RUNNER_TEMP/birds-status.json"' EXIT
+          "$RUNNER_TEMP/birds-cli/node_modules/.bin/supabase" status --output json > "$RUNNER_TEMP/birds-status.json"
+          python3 scripts/api_smoke.py "$RUNNER_TEMP/birds-status.json"
+      - name: Real local Auth lifecycle and user-bound RLS
+        run: |
+          umask 077
+          trap 'rm -f "$RUNNER_TEMP/birds-status.json"' EXIT
+          "$RUNNER_TEMP/birds-cli/node_modules/.bin/supabase" status --output json > "$RUNNER_TEMP/birds-status.json"
+          timeout --signal=TERM --kill-after=10s 180s python3 scripts/auth_lifecycle.py --local-disposable "$RUNNER_TEMP/birds-status.json"
+      - uses: denoland/setup-deno@e95548e56dfa95d4e1a28d6f422fafe75c4c26fb
+        with:
+          deno-version: v2.5.6
+      - name: Local media HTTP harness checks
+        run: |
+          python3 -m unittest discover -s scripts -p 'media_http_local_test.py'
+          (cd supabase/functions && npm ci --ignore-scripts --no-audit --no-fund)
+          export DENO_DIR="$RUNNER_TEMP/media-http-cache"
+          deno fmt --check --config supabase/functions/deno.json scripts/media_http_local.ts scripts/media_http_local_guard_test.ts
+          deno lint --config supabase/functions/deno.json scripts/media_http_local.ts scripts/media_http_local_guard_test.ts
+          deno check --no-lock --node-modules-dir=manual --config supabase/functions/deno.json scripts/media_http_local.ts scripts/media_http_local_guard_test.ts
+          SDK_ENV='SMITHY_NEW_RETRIES_2026,AWS_LAMBDA_NODEJS_NO_GLOBAL_AWSLAMBDA,AWS_LAMBDA_BENCHMARK_MODE,AWS_NEW_RETRIES_2026'
+          env -i PATH=/usr/bin:/bin DENO_DIR="$DENO_DIR" "$(command -v deno)" test \
+            --cached-only --no-remote --no-lock --no-prompt --node-modules-dir=manual \
+            --deny-net --deny-read --deny-write --deny-run --deny-sys --deny-ffi --allow-env="$SDK_ENV" \
+            --config supabase/functions/deno.json scripts/media_http_local_guard_test.ts
+      - name: Real local media HTTP Auth and RPC (simulated storage)
+        run: |
+          umask 077
+          trap 'rm -f "$RUNNER_TEMP/birds-media-status.json"' EXIT
+          "$RUNNER_TEMP/birds-cli/node_modules/.bin/supabase" status --output json > "$RUNNER_TEMP/birds-media-status.json"
+          export DENO_BIN="$(command -v deno)"
+          export DENO_DIR="$RUNNER_TEMP/media-http-cache"
+          timeout --signal=TERM --kill-after=10s 180s python3 scripts/media_http_local.py --local-disposable "$RUNNER_TEMP/birds-media-status.json"
+      - name: Remaining HTTP harness boundary checks (offline)
+        run: |
+          python3 -m unittest discover -s scripts -p 'remaining_http_local_test.py'
+          export DENO_DIR="$RUNNER_TEMP/media-http-cache"
+          FILES=(scripts/remaining_http_local.ts scripts/remaining_http_local_guard_test.ts)
+          deno fmt --check --config supabase/functions/deno.json "${FILES[@]}"
+          deno lint --config supabase/functions/deno.json "${FILES[@]}"
+          deno check --no-lock --node-modules-dir=manual --config supabase/functions/deno.json "${FILES[@]}"
+          SDK_ENV='SMITHY_NEW_RETRIES_2026,AWS_LAMBDA_NODEJS_NO_GLOBAL_AWSLAMBDA,AWS_LAMBDA_BENCHMARK_MODE,AWS_NEW_RETRIES_2026'
+          env -i PATH=/usr/bin:/bin DENO_DIR="$DENO_DIR" "$(command -v deno)" test \
+            --cached-only --no-remote --no-lock --no-prompt --node-modules-dir=manual \
+            --deny-net --deny-read --deny-write --deny-run --deny-sys --deny-ffi --allow-env="$SDK_ENV" \
+            --config supabase/functions/deno.json scripts/remaining_http_local_guard_test.ts
+      - name: Real local contact and deletion HTTP (simulated fences)
+        run: |
+          umask 077
+          trap 'rm -f "$RUNNER_TEMP/birds-remaining-status.json"' EXIT
+          # Fresh stack data: scheduled cleanup must not select earlier harness fixtures.
+          "$RUNNER_TEMP/birds-cli/node_modules/.bin/supabase" db reset --local
+          docker exec -i supabase_db_sudan-birds-local psql -U postgres -d postgres -v ON_ERROR_STOP=1 < scripts/remaining_http_fixture.sql
+          "$RUNNER_TEMP/birds-cli/node_modules/.bin/supabase" status --output json > "$RUNNER_TEMP/birds-remaining-status.json"
+          export DENO_BIN="$(command -v deno)" DENO_DIR="$RUNNER_TEMP/media-http-cache"
+          timeout --signal=TERM --kill-after=10s 180s python3 scripts/remaining_http_local.py --local-disposable "$RUNNER_TEMP/birds-remaining-status.json"
+      - name: Stop isolated services
+        if: always()
+        run: |
+          if [ -x "$RUNNER_TEMP/birds-cli/node_modules/.bin/supabase" ]; then
+            "$RUNNER_TEMP/birds-cli/node_modules/.bin/supabase" stop --no-backup
+          fi
+
+  edge:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: denoland/setup-deno@e95548e56dfa95d4e1a28d6f422fafe75c4c26fb
+        with:
+          deno-version: v2.5.6
+      - run: cd supabase/functions && npm ci --ignore-scripts --no-audit --no-fund
+      - run: cd supabase/functions && npm audit --omit=dev --audit-level=high
+      - run: cd supabase/functions && deno fmt --check
+      - run: cd supabase/functions && deno lint
+      - run: cd supabase/functions && deno check --node-modules-dir=manual */index.ts
+      - run: bash supabase/functions/test.sh
+      - name: Local media experiment guard tests (no hosted calls)
+        run: |
+          deno fmt --check --config supabase/functions/deno.json scripts/media_bundle_resource.ts scripts/media_bundle_resource_test.ts
+          deno lint --config supabase/functions/deno.json scripts/media_bundle_resource.ts scripts/media_bundle_resource_test.ts
+          deno test --no-lock --node-modules-dir=manual --config supabase/functions/deno.json scripts/media_bundle_resource_test.ts
+      - name: Closed-transport S3 SDK guards (no resource scenarios)
+        run: |
+          export DENO_BIN="$(command -v deno)"
+          export DENO_DIR="$RUNNER_TEMP/media-sdk-unit-cache"
+          FILES=(scripts/media_sdk_fixture.ts scripts/media_sdk_resource.ts scripts/media_sdk_resource_test.ts)
+          "$DENO_BIN" fmt --check --config supabase/functions/deno.json "${FILES[@]}"
+          "$DENO_BIN" lint --config supabase/functions/deno.json "${FILES[@]}"
+          "$DENO_BIN" check --no-lock --node-modules-dir=manual --config supabase/functions/deno.json "${FILES[@]}"
+          bash -n scripts/media_sdk_resource.sh
+          python3 -m unittest discover -s scripts -p media_sdk_launcher_test.py
+          SDK_ENV='SMITHY_NEW_RETRIES_2026,AWS_LAMBDA_NODEJS_NO_GLOBAL_AWSLAMBDA,AWS_LAMBDA_BENCHMARK_MODE,AWS_NEW_RETRIES_2026,AWS_SDK_JS_NODE_VERSION_SUPPORT_WARNING_DISABLED,AWS_PROFILE,AWS_SHARED_CREDENTIALS_FILE,HOME,USERPROFILE,HOMEPATH,HOMEDRIVE,AWS_CONFIG_FILE,AWS_LAMBDA_FUNCTION_NAME,_X_AMZN_TRACE_ID,AWS_LAMBDA_MAX_CONCURRENCY'
+          env -i PATH=/usr/bin:/bin DENO_DIR="$DENO_DIR" HOME=/nonexistent-sudan-sdk-home \
+            AWS_CONFIG_FILE=/dev/null AWS_SHARED_CREDENTIALS_FILE=/dev/null AWS_PROFILE=default \
+            "$DENO_BIN" test --cached-only --no-remote --no-lock --no-prompt --node-modules-dir=manual \
+            --deny-net --deny-read --deny-write --deny-run --deny-sys --deny-ffi --allow-env="$SDK_ENV" \
+            --config supabase/functions/deno.json scripts/media_sdk_resource_test.ts
+
+  repository-security:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Validate workflow schemas and expression contexts
+        run: go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.7 -shellcheck= -pyflakes=
+      - name: Repository policy checks
+        run: python3 scripts/check_repository.py
+      - name: Inert iOS staging pipeline guards (offline, no credentials)
+        run: |
+          python3 -m unittest discover -s scripts -p 'ios_staging*_test.py' -v
+          python3 -m unittest discover -s scripts -p 'ios_toolchain_probe_test.py' -v
+          python3 -m unittest discover -s scripts -p 'ios_p12_compatibility_probe_test.py' -v
+          python3 -m unittest discover -s scripts -p 'ios_p12_repack_probe_test.py' -v
+      - name: Native evidence boundary tests (offline)
+        run: python3 -m unittest discover -s scripts -p 'native_dependency_evidence_test.py'
+      - name: Secret scan (redacted, complete Git history)
+        run: go run github.com/zricethezav/gitleaks/v8@v8.21.2 git --redact --no-banner .

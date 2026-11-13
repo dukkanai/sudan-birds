@@ -1,0 +1,16 @@
+name: Beta distribution gates (not configured)
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: birds-beta
+  cancel-in-progress: false
+jobs:
+  distribution-blocked:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Require real signing and verified staging
+        run: |
+          echo 'Distribution is blocked. Complete docs/release-runbook.md, real device checks, staging configuration and approved store signing first.'
+          exit 1

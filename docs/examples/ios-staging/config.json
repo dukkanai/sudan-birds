@@ -1,0 +1,59 @@
+{
+  "schema_version": 1,
+  "enabled": false,
+  "repository": "dukkanai/sudan-birds",
+  "pull_request": 1,
+  "source_branch": "build/foundation",
+  "base_branch": "main",
+  "environment": "sudan-birds-ios-staging",
+  "owner_reviewer": "dukkanai",
+  "prevent_self_review": false,
+  "approved_team_id": "9G7GPBG7FB",
+  "bundle_id": "com.nextaura.sudanbirds",
+  "asc_app_id": "6833994816",
+  "profile_uuid": "c2a928b4-56f3-423f-b217-907947a63ada",
+  "certificate_sha1": "6465E7EBB57B263771D7F1858ED7D59738072C14",
+  "uploader_key_id": "4R5BLDNDJT",
+  "uploader_kind": "team",
+  "uploader_scope": "all_apps",
+  "uploader_issuer_id": "54a3742f-c62d-468e-a2ae-70e0d8aff797",
+  "uploader_role": "DEVELOPER",
+  "uploader_access_reviewed": true,
+  "build_version": "0.1.0",
+  "build_number": "1",
+  "runner": "macos-15",
+  "xcode_version": "26.3",
+  "xcode_build": "17C529",
+  "ios_sdk": "26.2",
+  "supabase_url": "https://tkfhcjdxovivsrmoxpjm.supabase.co",
+  "auth_redirect": "dev.sudanbirds.staging://auth/callback",
+  "staging_limitations_acknowledged": false,
+  "ci_workflows": [
+    {
+      "path": ".github/workflows/ci.yml",
+      "sha256": "aa802806dda6b8fa20737c8b399deb666c09b72f92930cd1ad2567f7ea13aa0b",
+      "jobs": [
+        "flutter",
+        "database",
+        "edge",
+        "repository-security"
+      ]
+    },
+    {
+      "path": ".github/workflows/native-checks.yml",
+      "sha256": "dd5deacbce53842f031a9cb501ba3abf1342c569e194ec98ebff07d7844e5602",
+      "jobs": [
+        "android-debug",
+        "ios-simulator",
+        "ios-native-storage"
+      ]
+    },
+    {
+      "path": ".github/workflows/codec-resource.yml",
+      "sha256": "189c5320e84de83dc254fe4c66e5e97048e37c32cf5c3161041660c8bfe521a4",
+      "jobs": [
+        "local-edge-probe"
+      ]
+    }
+  ]
+}

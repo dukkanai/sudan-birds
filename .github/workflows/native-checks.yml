@@ -13,6 +13,7 @@ on:
       - 'scripts/ios_native_storage*'
       - 'scripts/ios_toolchain_probe*'
       - 'scripts/ios_p12_compatibility_probe*'
+      - 'scripts/ios_p12_repack_probe*'
       - 'docs/native-dependency-evidence.md'
       - '.github/workflows/native-checks.yml'
       - '.github/workflows/ci.yml'
@@ -87,6 +88,11 @@ jobs:
       - name: Compare synthetic P12 imports in owned temporary keychains
         timeout-minutes: 5
         run: python3 scripts/ios_p12_compatibility_probe.py
+      - name: Verify synthetic P12 rewrap guards (no credentials)
+        run: python3 -m unittest discover -s scripts -p 'ios_p12_repack_probe_test.py' -v
+      - name: Test temporary synthetic P12 rewrap without changing source
+        timeout-minutes: 5
+        run: python3 scripts/ios_p12_repack_probe.py
       - name: Prepare Go for evidence secret scan
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:

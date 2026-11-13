@@ -264,6 +264,31 @@ Checked-in workflow fingerprints change only to cover these additional checks;
 runtime upload approval stays disabled. No actual Mac result for this probe is
 claimed before its exact-source run completes.
 
+The synthetic comparison on `37bf949` ran on GitHub's macOS runner in
+[job 131726390732](https://github.com/dukkanai/sudan-birds/actions/runs/43377210383/job/131726390732).
+The platform-default and 3DES/SHA-1 fixtures imported with matching dummy
+identities; AES-256/SHA-256 was accepted by OpenSSL but rejected by Apple with
+the same fixed MAC category. Every owned-keychain and workspace cleanup check
+passed. This reproduces a format-dependent reader disagreement, not the format
+of the real P12 or successful Apple signing.
+
+A second, still **synthetic-only** experiment tests a temporary rewrap path.
+It preserves the source P12 bytes, uses an AES-256-encrypted PEM intermediate
+inside the owned private workspace, and compares the certificate and public
+key before importing the temporary compatibility fixture. OpenSSL passwords
+use private standard input rather than arguments, environment variables or
+password files. The dummy-only native keychain commands retain their documented
+password arguments, with raw subprocess output suppressed. No real signing
+adapter, stored secret, certificate or runtime approval gate changes.
+
+The compatibility fixture uses legacy 3DES/SHA-1 only to test this temporary
+path. Applying a conversion to actual signing material is a distinct decision:
+preserve the original encrypted secret, avoid plaintext private-key files,
+verify the exact certificate and public-key identity, and require cleanup.
+Synthetic success alone does not authorize that action or another upload.
+Official password-input references: [OpenSSL](https://docs.openssl.org/3.4/man1/openssl-passphrase-options/)
+and [LibreSSL](https://man.openbsd.org/openssl).
+
 ## Local validation and remaining blockers
 
 From repository root:

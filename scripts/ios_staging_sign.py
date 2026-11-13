@@ -27,6 +27,7 @@ import urllib.request
 import zipfile
 
 import ios_toolchain_probe as toolchain_probe
+from ios_staging_p12_rewrap import RewrapFailure, temporary_compatible_p12
 from ios_staging_guard import (Blocked, CONFIG, ROOT, GitHub, NoRedirect, full,
                                live_gate, require, runtime_config, validate_config, validate_uploader)
 
@@ -448,22 +449,41 @@ class Invocation:
             # original import failure remains primary, including on interruption.
             return 'failed_or_unavailable'
 
-    def import_certificate(self, p12, password):
+    def import_certificate(self, p12, password, approved_cert_der=None):
         try:
             self.run(['/usr/bin/security', 'import', str(p12), '-k', str(self.keychain),
                       '-P', password, '-T', '/usr/bin/codesign', '-T', '/usr/bin/security'],
                      'certificate-import')
         except Blocked as error:
             if str(error) == private_failure_message('certificate-import', b'MAC verification failed'):
+                result = 'failed_or_unavailable'
                 try:
                     result = self.p12_read_diagnostic(p12, password)
                     print('P12 diagnostic: ' + result)
                 except Exception:
                     pass  # Diagnostic/reporting failure must not replace the import failure.
+                # This compatibility action is explicitly owner-approved. It is
+                # available only inside the existing exact-source protected run,
+                # after a MAC-present read and exact validated profile binding.
+                # Diagnostic-only callers never gain a credential fallback.
+                if result == 'read_check_passed_mac_present' and isinstance(approved_cert_der, bytes):
+                    try:
+                        with temporary_compatible_p12(self, p12, password, approved_cert_der) as (compatible, temporary_password):
+                            self.run(['/usr/bin/security', 'import', str(compatible), '-k', str(self.keychain),
+                                      '-P', temporary_password, '-T', '/usr/bin/codesign', '-T', '/usr/bin/security'],
+                                     'certificate-import-compatible', timeout=30)
+                    except RewrapFailure as failure:
+                        raise Blocked('Original Apple P12 MAC rejection; temporary compatibility ' + str(failure) + '.') from None
+                    except Exception:
+                        raise Blocked('Original Apple P12 MAC rejection; temporary compatibility import failed.') from None
+                    print('P12 compatibility: verified temporary import; original preserved; temporary files removed.')
+                    return
             raise  # Diagnostic success must never permit signing or replace the failure.
 
     def cleanup(self):
         failures = ['private-process-group-unconfirmed'] if self.unconfirmed_process_groups else []
+        if getattr(self, 'p12_rewrap_cleanup_complete', None) is False:
+            failures.append('p12-rewrap-cleanup-unconfirmed')
         if self.search_changed:
             try:
                 self.run(['/usr/bin/security', 'list-keychains', '-d', 'user', '-s'] + self.original_keychains, 'cleanup-search', timeout=30)
@@ -498,6 +518,9 @@ class Invocation:
         profile_file = self.write('profile.mobileprovision', decode_secret(private['BIRDS_APP_PROFILE_BASE64']))
         profile = plistlib.loads(self.run(['/usr/bin/security', 'cms', '-D', '-i', str(profile_file)], 'profile-decode'))
         validate_profile(profile, c, time.time())
+        approved_certificates = [cert for cert in profile.get('DeveloperCertificates', [])
+                                 if isinstance(cert, bytes) and hashlib.sha1(cert).hexdigest().upper() == c['certificate_sha1']]
+        require(len(approved_certificates) == 1, 'Profile must contain exactly one approved signing certificate.')
         password = secrets.token_urlsafe(32)
         self.original_keychains = shlex.split(self.run(['/usr/bin/security', 'list-keychains', '-d', 'user'], 'keychain-state').decode())
         # Set cleanup ownership before invoking creation because a command can fail after making changes.
@@ -505,7 +528,7 @@ class Invocation:
         self.run(['/usr/bin/security', 'create-keychain', '-p', password, str(self.keychain)], 'keychain-create')
         self.run(['/usr/bin/security', 'set-keychain-settings', '-lut', '3600', str(self.keychain)], 'keychain-settings')
         self.run(['/usr/bin/security', 'unlock-keychain', '-p', password, str(self.keychain)], 'keychain-unlock')
-        self.import_certificate(p12, private['BIRDS_P12_PASSWORD'])
+        self.import_certificate(p12, private['BIRDS_P12_PASSWORD'], approved_certificates[0])
         self.run(['/usr/bin/security', 'set-key-partition-list', '-S', 'apple-tool:,apple:,codesign:', '-s', '-k', password,
                   str(self.keychain)], 'key-partitions')
         identity = self.run(['/usr/bin/security', 'find-identity', '-v', '-p', 'codesigning', str(self.keychain)], 'certificate-identity').decode()
@@ -635,9 +658,15 @@ def main():
                 print('Cleanup incomplete: ' + ', '.join(failures) + '. Revoke exposed credentials if runner isolation is uncertain.', file=sys.stderr)
                 if primary == 0:
                     primary = 1
+            if getattr(invocation, 'p12_rewrap_source_unchanged', None) is False:
+                print('P12 rewrap source preservation failed; no successful signing result is claimed.', file=sys.stderr)
+                primary = 1
             try:
                 result = summarize(sha, invocation.digest, status)
                 result['cleanup_complete'] = not failures
+                for name in ('p12_rewrap_cleanup_complete', 'p12_rewrap_source_unchanged'):
+                    flag = getattr(invocation, name, None)
+                    result[name] = flag if type(flag) is bool else None
                 safe = json.dumps(result, sort_keys=True)
             except Exception:
                 safe = '{"result_summary": "unavailable"}'

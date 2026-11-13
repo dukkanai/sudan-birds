@@ -543,6 +543,8 @@ class SigningTests(unittest.TestCase):
             invocation = mock.Mock(status='upload_outcome_uncertain', digest='f' * 64)
             invocation.execute.side_effect = gate.Blocked('fixture primary failure')
             invocation.cleanup.return_value = ['temporary-keychain']
+            invocation.p12_rewrap_cleanup_complete = False
+            invocation.p12_rewrap_source_unchanged = False
             runtime = {**env(), 'RUNNER_ENVIRONMENT': 'github-hosted', 'GITHUB_RUN_ID': '123',
                        'BIRDS_APPROVED_UPLOAD_RUN_ID': '123', 'GITHUB_EVENT_PATH': str(e),
                        **{name: 'fixture' for name in sign.SECRET_NAMES}}
@@ -555,6 +557,10 @@ class SigningTests(unittest.TestCase):
                 self.assertEqual(sign.main(), 1)
                 self.assertIn('fixture primary failure', stderr.getvalue())
                 self.assertIn('upload_outcome_uncertain', stdout.getvalue())
+                report = json.loads(stdout.getvalue())
+                self.assertFalse(report['p12_rewrap_cleanup_complete'])
+                self.assertFalse(report['p12_rewrap_source_unchanged'])
+                self.assertIn('source preservation failed', stderr.getvalue())
                 self.assertIn('before any retry', stderr.getvalue())
                 invocation.cleanup.assert_called_once()
 

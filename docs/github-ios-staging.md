@@ -227,11 +227,10 @@ not promoted to positive MAC evidence. The metadata read is bounded to 4096
 bytes, but the existing private subprocess capture files are not a strict
 output-volume limit.
 
-Every diagnostic outcome preserves the original import failure and prevents
-signing/upload. Even a broken diagnostic output stream must not replace it.
-No key extraction, container conversion, algorithm downgrade, password change,
-credential fallback or upload retry is added. This source needs fresh CI and a
-protected invocation before any actual macOS diagnostic result can be claimed.
+In the diagnostic-only implementation described here, every outcome preserved
+the original import failure and prevented signing/upload. It added no key
+extraction or conversion. The separately approved compatibility path below is
+not inferred from diagnostic success alone.
 
 ### Observed reader difference and synthetic next step
 
@@ -305,6 +304,43 @@ false-positive fingerprints alone are documented in `.gitleaksignore`, scoped
 to the immutable introducing commit, test file, rule and lines 82/83. There is
 no file-wide or rule-wide exclusion, history rewrite or skipped scanner.
 Native and codec checks also trigger on changes to this narrowly scoped file.
+
+### Approved transient compatibility path (13 November 2026)
+
+The owner explicitly approved temporary 3DES/SHA-1 compatibility wrapping inside
+an ephemeral build runner, followed by deletion, without changing the original
+certificate or stored secrets. This adapter still requires an approved exact
+source, passing CI, the protected environment, and a one-time upload run gate.
+The helper is not a standalone activation or permission mechanism.
+
+The original Apple import is attempted once. Only its classified MAC rejection,
+a positive bounded MAC-present OpenSSL read, and the exact leaf DER selected
+from the validated provisioning profile permit the temporary helper. Unknown,
+absent-MAC, wrong-password, invalid-profile and other import errors stop. The
+real source's export algorithm is not assumed from the synthetic experiment.
+
+The helper checks one encrypted private key against the approved leaf, validates
+all included certificates and preserves their complete unique DER set. AES-256
+encrypted intermediates and the new P12 stay in an owned mode-0700 directory
+with mode-0600 files. Passwords for OpenSSL use private stdin without trimming
+or normalization; the native importer requires its password argument, whose
+output remains captured privately. No plaintext private-key file or stdout is
+produced. Source bytes are checked again on both success and failure.
+
+Encrypted intermediates are removed before import; the temporary P12 is removed
+when import exits, before archive/upload. Fixed cleanup and source-preservation
+flags are included in the final result, even if import already failed. A later
+workspace deletion cannot erase an earlier cleanup uncertainty. Persistent
+credentials are not replaced, reissued or uploaded by this helper.
+
+Local tests use an internally generated CA/leaf chain and adversarial cases,
+including corrupt/MAC-less containers, mismatched leaf/key, chain changes,
+symlink/FIFO rejection, process timeout and combined import/source/cleanup
+failure. The macOS probe now invokes this exact helper and its production private
+reader on synthetic material before import into an owned temporary keychain.
+New exact-source CI must pass before a real protected attempt. Neither local
+success nor historical synthetic macOS success proves real signing, archive,
+upload, Apple processing or tester delivery.
 
 ## Local validation and remaining blockers
 

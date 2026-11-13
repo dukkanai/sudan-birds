@@ -90,7 +90,9 @@ jobs:
         timeout-minutes: 5
         run: python3 scripts/ios_p12_compatibility_probe.py
       - name: Verify synthetic P12 rewrap guards (no credentials)
-        run: python3 -m unittest discover -s scripts -p 'ios_p12_repack_probe_test.py' -v
+        run: |
+          python3 -m unittest discover -s scripts -p 'ios_staging_p12_rewrap_test.py' -v
+          python3 -m unittest discover -s scripts -p 'ios_p12_repack_probe_test.py' -v
       - name: Test temporary synthetic P12 rewrap without changing source
         timeout-minutes: 5
         run: python3 scripts/ios_p12_repack_probe.py

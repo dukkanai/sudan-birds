@@ -107,6 +107,85 @@ class ImportDiagnosticTests(unittest.TestCase):
             finally:
                 self.assertEqual(invocation.cleanup(), [])
 
+    def test_approved_profile_bound_compatibility_is_once_and_cleans_before_return(self):
+        with tempfile.TemporaryDirectory() as folder:
+            invocation = sign.Invocation(team_config(), {'RUNNER_TEMP': folder})
+            primary = sign.Blocked(sign.private_failure_message('certificate-import', b'MAC verification failed'))
+            approved = b'synthetic-approved-public-certificate'
+            compatible = invocation.path / 'owned-compatible.p12'
+            events = []
+            @contextlib.contextmanager
+            def rewrap(*args):
+                self.assertEqual(args, (invocation, invocation.path / 'source.p12', 'original-password', approved))
+                events.append('rewrap')
+                try:
+                    yield compatible, 'temporary-password'
+                finally:
+                    events.append('cleanup')
+            def run(command, stage, **kwargs):
+                if stage == 'certificate-import':
+                    raise primary
+                self.assertEqual(stage, 'certificate-import-compatible')
+                self.assertEqual(kwargs, {'timeout': 30})
+                self.assertIn(str(compatible), command)
+                self.assertIn('temporary-password', command)
+                self.assertNotIn('original-password', command)
+                events.append('import')
+                return b''
+            try:
+                with mock.patch.object(invocation, 'run', side_effect=run), \
+                        mock.patch.object(invocation, 'p12_read_diagnostic', return_value='read_check_passed_mac_present'), \
+                        mock.patch.object(sign, 'temporary_compatible_p12', side_effect=rewrap), \
+                        contextlib.redirect_stdout(io.StringIO()):
+                    invocation.import_certificate(invocation.path / 'source.p12', 'original-password', approved)
+                self.assertEqual(events, ['rewrap', 'import', 'cleanup'])
+                self.assertFalse(invocation.upload_started)
+            finally:
+                self.assertEqual(invocation.cleanup(), [])
+
+    def test_compatibility_never_runs_for_unproven_mac_or_unapproved_profile(self):
+        with tempfile.TemporaryDirectory() as folder:
+            invocation = sign.Invocation(team_config(), {'RUNNER_TEMP': folder})
+            primary = sign.Blocked(sign.private_failure_message('certificate-import', b'MAC verification failed'))
+            try:
+                for result, approved in [('read_check_passed_mac_absent', b'certificate'),
+                                         ('read_check_passed_mac_unknown', b'certificate'),
+                                         ('failed_or_unavailable', b'certificate'),
+                                         ('read_check_passed_mac_present', None)]:
+                    with mock.patch.object(invocation, 'run', side_effect=primary), \
+                            mock.patch.object(invocation, 'p12_read_diagnostic', return_value=result), \
+                            mock.patch.object(sign, 'temporary_compatible_p12') as rewrap, \
+                            contextlib.redirect_stdout(io.StringIO()), self.assertRaises(sign.Blocked) as failure:
+                        invocation.import_certificate(invocation.path / 'source.p12', 'original-password', approved)
+                    self.assertIs(failure.exception, primary)
+                    rewrap.assert_not_called()
+            finally:
+                self.assertEqual(invocation.cleanup(), [])
+
+    def test_compatible_import_failure_stays_private_and_cleanup_runs(self):
+        with tempfile.TemporaryDirectory() as folder:
+            invocation = sign.Invocation(team_config(), {'RUNNER_TEMP': folder})
+            primary = sign.Blocked(sign.private_failure_message('certificate-import', b'MAC verification failed'))
+            cleaned = []
+            @contextlib.contextmanager
+            def rewrap(*_):
+                try:
+                    yield invocation.path / 'owned-compatible.p12', 'temporary-password'
+                finally:
+                    cleaned.append(True)
+            try:
+                with mock.patch.object(invocation, 'run', side_effect=[primary, OSError('synthetic-private-error')]) as run, \
+                        mock.patch.object(invocation, 'p12_read_diagnostic', return_value='read_check_passed_mac_present'), \
+                        mock.patch.object(sign, 'temporary_compatible_p12', side_effect=rewrap), \
+                        contextlib.redirect_stdout(io.StringIO()), self.assertRaises(sign.Blocked) as failure:
+                    invocation.import_certificate(invocation.path / 'source.p12', 'original-password', b'approved-cert')
+                self.assertEqual(str(failure.exception), 'Original Apple P12 MAC rejection; temporary compatibility import failed.')
+                self.assertEqual(run.call_count, 2)
+                self.assertEqual(cleaned, [True])
+                self.assertFalse(invocation.upload_started)
+            finally:
+                self.assertEqual(invocation.cleanup(), [])
+
     def test_real_synthetic_p12_valid_wrong_password_corrupt_and_macless(self):
         # This exercises the installed OpenSSL, not macOS Keychain/LibreSSL.
         with tempfile.TemporaryDirectory() as folder:
@@ -161,6 +240,15 @@ class ImportDiagnosticTests(unittest.TestCase):
                 self.assertNotIn('synthetic-secret', result)
                 self.assertNotIn('wrong password', result)
                 self.assertNotIn('/private/path', result)
+
+    def test_rewrap_cleanup_failure_is_not_erased_by_workspace_removal(self):
+        with tempfile.TemporaryDirectory() as folder:
+            invocation = sign.Invocation(team_config(), {'RUNNER_TEMP': folder})
+            invocation.p12_rewrap_cleanup_complete = False
+            invocation.p12_rewrap_source_unchanged = False
+            self.assertEqual(invocation.cleanup(), ['p12-rewrap-cleanup-unconfirmed'])
+            self.assertFalse(invocation.path.exists())
+            self.assertFalse(invocation.p12_rewrap_source_unchanged)
 
     def test_unknown_ambiguous_malformed_and_oversized_remain_unclassified(self):
         for diagnostic in (b'', b'synthetic-secret', b'\xff\x00', b'\xffMAC verification failed', None, 'MAC verification failed',

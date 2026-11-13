@@ -51,7 +51,8 @@ class Tests(unittest.TestCase):
                 result, ok = probe.execute()
             self.assertTrue(ok)
             self.assertTrue(all(result[k] for k in ['certificate_equal', 'public_key_equal',
-                'source_unchanged', 'matching_dummy_identity', 'cleanup']))
+                'source_unchanged', 'matching_dummy_identity', 'adapter_cleanup', 'cleanup']))
+            self.assertEqual(result['adapter_helper'], 'passed')
             self.assertEqual(output.getvalue(), '')
             for args, stage, data in probe.calls:
                 if args[0] == p.OPENSSL:

@@ -41,7 +41,7 @@
     },
     {
       "path": ".github/workflows/native-checks.yml",
-      "sha256": "faa9918ed0aff1a1fb6e496aea0bf0a72993f3580287b3f3c0c5fa9575062ad2",
+      "sha256": "dd5deacbce53842f031a9cb501ba3abf1342c569e194ec98ebff07d7844e5602",
       "jobs": [
         "android-debug",
         "ios-simulator",

@@ -20,6 +20,8 @@ import sys
 import tempfile
 
 from ios_p12_compatibility_probe import Failure, Probe, interrupted, validate_environment
+from ios_staging_sign import Invocation
+from ios_staging_p12_rewrap import temporary_compatible_p12
 
 OPENSSL = '/usr/bin/openssl'
 MODERN = ['-keypbe', 'AES-256-CBC', '-certpbe', 'AES-256-CBC', '-macalg', 'sha256']
@@ -95,30 +97,40 @@ class RepackProbe(Probe):
             raise Failure('rewrapped_identity_mismatch')
         if hashlib.sha256(source.read_bytes()).digest() != original:
             raise Failure('source_changed')
-        return source, original, target, target_password, original_cert
+        return source, original, target, target_password, original_cert, source_password
 
     def execute(self):
         result = {'case': 'synthetic_aes256_sha256_to_tripledes_sha1',
                   'rewrap': 'not_run', 'certificate_equal': False, 'public_key_equal': False,
                   'source_unchanged': False, 'import': 'not_run',
-                  'matching_dummy_identity': False, 'cleanup': False}
+                  'matching_dummy_identity': False, 'adapter_helper': 'not_run',
+                  'adapter_cleanup': False, 'cleanup': False}
         baseline = self.snapshot()
         folder = self.path / 'owned-rewrap'
         folder.mkdir(mode=0o700)
         kc = folder / 'owned.keychain-db'
         owned, ok = False, False
         source, original = None, None
+        invocation = None
         stage = 'rewrap'
         try:
-            source, original, target, password, cert = self.cryptographic_flow(folder)
+            source, original, target, password, cert, source_password = self.cryptographic_flow(folder)
             result.update(rewrap='passed', certificate_equal=True, public_key_equal=True,
                           source_unchanged=True)
             stage = 'import'
             owned = True
             self.run(['/usr/bin/security', 'create-keychain', '-p', password, str(kc)], 'keychain')
             self.run(['/usr/bin/security', 'unlock-keychain', '-p', password, str(kc)], 'keychain')
-            self.run(['/usr/bin/security', 'import', str(target), '-k', str(kc), '-P', password,
-                      '-T', '/usr/bin/security'], 'import')
+            # Exercise the exact production helper/reader boundary on internally
+            # generated data only, before its source is approved for real use.
+            invocation = Invocation({}, {'RUNNER_TEMP': str(folder), 'HOME': self.env['HOME']})
+            copied = invocation.write('synthetic-source.p12', source.read_bytes())
+            with temporary_compatible_p12(invocation, copied, source_password, cert) as (compatible, temporary_password):
+                self.run(['/usr/bin/security', 'import', str(compatible), '-k', str(kc), '-P', temporary_password,
+                          '-T', '/usr/bin/security'], 'import')
+            if (not invocation.p12_rewrap_source_unchanged or not invocation.p12_rewrap_cleanup_complete):
+                raise Failure('adapter_final_check_failed')
+            result['adapter_helper'] = 'passed'
             result['import'] = 'passed'
             identities = self.run(['/usr/bin/security', 'find-identity', '-p', 'basic', str(kc)], 'identity')
             fingerprint = hashlib.sha1(cert).hexdigest().upper().encode('ascii')
@@ -132,6 +144,14 @@ class RepackProbe(Probe):
         except Exception:
             result[stage] = 'failed_or_unavailable'
         finally:
+            if invocation is not None:
+                try:
+                    result['adapter_cleanup'] = (not invocation.cleanup() and not invocation.path.exists()
+                        and getattr(invocation, 'p12_rewrap_source_unchanged', None) is True
+                        and getattr(invocation, 'p12_rewrap_cleanup_complete', None) is True)
+                except Exception:
+                    result['adapter_cleanup'] = False
+                ok = ok and result['adapter_cleanup']
             # Report final preservation even when import/identity fails before
             # the normal post-import check. Never retain a stale true field.
             if source is not None:
@@ -157,7 +177,7 @@ class RepackProbe(Probe):
                 clean = clean and not folder.exists()
             except Exception:
                 clean = False
-            result['cleanup'] = clean and self.groups_clean
+            result['cleanup'] = clean and self.groups_clean and (invocation is None or result['adapter_cleanup'])
         return result, ok and result['cleanup']
 
 
